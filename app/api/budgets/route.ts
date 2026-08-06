@@ -4,7 +4,11 @@ import { apiError, hasAccess, requireApiIdentity } from "@/lib/auth/api-access";
 import { d1Id, d1Json, runD1Batch } from "@/lib/database/d1-atomic";
 import { getPrismaClient } from "@/lib/database/prisma";
 import { d1Database } from "@/lib/runtime-env";
-
+import {
+  ApprovalDecision,
+  ApprovalLevel,
+  BudgetStatus,
+} from "@prisma/client";
 const createSchema = z.object({
   programId: z.string().min(1),
   cohortName: z.string().trim().min(3),
