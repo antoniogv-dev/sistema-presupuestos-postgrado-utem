@@ -89,6 +89,7 @@ function json(value: unknown) {
 function isAcademic(type: ProgramType) {
   return type === ProgramType.DOCTORADO || type === ProgramType.MAGISTER_ACADEMICO;
 }
+type D1BindValue = string | number | null;
 const includeAll = {
   program: { include: { annualTuitions: { orderBy: { year: "asc" as const } } } },
   appliedTemplate: true,
@@ -148,8 +149,9 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
     const database = d1Database();
     const statements: D1PreparedStatement[] = [];
     const assignments: string[] = [];
-    const values: D1Value[] = [];
-    const assign = (column: string, value: D1Value) => {
+const values: D1BindValue[] = [];
+
+const assign = (column: string, value: D1BindValue) => {
       assignments.push(`"${column}" = ?`);
       values.push(value);
     };
