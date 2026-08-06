@@ -14,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "postgrado-presupuestos-prod",
-      "database_id": "REEMPLAZAR_ID_D1_PRODUCCION",
+      "database_id": "d5d73814-ecd9-45f3-99d0-ddcc3c9a7f42",
       "migrations_dir": "migrations"
     }
   ],
