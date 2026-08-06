@@ -10,7 +10,29 @@ const TYPES: ProgramType[] = ["DOCTORADO","MAGISTER_ACADEMICO","MAGISTER_PROFESI
 const typeLabel = (type: ProgramType) => ({ DOCTORADO:"Doctorado", MAGISTER_ACADEMICO:"Magíster académico", MAGISTER_PROFESIONAL:"Magíster profesional", OTRO:"Otro" })[type];
 const kindLabel = (kind: TemplateItemKind) => ({ DESCUENTO:"Descuento", BECA_ARANCEL:"Beca de excelencia académica (arancel)", BECA_MANUTENCION:"Beca de atención económica (manutención)", COSTO:"Costo o gasto", INGRESO_EXTRAORDINARIO:"Ingreso extraordinario" })[kind];
 const uid = (prefix:string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
-const clone = <T,>(value:T):T => structuredClone(value);
+type ApiTemplateItem = Omit<BudgetTemplateItem, "key"> & {
+  key?: string;
+  itemKey?: string;
+};
+
+type ApiBudgetTemplate = Omit<BudgetTemplate, "description" | "items"> & {
+  description?: string | null;
+  items: ApiTemplateItem[];
+};
+
+function normalizeTemplate(record: ApiBudgetTemplate): BudgetTemplate {
+  return {
+    ...record,
+    description: record.description ?? "",
+    items: record.items.map((item) => {
+      const { key, itemKey, ...rest } = item;
+      return {
+        ...rest,
+        key: key ?? itemKey ?? uid("item"),
+      };
+    }),
+  };
+}
 const defaultConfig = (kind:TemplateItemKind): Record<string,unknown> => ({
   DESCUENTO:{percentage:0,students:0,periodMode:"TODOS"},
   BECA_ARANCEL:{studentMode:"TODOS_ACTIVOS",students:0,coverage:1,periodMode:"TODOS"},
@@ -24,11 +46,11 @@ export function TemplateManager() {
   const [activeType,setActiveType]=useState<ProgramType>("DOCTORADO");
   const [message,setMessage]=useState("");
   const template=templates.find((item)=>item.programType===activeType)??templates[0];
-  useEffect(()=>{ fetch("/api/templates",{cache:"no-store"}).then(async(response)=>{if(!response.ok) throw new Error(); const records=await response.json() as Array<BudgetTemplate & {description?:string|null;items:Array<BudgetTemplateItem & {itemKey?:string}>}>; setTemplates(records.map((record)=>({...record,description:record.description??"",items:record.items.map((item)=>({...item,key:item.key??item.itemKey??uid("item")}))})));}).catch(()=>{try{const saved=localStorage.getItem(STORAGE_KEY);if(saved)setTemplates(JSON.parse(saved));}catch{}});},[]);
+  useEffect(()=>{ fetch("/api/templates",{cache:"no-store"}).then(async(response)=>{if(!response.ok) throw new Error(); const records=await response.json() as ApiBudgetTemplate[]; setTemplates(records.map(normalizeTemplate));}).catch(()=>{try{const saved=localStorage.getItem(STORAGE_KEY);if(saved)setTemplates(JSON.parse(saved));}catch{}});},[]);
   const replace=(next:BudgetTemplate)=>setTemplates((current)=>current.map((item)=>item.id===next.id?next:item));
   const updateItem=(index:number,field:keyof BudgetTemplateItem,value:unknown)=>replace({...template,items:template.items.map((item,candidate)=>candidate===index?{...item,[field]:value}:item)});
   const updateConfig=(index:number,key:string,value:unknown)=>replace({...template,items:template.items.map((item,candidate)=>candidate===index?{...item,config:{...(item.config as object),[key]:value}}:item)});
-  async function save(){const payload={name:template.name,description:template.description,active:template.active,items:template.items.map((item,index)=>({...item,position:index,config:item.config}))};try{const response=await fetch(`/api/templates/${template.id}`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});if(!response.ok)throw new Error();const saved=await response.json() as BudgetTemplate & {description?:string|null;items:Array<BudgetTemplateItem & {itemKey?:string}>};replace({...saved,description:saved.description??"",items:saved.items.map((item)=>({...item,key:item.key??item.itemKey??uid("item")}))});setMessage("Plantilla actualizada en la base institucional.");}catch{const next={...template,version:template.version+1};replace(next);localStorage.setItem(STORAGE_KEY,JSON.stringify(templates.map((item)=>item.id===next.id?next:item)));setMessage("Plantilla actualizada en modo local.");}}
+  async function save(){const payload={name:template.name,description:template.description,active:template.active,items:template.items.map((item,index)=>({...item,position:index,config:item.config}))};try{const response=await fetch(`/api/templates/${template.id}`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});if(!response.ok)throw new Error();const saved=await response.json() as ApiBudgetTemplate;replace(normalizeTemplate(saved));setMessage("Plantilla actualizada en la base institucional.");}catch{const next={...template,version:template.version+1};replace(next);localStorage.setItem(STORAGE_KEY,JSON.stringify(templates.map((item)=>item.id===next.id?next:item)));setMessage("Plantilla actualizada en modo local.");}}
   if(!template)return null;
   return <section className="panel template-manager"><div className="panel-header"><div><h2>Plantillas presupuestarias editables</h2><p>Los cambios sólo afectan nuevos usos o presupuestos donde se vuelva a aplicar la plantilla.</p></div><button className="button primary" type="button" onClick={save}>Guardar plantilla</button></div>{message?<div className="notice success">{message}</div>:null}<div className="parameter-tabs">{TYPES.map((type)=><button key={type} className={`tab-button ${activeType===type?"active":""}`} onClick={()=>setActiveType(type)}>{typeLabel(type)}</button>)}</div><div className="form-grid"><label>Nombre<input value={template.name} onChange={(event)=>replace({...template,name:event.target.value})}/></label><label className="span-2">Descripción<input value={template.description} onChange={(event)=>replace({...template,description:event.target.value})}/></label><label>Estado<select value={String(template.active)} onChange={(event)=>replace({...template,active:event.target.value==="true"})}><option value="true">Activa</option><option value="false">Inactiva</option></select></label></div><div className="template-toolbar"><span>Versión {template.version}</span><button className="button secondary" type="button" onClick={()=>{const kind:TemplateItemKind="DESCUENTO";replace({...template,items:[...template.items,{id:uid("template-item"),key:uid("item"),kind,name:kindLabel(kind),active:true,position:template.items.length,config:defaultConfig(kind)}]});}}>Agregar ítem</button></div><div className="template-items">{template.items.map((item,index)=><article className="template-item-card" key={item.id}><div className="template-item-head"><label>Nombre<input value={item.name} onChange={(event)=>updateItem(index,"name",event.target.value)}/></label><label>Tipo<select value={item.kind} onChange={(event)=>{const kind=event.target.value as TemplateItemKind;replace({...template,items:template.items.map((candidate,i)=>i===index?{...candidate,kind,name:kindLabel(kind),config:defaultConfig(kind)}:candidate)});}}>{KINDS.map((kind)=><option key={kind} value={kind}>{kindLabel(kind)}</option>)}</select></label><label className="compact-check"><input type="checkbox" checked={item.active} onChange={(event)=>updateItem(index,"active",event.target.checked)}/>Activo</label><button className="text-button danger-text" type="button" onClick={()=>replace({...template,items:template.items.filter((_,i)=>i!==index)})}>Quitar</button></div><TemplateConfig item={item} onChange={(key,value)=>updateConfig(index,key,value)}/></article>)}</div></section>;
 }
