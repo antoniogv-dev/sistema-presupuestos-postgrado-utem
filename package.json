@@ -12,7 +12,7 @@
     "dev": "next dev",
     "build:next": "next build",
     "build:cloudflare": "npm run db:generate && opennextjs-cloudflare build",
-    "build": "npm run build:cloudflare",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
