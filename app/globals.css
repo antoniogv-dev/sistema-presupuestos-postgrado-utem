@@ -269,7 +269,7 @@ input:disabled { background: var(--surface-muted); color: #52606b; }
 
 .form-action {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
 }
 
 .form-action .button {
