@@ -15,10 +15,32 @@ const roleLabels: Record<AccessLevel, string> = {
   APROBADOR: "Aprobación",
 };
 
-async function responseBody(response: Response) {
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error ?? "No fue posible completar la operación.");
-  return body;
+function responseErrorMessage(body: unknown): string {
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    !("error" in body)
+  ) {
+    return "No fue posible completar la operación.";
+  }
+
+  const error = (body as { error?: unknown }).error;
+
+  return typeof error === "string" && error.trim().length > 0
+    ? error
+    : "No fue posible completar la operación.";
+}
+
+async function responseBody<T = unknown>(
+  response: Response,
+): Promise<T> {
+  const body: unknown = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(responseErrorMessage(body));
+  }
+
+  return body as T;
 }
 
 export default function AdministrationPage() {
@@ -28,13 +50,17 @@ export default function AdministrationPage() {
   const [form, setForm] = useState({ email: "", name: "", accessLevel: "GESTOR" as AccessLevel });
 
   async function loadUsers() {
-    const me = await responseBody(await fetch("/api/me", { cache: "no-store" })) as Identity;
+    const me = await responseBody<Identity>(
+  await fetch("/api/me", { cache: "no-store" }),
+);
     setIdentity(me);
     if (!me.roles.includes("APROBADOR")) {
       setMessage("Su identidad fue validada. Sólo el nivel Aprobación puede administrar usuarios.");
       return;
     }
-    const records = await responseBody(await fetch("/api/admin/users", { cache: "no-store" })) as ManagedUser[];
+    const records = await responseBody<ManagedUser[]>(
+  await fetch("/api/admin/users", { cache: "no-store" }),
+);
     setUsers(records);
     setMessage("Usuarios y niveles cargados desde Cloudflare D1.");
   }
