@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "sistema-presupuestos-postgrado-utem",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-08-06",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "postgrado-presupuestos-prod",
+      "database_id": "REEMPLAZAR_ID_D1_PRODUCCION",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "NEXT_PUBLIC_APP_NAME": "Sistema de Presupuestos de Postgrado UTEM",
+    "CLOUDFLARE_ACCESS_TEAM_DOMAIN": "https://REEMPLAZAR_EQUIPO.cloudflareaccess.com",
+    "CLOUDFLARE_ACCESS_AUD": "REEMPLAZAR_AUD_DE_ACCESS",
+    "BOOTSTRAP_ADMIN_EMAIL": "REEMPLAZAR_CORREO_UTEM"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

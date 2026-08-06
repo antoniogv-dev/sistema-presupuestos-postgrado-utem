@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Sistema de Presupuestos de Postgrado UTEM">
+  <title>Sistema de Presupuestos de Postgrado UTEM</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Saltar al contenido</a>
+  <div class="shell">
+    <aside class="sidebar" aria-label="Navegación principal">
+      <div class="brand"><span>UTEM · Escuela de Postgrado</span><strong>Presupuestos</strong><button id="menu-close" aria-label="Cerrar menú">×</button></div>
+      <nav>
+        <a href="#" class="active" data-view="dashboard"><i></i>Panel general</a>
+        <a href="#" data-view="budgets"><i></i>Presupuestos</a>
+        <a href="#" data-view="consolidated"><i></i>Consolidado</a>
+        <a href="#" data-view="parameters"><i></i>Parámetros y plantillas</a>
+        <a href="#" data-view="programs"><i></i>Programas</a>
+        <a href="#" data-view="reviews"><i></i>Revisión y aprobación</a>
+      </nav>
+      <footer><span>Versión demostrativa D1 web 1.0</span><small>Motor financiero trazable</small></footer>
+    </aside>
+    <button id="backdrop" aria-label="Cerrar menú"></button>
+    <div class="main-area">
+      <header class="topbar"><button id="menu-open" aria-label="Abrir menú">☰</button><div><strong>Sistema de Presupuestos de Postgrado UTEM</strong><span>Formulación · Evaluación · Consolidación · Seguimiento</span></div><div class="user"><b>AG</b><span><strong>Antonio Gutiérrez</strong><small>Gestión de Recursos</small></span></div></header>
+      <main id="main" tabindex="-1"></main>
+    </div>
+  </div>
+  <script src="bundle.js"></script>
+</body>
+</html>

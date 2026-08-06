@@ -1,0 +1,75 @@
+{
+  "name": "sistema-presupuestos-postgrado-utem",
+  "version": "1.0.0-d1-web",
+  "private": true,
+  "description": "Sistema de Presupuestos de Postgrado UTEM para Cloudflare Workers y D1, desplegable desde GitHub y Cloudflare web.",
+  "engines": {
+    "node": ">=22 <23",
+    "npm": ">=10"
+  },
+  "packageManager": "npm@10.9.2",
+  "scripts": {
+    "dev": "next dev",
+    "build:next": "next build",
+    "build:cloudflare": "npm run db:generate && opennextjs-cloudflare build",
+    "build": "npm run build:cloudflare",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:standalone": "node --test demo/tests/engine.test.mjs",
+    "test:e2e": "playwright test",
+    "test:engine": "node scripts/clean-engine-build.mjs && tsc -p tsconfig.engine.json",
+    "preflight": "node scripts/preflight.mjs",
+    "db:generate": "prisma generate --no-engine",
+    "db:migrations:apply": "wrangler d1 migrations apply DB --remote",
+    "db:migrations:list": "wrangler d1 migrations list DB --remote",
+    "deploy:cloudflare": "npm run db:migrations:apply && opennextjs-cloudflare deploy",
+    "deploy": "npm run deploy:cloudflare",
+    "preview:cloudflare": "npm run db:generate && opennextjs-cloudflare preview",
+    "verify": "npm run db:generate && npm run preflight && npm run typecheck && npm run test:engine && npm run test && npm run test:standalone && npm run build:cloudflare"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "3.9.1",
+    "@opennextjs/cloudflare": "1.20.2",
+    "@prisma/client": "6.19.0",
+    "jose": "6.2.3",
+    "next": "15.2.4",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "react-hook-form": "7.54.2",
+    "zod": "3.24.2",
+    "@prisma/adapter-d1": "6.19.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "3.3.0",
+    "@playwright/test": "1.51.1",
+    "@types/node": "22.13.10",
+    "@types/react": "19.0.10",
+    "@types/react-dom": "19.0.4",
+    "eslint": "9.22.0",
+    "eslint-config-next": "15.2.4",
+    "prisma": "6.19.0",
+    "tsx": "4.19.3",
+    "typescript": "5.8.2",
+    "vitest": "3.0.8",
+    "wrangler": "4.114.0",
+    "@cloudflare/workers-types": "4.20260801.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "Base de datos Cloudflare D1 del Sistema de Presupuestos de Postgrado UTEM."
+      },
+      "CLOUDFLARE_ACCESS_TEAM_DOMAIN": {
+        "description": "Dominio del equipo Zero Trust, por ejemplo https://utem.cloudflareaccess.com."
+      },
+      "CLOUDFLARE_ACCESS_AUD": {
+        "description": "AUD de la aplicación protegida con Cloudflare Access."
+      },
+      "BOOTSTRAP_ADMIN_EMAIL": {
+        "description": "Correo UTEM del administrador inicial; luego debe reducirse a un rol segregado."
+      }
+    }
+  }
+}

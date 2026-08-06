@@ -1,0 +1,82 @@
+import type { BudgetTemplate } from "../calculations/types";
+
+export const defaultBudgetTemplates: BudgetTemplate[] = [
+  {
+    id: "template-doctorado",
+    code: "DOCTORADO",
+    name: "Plantilla Doctoral",
+    programType: "DOCTORADO",
+    description: "Incluye beca de excelencia académica de arancel y beca de atención económica de manutención.",
+    version: 1,
+    active: true,
+    items: [
+      {
+        id: "doctorado-beca-arancel",
+        key: "beca-excelencia-arancel",
+        kind: "BECA_ARANCEL",
+        name: "Beca de excelencia académica (arancel)",
+        active: true,
+        position: 1,
+        config: { studentMode: "TODOS_ACTIVOS", students: 0, coverage: 1, periodMode: "TODOS" },
+      },
+      {
+        id: "doctorado-beca-mantencion",
+        key: "beca-atencion-economica",
+        kind: "BECA_MANUTENCION",
+        name: "Beca de atención económica (manutención)",
+        active: true,
+        position: 2,
+        config: { studentMode: "TODOS_ACTIVOS", students: 0, months: 0, periodMode: "TODOS" },
+      },
+    ],
+  },
+  {
+    id: "template-magister-academico",
+    code: "MAGISTER_ACADEMICO",
+    name: "Plantilla Magíster Académico",
+    programType: "MAGISTER_ACADEMICO",
+    description: "Incluye beca de excelencia académica de arancel y beca de atención económica de manutención.",
+    version: 1,
+    active: true,
+    items: [
+      {
+        id: "ma-beca-arancel",
+        key: "beca-excelencia-arancel",
+        kind: "BECA_ARANCEL",
+        name: "Beca de excelencia académica (arancel)",
+        active: true,
+        position: 1,
+        config: { studentMode: "TODOS_ACTIVOS", students: 0, coverage: 1, periodMode: "TODOS" },
+      },
+      {
+        id: "ma-beca-mantencion",
+        key: "beca-atencion-economica",
+        kind: "BECA_MANUTENCION",
+        name: "Beca de atención económica (manutención)",
+        active: true,
+        position: 2,
+        config: { studentMode: "TODOS_ACTIVOS", students: 0, months: 0, periodMode: "TODOS" },
+      },
+    ],
+  },
+  {
+    id: "template-magister-profesional",
+    code: "MAGISTER_PROFESIONAL",
+    name: "Plantilla Magíster Profesional",
+    programType: "MAGISTER_PROFESIONAL",
+    description: "Incluye únicamente descuentos configurables; no incorpora becas académicas por defecto.",
+    version: 1,
+    active: true,
+    items: [
+      {
+        id: "mp-descuento",
+        key: "descuento-incorporable",
+        kind: "DESCUENTO",
+        name: "Descuento incorporable",
+        active: true,
+        position: 1,
+        config: { percentage: 0, students: 0, periodMode: "TODOS", note: "Complete porcentaje y estudiantes según autorización." },
+      },
+    ],
+  },
+];

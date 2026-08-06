@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": ".engine-build",
+    "rootDir": ".",
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": [
+    "lib/calculations/**/*.ts",
+    "lib/templates/**/*.ts",
+    "lib/demo-data.ts",
+    "lib/workflow/**/*.ts",
+    "lib/export/report-model.ts",
+    "lib/export/xlsx.ts",
+    "lib/export/pdf.ts"
+  ]
+}
