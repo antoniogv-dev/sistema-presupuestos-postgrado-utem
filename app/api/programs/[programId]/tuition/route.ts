@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import { apiError, hasAccess, requireApiIdentity } from "@/lib/auth/api-access";
 import { d1Id, d1Json, runD1Batch } from "@/lib/database/d1-atomic";
 import { getPrismaClient } from "@/lib/database/prisma";
@@ -68,7 +68,7 @@ export async function PUT(request: Request, context: RouteContext) {
 
     return NextResponse.json({ message: "Aranceles del programa actualizados.", values: payload.values });
   } catch (error) {
-    if (error instanceof z.ZodError) return NextResponse.json({ message: "Datos de arancel inválidos.", issues: error.issues }, { status: 400 });
+    if (error instanceof ZodError) return NextResponse.json({ message: "Datos de arancel inválidos.", issues: error.issues }, { status: 400 });
     return apiError(error);
   }
 }

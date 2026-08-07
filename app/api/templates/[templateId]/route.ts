@@ -3,6 +3,7 @@ import { apiError, hasAccess, requireApiIdentity } from "@/lib/auth/api-access";
 import { d1Id, d1Json, runD1Batch } from "@/lib/database/d1-atomic";
 import { getPrismaClient } from "@/lib/database/prisma";
 import { d1Database } from "@/lib/runtime-env";
+import { templateApiShape } from "@/lib/templates/api-shape";
 
 const itemSchema = z.object({
   key: z.string().min(1),
@@ -71,7 +72,8 @@ export async function PUT(request: Request, context: { params: Promise<{ templat
       where: { id: templateId },
       include: { items: { orderBy: { position: "asc" } } },
     });
-    return Response.json(updated);
+    if (!updated) throw new Error("NOT_FOUND");
+    return Response.json(templateApiShape(updated));
   } catch (error) {
     return apiError(error);
   }

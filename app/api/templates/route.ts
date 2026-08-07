@@ -3,6 +3,7 @@ import { apiError, hasAccess, requireApiIdentity } from "@/lib/auth/api-access";
 import { d1Id, d1Json, runD1Batch } from "@/lib/database/d1-atomic";
 import { getPrismaClient } from "@/lib/database/prisma";
 import { d1Database } from "@/lib/runtime-env";
+import { templateApiShape } from "@/lib/templates/api-shape";
 
 const itemSchema = z.object({
   key: z.string().min(1),
@@ -30,18 +31,7 @@ export async function GET(request: Request) {
       include: { items: { orderBy: { position: "asc" } } },
       orderBy: [{ programType: "asc" }, { name: "asc" }],
     });
-    return Response.json(templates.map((template) => ({
-      ...template,
-      items: template.items.map((item) => ({
-        id: item.id,
-        key: item.itemKey,
-        kind: item.kind,
-        name: item.name,
-        active: item.active,
-        position: item.position,
-        config: item.config,
-      })),
-    })));
+    return Response.json(templates.map(templateApiShape));
   } catch (error) {
     return apiError(error);
   }
@@ -106,7 +96,8 @@ export async function POST(request: Request) {
       where: { id: templateId },
       include: { items: { orderBy: { position: "asc" } } },
     });
-    return Response.json(created, { status: 201 });
+    if (!created) throw new Error("NOT_FOUND");
+    return Response.json(templateApiShape(created), { status: 201 });
   } catch (error) {
     return apiError(error);
   }

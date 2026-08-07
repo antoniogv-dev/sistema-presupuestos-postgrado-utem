@@ -11,7 +11,7 @@ export interface RuntimeBindings {
 
 function cloudflareBindings(): RuntimeBindings | undefined {
   try {
-    return getCloudflareContext<RuntimeBindings>().env;
+    return getCloudflareContext().env as RuntimeBindings;
   } catch {
     return undefined;
   }

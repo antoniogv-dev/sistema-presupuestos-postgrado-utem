@@ -1,6 +1,6 @@
 {
   "name": "sistema-presupuestos-postgrado-utem",
-  "version": "1.0.0-d1-web",
+  "version": "1.0.3-d1-web",
   "private": true,
   "description": "Sistema de Presupuestos de Postgrado UTEM para Cloudflare Workers y D1, desplegable desde GitHub y Cloudflare web.",
   "engines": {
@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "next dev",
     "build:next": "next build",
-    "build:cloudflare": "npm run db:generate && opennextjs-cloudflare build",
+    "build:cloudflare": "npm run db:generate && npm run quality:cloudflare && opennextjs-cloudflare build",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -26,8 +26,10 @@
     "db:migrations:list": "wrangler d1 migrations list DB --remote",
     "deploy:cloudflare": "npm run db:migrations:apply && opennextjs-cloudflare deploy",
     "deploy": "npm run deploy:cloudflare",
-    "preview:cloudflare": "npm run db:generate && opennextjs-cloudflare preview",
-    "verify": "npm run db:generate && npm run preflight && npm run typecheck && npm run test:engine && npm run test && npm run test:standalone && npm run build:cloudflare"
+    "preview:cloudflare": "npm run build:cloudflare && opennextjs-cloudflare preview",
+    "verify": "npm run build:cloudflare",
+    "source:audit": "node scripts/source-audit.mjs",
+    "quality:cloudflare": "npm run preflight && npm run source:audit && npm run typecheck && npm run lint && npm run test:engine && npm run test && npm run test:standalone"
   },
   "dependencies": {
     "@hookform/resolvers": "3.9.1",

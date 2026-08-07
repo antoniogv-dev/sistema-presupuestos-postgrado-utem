@@ -30,7 +30,20 @@ const clone = <T,>(value: T): T => structuredClone(value);
 const uid = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 const budgetStatus = (value: string): CohortBudget["status"] => ({ BORRADOR: "Borrador", EN_REVISION: "En revisión", OBSERVADO: "Observado", APROBADO: "Aprobado", REEMPLAZADO: "Reemplazado" } as Record<string,CohortBudget["status"]>)[value] ?? "Borrador";
 const workflowDecision = (action: string): ReviewDecision => ({ SUBMIT_VB: "ENVIADO", VB_APPROVE: "VISTO_BUENO", VB_OBSERVE: "OBSERVADO", FINAL_APPROVE: "APROBADO", FINAL_OBSERVE: "RECHAZADO" } as Record<string,ReviewDecision>)[action] ?? "OBSERVADO";
-const responseBody = async <T,>(response: Response): Promise<T> => { const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error((body as { error?: string }).error ?? "No fue posible completar la operación."); return body as T; };
+function apiErrorMessage(body: unknown): string {
+  if (typeof body !== "object" || body === null || !("error" in body)) {
+    return "No fue posible completar la operación.";
+  }
+  const value = (body as { error?: unknown }).error;
+  return typeof value === "string" && value.trim()
+    ? value
+    : "No fue posible completar la operación.";
+}
+const responseBody = async <T,>(response: Response): Promise<T> => {
+  const body: unknown = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(apiErrorMessage(body));
+  return body as T;
+};
 
 function toProgram(record: ApiProgram): Program {
   const annualTuition = Object.fromEntries((record.annualTuitions ?? []).map((item) => [item.year, numberValue(item.amount)]));

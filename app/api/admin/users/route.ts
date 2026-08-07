@@ -1,5 +1,5 @@
 import { AccessLevel } from "@prisma/client";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import { apiError, hasAccess, requireApiIdentity } from "@/lib/auth/api-access";
 import { d1Id, d1Json, runD1Batch } from "@/lib/database/d1-atomic";
 import { getPrismaClient } from "@/lib/database/prisma";
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
       roles: [input.accessLevel],
     }, { status: 201 });
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof ZodError) {
       return Response.json({ error: "Datos de usuario inválidos.", issues: error.issues }, { status: 400 });
     }
     return apiError(error);
