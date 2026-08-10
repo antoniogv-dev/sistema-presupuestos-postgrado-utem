@@ -1,6 +1,6 @@
 {
   "name": "sistema-presupuestos-postgrado-utem",
-  "version": "1.0.12-d1-web",
+  "version": "1.0.13-d1-web",
   "private": true,
   "description": "Sistema de Presupuestos de Postgrado UTEM para Cloudflare Workers y D1, desplegable desde GitHub y Cloudflare web.",
   "engines": {
@@ -21,7 +21,7 @@
     "test:e2e": "playwright test",
     "test:engine": "node scripts/clean-engine-build.mjs && tsc -p tsconfig.engine.json",
     "preflight": "node scripts/preflight.mjs",
-    "db:generate": "prisma generate --no-engine",
+    "db:generate": "npm run db:validate && prisma generate --no-engine",
     "db:migrations:apply": "wrangler d1 migrations apply DB --remote",
     "db:migrations:list": "wrangler d1 migrations list DB --remote",
     "deploy:cloudflare": "npm run db:migrations:apply && opennextjs-cloudflare deploy",
@@ -29,7 +29,8 @@
     "preview:cloudflare": "npm run build:cloudflare && opennextjs-cloudflare preview",
     "verify": "npm run build:cloudflare",
     "source:audit": "node scripts/source-audit.mjs",
-    "quality:cloudflare": "npm run preflight && npm run source:audit && npm run typecheck && npm run lint && npm run test:engine && npm run test && npm run test:standalone"
+    "quality:cloudflare": "npm run preflight && npm run source:audit && npm run typecheck && npm run lint && npm run test:engine && npm run test && npm run test:standalone",
+    "db:validate": "prisma validate"
   },
   "dependencies": {
     "@hookform/resolvers": "3.9.1",

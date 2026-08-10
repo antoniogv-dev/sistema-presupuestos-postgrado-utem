@@ -172,16 +172,42 @@ if (!adminAccess.includes("Antonio Gutiérrez") || !adminAccess.includes("BOOTST
 
 
 const prismaFactory = await readFile(path.join(root, "lib/database/prisma.ts"), "utf8");
-if (/globalThis|globalForPrisma|prismaBinding/.test(prismaFactory)) {
+// Analice sólo código ejecutable: los comentarios explicativos pueden mencionar
+// globalThis como antipatrón y no deben producir falsos positivos en CI.
+const prismaExecutable = prismaFactory
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/\/\/.*$/gm, "");
+if (/\bglobalThis\b|\bglobalForPrisma\b|\bprismaBinding\b/.test(prismaExecutable)) {
   fail("lib/database/prisma.ts: no reutilice PrismaClient/PrismaD1 globalmente entre requests de Cloudflare Workers.");
 }
-if (!prismaFactory.includes("new PrismaClient")) {
+if (!prismaExecutable.includes("new PrismaClient")) {
   fail("lib/database/prisma.ts: debe crear un PrismaClient ligado al binding D1 del request actual.");
 }
 
 const authHealth = await readFile(path.join(root, "app/api/auth/health/route.ts"), "utf8");
 if (!authHealth.includes("AUTH_READY") || !authHealth.includes("BOOTSTRAP_ADMIN_PASSWORD")) {
   fail("app/api/auth/health/route.ts: falta el diagnóstico seguro de autenticación/D1.");
+}
+
+// Prisma/OpenNext: estas condiciones son obligatorias para el runtime workerd.
+const nextConfigSource = await readFile(path.join(root, "next.config.ts"), "utf8");
+if (!nextConfigSource.includes("serverExternalPackages")) {
+  fail("next.config.ts: falta serverExternalPackages para Prisma/OpenNext.");
+}
+for (const pkg of ["@prisma/client", ".prisma/client"]) {
+  if (!nextConfigSource.includes(pkg)) {
+    fail(`next.config.ts: serverExternalPackages debe incluir ${pkg}.`);
+  }
+}
+const prismaSchemaSource = await readFile(path.join(root, "prisma/schema.prisma"), "utf8");
+if (/generator\s+client\s*\{[\s\S]*?\boutput\s*=/.test(prismaSchemaSource)) {
+  fail("prisma/schema.prisma: no use output personalizado; OpenNext debe parchear el cliente estándar.");
+}
+const prismaClientVersion = packageJson.dependencies?.["@prisma/client"];
+const prismaAdapterVersion = packageJson.dependencies?.["@prisma/adapter-d1"];
+const prismaCliVersion = packageJson.devDependencies?.prisma;
+if (!prismaClientVersion || prismaClientVersion !== prismaAdapterVersion || prismaClientVersion !== prismaCliVersion) {
+  fail(`package.json: Prisma CLI, @prisma/client y @prisma/adapter-d1 deben coincidir. prisma=${prismaCliVersion ?? "?"}, client=${prismaClientVersion ?? "?"}, adapter=${prismaAdapterVersion ?? "?"}.`);
 }
 
 for (const message of warnings) console.warn(`ADVERTENCIA: ${message}`);
@@ -191,3 +217,4 @@ if (failures.length) {
 }
 
 console.log(`Auditoría de código correcta${warnings.length ? `, con ${warnings.length} advertencia(s)` : ""}.`);
+

@@ -77,3 +77,30 @@ if (new Set(migrations.map((name) => name.slice(0, 4))).size !== migrations.leng
 }
 
 console.log(`Preflight correcto: Node 22, dependencias Next/OpenNext compatibles, build no recursivo, D1 y ${migrations.length} migraciones verificados.`);
+
+// Integración Prisma + OpenNext/Cloudflare.
+const prismaVersion = packageJson.dependencies?.["@prisma/client"];
+const adapterD1Version = packageJson.dependencies?.["@prisma/adapter-d1"];
+const prismaCliVersion = packageJson.devDependencies?.prisma;
+if (!prismaVersion || prismaVersion !== adapterD1Version || prismaVersion !== prismaCliVersion) {
+  throw new Error(`Prisma, @prisma/client y @prisma/adapter-d1 deben usar exactamente la misma versión. prisma=${prismaCliVersion ?? "?"}, client=${prismaVersion ?? "?"}, adapter=${adapterD1Version ?? "?"}.`);
+}
+
+const nextConfig = await readFile("next.config.ts", "utf8");
+for (const pkg of ["@prisma/client", ".prisma/client"]) {
+  if (!nextConfig.includes(pkg)) {
+    throw new Error(`next.config.ts debe declarar serverExternalPackages e incluir ${pkg} para OpenNext/Cloudflare.`);
+  }
+}
+if (!nextConfig.includes("serverExternalPackages")) {
+  throw new Error("next.config.ts debe declarar serverExternalPackages para Prisma en OpenNext/Cloudflare.");
+}
+
+const prismaSchema = await readFile("prisma/schema.prisma", "utf8");
+if (!/provider\s*=\s*"prisma-client-js"/.test(prismaSchema)) {
+  throw new Error('Prisma 6/OpenNext debe usar provider = "prisma-client-js" en este proyecto.');
+}
+if (/generator\s+client\s*\{[\s\S]*?\boutput\s*=/.test(prismaSchema)) {
+  throw new Error("No configure output personalizado para Prisma Client: OpenNext necesita parchear el cliente generado estándar.");
+}
+console.log(`Prisma/OpenNext verificado: ${prismaVersion}, adapter D1 alineado y serverExternalPackages configurado.`);
