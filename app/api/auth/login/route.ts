@@ -67,6 +67,14 @@ function classifyLoginFailure(error: unknown): LoginFailure {
     };
   }
 
+  if (message.includes("cannot perform i/o on behalf of a different request")) {
+    return {
+      status: 503,
+      code: "AUTH_RUNTIME_CONTEXT_ERROR",
+      error: "El acceso a D1 intentó reutilizar un contexto de otro request. Actualice lib/database/prisma.ts para crear un PrismaClient por invocación.",
+    };
+  }
+
   if (message.includes("bootstrap_admin_password_missing")) {
     return {
       status: 503,

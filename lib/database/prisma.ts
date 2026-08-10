@@ -2,25 +2,17 @@ import { PrismaD1 } from "@prisma/adapter-d1";
 import { PrismaClient } from "@prisma/client";
 import { d1Database } from "@/lib/runtime-env";
 
-type PrismaGlobal = { prisma?: PrismaClient; prismaBinding?: D1Database };
-const globalForPrisma = globalThis as unknown as PrismaGlobal;
-
 /**
- * Prisma se conecta exclusivamente al binding D1 `DB` del Worker.
- * No utiliza cadenas de conexión ni Hyperdrive.
+ * Crea un PrismaClient nuevo para el contexto actual del request.
+ *
+ * Cloudflare Workers no permite reutilizar objetos de I/O creados por una
+ * invocación en otra invocación. El adapter D1 queda ligado al request actual,
+ * por lo que NO se debe conservar PrismaClient en globalThis entre requests.
  */
 export function getPrismaClient(): PrismaClient {
   const database = d1Database();
-  if (globalForPrisma.prisma && globalForPrisma.prismaBinding === database) {
-    return globalForPrisma.prisma;
-  }
-
-  const client = new PrismaClient({
+  return new PrismaClient({
     adapter: new PrismaD1(database),
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
-
-  globalForPrisma.prisma = client;
-  globalForPrisma.prismaBinding = database;
-  return client;
 }
