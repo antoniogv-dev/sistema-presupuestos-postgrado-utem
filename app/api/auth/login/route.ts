@@ -1,9 +1,8 @@
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { ensureBootstrapAdministrator } from "@/lib/auth/api-access";
+import { ensureBootstrapAdministrator, findAuthUserByEmail } from "@/lib/auth/api-access";
 import { createSessionToken, hashSessionToken, verifyPassword } from "@/lib/auth/password";
 import { d1Id, runD1Batch } from "@/lib/database/d1-atomic";
-import { getPrismaClient } from "@/lib/database/prisma";
 import { d1Database, runtimeValue } from "@/lib/runtime-env";
 
 const loginSchema = z.object({
@@ -46,11 +45,7 @@ function classifyLoginFailure(error: unknown): LoginFailure {
   const message = errorChain(error).toLowerCase();
 
   if (message.includes("database_not_configured")) {
-    return {
-      status: 503,
-      code: "AUTH_D1_BINDING_MISSING",
-      error: "La base D1 no está vinculada al Worker. Revise el binding DB.",
-    };
+    return { status: 503, code: "AUTH_D1_BINDING_MISSING", error: "La base D1 no está vinculada al Worker. Revise el binding DB." };
   }
 
   if (
@@ -67,19 +62,19 @@ function classifyLoginFailure(error: unknown): LoginFailure {
     };
   }
 
-  if (message.includes("cannot perform i/o on behalf of a different request")) {
-    return {
-      status: 503,
-      code: "AUTH_RUNTIME_CONTEXT_ERROR",
-      error: "El acceso a D1 intentó reutilizar un contexto de otro request. Actualice lib/database/prisma.ts para crear un PrismaClient por invocación.",
-    };
-  }
-
   if (message.includes("bootstrap_admin_password_missing")) {
     return {
       status: 503,
       code: "AUTH_ADMIN_SECRET_MISSING",
       error: "La contraseña inicial del administrador no está disponible para el Worker. Revise BOOTSTRAP_ADMIN_PASSWORD en Variables and Secrets.",
+    };
+  }
+
+  if (message.includes("bootstrap_admin_provision_failed")) {
+    return {
+      status: 500,
+      code: "AUTH_BOOTSTRAP_PROVISION_FAILED",
+      error: "No fue posible crear el administrador inicial en D1. Revise Logs → Live con el código AUTH_BOOTSTRAP_PROVISION_FAILED.",
     };
   }
 
@@ -92,7 +87,6 @@ function classifyLoginFailure(error: unknown): LoginFailure {
 
 async function assertAuthDatabaseReady() {
   const database = d1Database();
-
   const userColumnsResult = await database.prepare(`PRAGMA table_info("User")`).all();
   const userColumns = new Set(
     (userColumnsResult.results ?? [])
@@ -101,9 +95,7 @@ async function assertAuthDatabaseReady() {
   );
 
   const missingColumns = REQUIRED_AUTH_COLUMNS.filter((column) => !userColumns.has(column));
-  if (missingColumns.length) {
-    throw new Error(`AUTH_MIGRATION_REQUIRED:User:${missingColumns.join(",")}`);
-  }
+  if (missingColumns.length) throw new Error(`AUTH_MIGRATION_REQUIRED:User:${missingColumns.join(",")}`);
 
   const sessionTable = await database
     .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'UserSession'`)
@@ -120,20 +112,18 @@ async function assertAuthDatabaseReady() {
 }
 
 export async function POST(request: Request) {
+  let stage = "PARSE_INPUT";
   try {
     const input = loginSchema.parse(await request.json());
+
+    stage = "CHECK_DATABASE";
     await assertAuthDatabaseReady();
 
-    let user = await getPrismaClient().user.findUnique({
-      where: { email: input.email },
-      include: { roles: { include: { role: true } } },
-    });
+    stage = "BOOTSTRAP_ADMIN";
+    let user = await ensureBootstrapAdministrator(input.email);
 
-    // Si el correo coincide con BOOTSTRAP_ADMIN_EMAIL, se reconcilian nombre y roles
-    // antes de validar la contraseña. En el primer acceso también se fija el hash de la
-    // contraseña inicial si BOOTSTRAP_ADMIN_PASSWORD está configurado como Secret.
-    const bootstrap = await ensureBootstrapAdministrator(input.email);
-    if (bootstrap) user = bootstrap;
+    stage = "READ_USER";
+    if (!user) user = await findAuthUserByEmail(input.email);
 
     const bootstrapEmail = runtimeValue("BOOTSTRAP_ADMIN_EMAIL")?.trim().toLowerCase();
     if (
@@ -152,6 +142,7 @@ export async function POST(request: Request) {
       );
     }
 
+    stage = "VERIFY_PASSWORD";
     const valid = await verifyPassword(
       input.password,
       user.passwordHash,
@@ -165,6 +156,7 @@ export async function POST(request: Request) {
       );
     }
 
+    stage = "CREATE_SESSION";
     const token = createSessionToken();
     const tokenHash = await hashSessionToken(token);
     const expiresAt = new Date(Date.now() + SESSION_SECONDS * 1000);
@@ -177,6 +169,7 @@ export async function POST(request: Request) {
       `).bind(d1Id("session"), user.id, tokenHash, expiresAt.toISOString()),
     ]);
 
+    stage = "SET_COOKIE";
     const cookieStore = await cookies();
     cookieStore.set("utem_budget_session", token, {
       httpOnly: true,
@@ -195,12 +188,13 @@ export async function POST(request: Request) {
   } catch (error) {
     const failure = classifyLoginFailure(error);
     console.error("[AUTH_LOGIN_ERROR]", {
+      stage,
       code: failure.code,
       message: errorChain(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
     return Response.json(
-      { error: failure.error, code: failure.code },
+      { error: failure.error, code: failure.code, stage },
       { status: failure.status },
     );
   }

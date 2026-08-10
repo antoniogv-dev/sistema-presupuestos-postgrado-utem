@@ -1,7 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { ZodError } from "zod";
 import { d1Id, runD1Batch } from "@/lib/database/d1-atomic";
-import { getPrismaClient } from "@/lib/database/prisma";
 import { hashPassword, hashSessionToken } from "@/lib/auth/password";
 import { d1Database, runtimeValue } from "@/lib/runtime-env";
 
@@ -15,8 +14,20 @@ export interface ApiIdentity {
   source: "CLOUDFLARE_ACCESS" | "INTERNAL_SESSION" | "INTERNAL_SERVICE";
 }
 
+export interface AuthUserRecord {
+  id: string;
+  email: string;
+  name: string;
+  active: boolean;
+  passwordHash: string | null;
+  passwordSalt: string | null;
+  passwordIterations: number | null;
+  roles: Array<{ role: { code: string } }>;
+}
+
 const accessKeySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 const SESSION_COOKIE = "utem_budget_session";
+const BOOTSTRAP_ROLES = ["ADMIN", "GESTOR", "VISTO_BUENO", "APROBADOR"] as const;
 
 function isAppRole(value: string): value is AppRole {
   return ["ADMIN", "CREADOR", "LECTOR", "GESTOR", "VISTO_BUENO", "APROBADOR"].includes(value);
@@ -43,7 +54,9 @@ async function verifiedAccessEmail(request: Request): Promise<string | null> {
   if (!token) return null;
   const teamDomain = normalizedTeamDomain();
   const audience = runtimeValue("CLOUDFLARE_ACCESS_AUD");
-  if (!teamDomain || !audience) throw new Error("ACCESS_NOT_CONFIGURED");
+  if (!teamDomain || !audience || teamDomain.includes("REEMPLAZAR") || audience.includes("REEMPLAZAR")) {
+    throw new Error("ACCESS_NOT_CONFIGURED");
+  }
 
   let keySet = accessKeySets.get(teamDomain);
   if (!keySet) {
@@ -69,36 +82,127 @@ function cookieValue(request: Request, name: string): string | null {
   return null;
 }
 
-async function sessionUser(request: Request) {
+function asString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function asNullableInteger(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function rowIsActive(value: unknown): boolean {
+  return value === true || value === 1 || value === "1";
+}
+
+function buildAuthUser(rows: Record<string, unknown>[]): AuthUserRecord | null {
+  if (!rows.length) return null;
+  const first = rows[0];
+  const id = asString(first.id);
+  const email = asString(first.email);
+  const name = asString(first.name);
+  if (!id || !email || !name) throw new Error("AUTH_USER_ROW_INVALID");
+
+  const roleCodes = rows
+    .map((row) => asString(row.roleCode))
+    .filter((value): value is string => Boolean(value));
+
+  return {
+    id,
+    email,
+    name,
+    active: rowIsActive(first.active),
+    passwordHash: asString(first.passwordHash),
+    passwordSalt: asString(first.passwordSalt),
+    passwordIterations: asNullableInteger(first.passwordIterations),
+    roles: uniqueRoles(roleCodes).map((code) => ({ role: { code } })),
+  };
+}
+
+async function findAuthUser(field: "email" | "id", value: string): Promise<AuthUserRecord | null> {
+  const database = d1Database();
+  const comparison = field === "email" ? `LOWER(u."email") = LOWER(?)` : `u."id" = ?`;
+  const result = await database.prepare(`
+    SELECT
+      u."id" AS id,
+      u."email" AS email,
+      u."name" AS name,
+      u."active" AS active,
+      u."passwordHash" AS passwordHash,
+      u."passwordSalt" AS passwordSalt,
+      u."passwordIterations" AS passwordIterations,
+      r."code" AS roleCode
+    FROM "User" u
+    LEFT JOIN "UserRole" ur ON ur."userId" = u."id"
+    LEFT JOIN "Role" r ON r."id" = ur."roleId"
+    WHERE ${comparison}
+    ORDER BY r."code"
+  `).bind(value).all();
+
+  return buildAuthUser((result.results ?? []) as Record<string, unknown>[]);
+}
+
+export async function findAuthUserByEmail(email: string): Promise<AuthUserRecord | null> {
+  return findAuthUser("email", email.trim().toLowerCase());
+}
+
+export async function findAuthUserById(id: string): Promise<AuthUserRecord | null> {
+  return findAuthUser("id", id);
+}
+
+async function sessionUser(request: Request): Promise<AuthUserRecord | null> {
   const token = cookieValue(request, SESSION_COOKIE);
   if (!token) return null;
   const tokenHash = await hashSessionToken(token);
-  const session = await getPrismaClient().userSession.findUnique({
-    where: { tokenHash },
-    include: { user: { include: { roles: { include: { role: true } } } } },
-  });
-  if (!session || session.expiresAt.getTime() <= Date.now() || !session.user.active) return null;
-  return session.user;
+  const database = d1Database();
+  const session = await database.prepare(`
+    SELECT "userId" AS userId, "expiresAt" AS expiresAt
+    FROM "UserSession"
+    WHERE "tokenHash" = ?
+    LIMIT 1
+  `).bind(tokenHash).first();
+
+  if (!session) return null;
+  const row = session as Record<string, unknown>;
+  const userId = asString(row.userId);
+  const expiresAt = asString(row.expiresAt);
+  if (!userId || !expiresAt || Date.parse(expiresAt) <= Date.now()) return null;
+
+  const user = await findAuthUserById(userId);
+  return user?.active ? user : null;
 }
 
-export async function ensureBootstrapAdministrator(email: string) {
+export async function ensureBootstrapAdministrator(email: string): Promise<AuthUserRecord | null> {
   const configured = runtimeValue("BOOTSTRAP_ADMIN_EMAIL")?.trim().toLowerCase();
-  if (!configured || configured !== email) return null;
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!configured || configured !== normalizedEmail) return null;
 
-  const prisma = getPrismaClient();
-  const roles = await prisma.role.findMany({
-    where: { code: { in: ["ADMIN", "GESTOR", "VISTO_BUENO", "APROBADOR"] } },
-  });
-  if (roles.length < 4) throw new Error("DATABASE_NOT_INITIALIZED");
-
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true, passwordHash: true } });
-  const userId = existing?.id ?? d1Id("user");
   const database = d1Database();
-  const statements: D1PreparedStatement[] = [];
-  const configuredPassword = runtimeValue("BOOTSTRAP_ADMIN_PASSWORD");
-  let passwordFields: { hash: string; salt: string; iterations: number } | null = null;
-  if (configuredPassword && !existing?.passwordHash) passwordFields = await hashPassword(configuredPassword);
+  const roleResult = await database.prepare(`
+    SELECT "id" AS id, "code" AS code
+    FROM "Role"
+    WHERE "code" IN ('ADMIN', 'GESTOR', 'VISTO_BUENO', 'APROBADOR')
+    ORDER BY "code"
+  `).all();
 
+  const roles = (roleResult.results ?? []) as Record<string, unknown>[];
+  const rolePairs = roles
+    .map((row) => ({ id: asString(row.id), code: asString(row.code) }))
+    .filter((row): row is { id: string; code: string } => Boolean(row.id && row.code));
+  if (rolePairs.length < BOOTSTRAP_ROLES.length) throw new Error("DATABASE_NOT_INITIALIZED");
+
+  const existing = await findAuthUserByEmail(normalizedEmail);
+  const userId = existing?.id ?? d1Id("user");
+  const configuredPassword = runtimeValue("BOOTSTRAP_ADMIN_PASSWORD");
+  if (!configuredPassword && !existing?.passwordHash) throw new Error("BOOTSTRAP_ADMIN_PASSWORD_MISSING");
+
+  let passwordFields: { hash: string; salt: string; iterations: number } | null = null;
+  if (configuredPassword && !existing?.passwordHash) {
+    passwordFields = await hashPassword(configuredPassword);
+  }
+
+  const statements: D1PreparedStatement[] = [];
   if (passwordFields) {
     statements.push(database.prepare(`
       INSERT INTO "User" (
@@ -106,49 +210,47 @@ export async function ensureBootstrapAdministrator(email: string) {
         "passwordUpdatedAt", "createdAt", "updatedAt"
       ) VALUES (?, ?, 'Antonio Gutiérrez', 1, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT("email") DO UPDATE SET
-        "name" = 'Antonio Gutiérrez', "active" = 1,
-        "passwordHash" = excluded."passwordHash", "passwordSalt" = excluded."passwordSalt",
-        "passwordIterations" = excluded."passwordIterations", "passwordUpdatedAt" = CURRENT_TIMESTAMP,
+        "name" = 'Antonio Gutiérrez',
+        "active" = 1,
+        "passwordHash" = excluded."passwordHash",
+        "passwordSalt" = excluded."passwordSalt",
+        "passwordIterations" = excluded."passwordIterations",
+        "passwordUpdatedAt" = CURRENT_TIMESTAMP,
         "updatedAt" = CURRENT_TIMESTAMP
-    `).bind(userId, email, passwordFields.hash, passwordFields.salt, passwordFields.iterations));
+    `).bind(userId, normalizedEmail, passwordFields.hash, passwordFields.salt, passwordFields.iterations));
   } else {
     statements.push(database.prepare(`
       INSERT INTO "User" ("id", "email", "name", "active", "createdAt", "updatedAt")
       VALUES (?, ?, 'Antonio Gutiérrez', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      ON CONFLICT("email") DO UPDATE SET "name" = 'Antonio Gutiérrez', "active" = 1, "updatedAt" = CURRENT_TIMESTAMP
-    `).bind(userId, email));
+      ON CONFLICT("email") DO UPDATE SET
+        "name" = 'Antonio Gutiérrez', "active" = 1, "updatedAt" = CURRENT_TIMESTAMP
+    `).bind(userId, normalizedEmail));
   }
 
-  for (const role of roles) {
-    statements.push(database.prepare(`INSERT OR IGNORE INTO "UserRole" ("userId", "roleId") VALUES (?, ?)`).bind(userId, role.id));
+  for (const role of rolePairs) {
+    statements.push(
+      database.prepare(`INSERT OR IGNORE INTO "UserRole" ("userId", "roleId") VALUES (?, ?)`).bind(userId, role.id),
+    );
   }
+
   await runD1Batch(statements);
-
-  return prisma.user.findUnique({
-    where: { id: userId },
-    include: { roles: { include: { role: true } } },
-  });
+  const provisioned = await findAuthUserById(userId);
+  if (!provisioned) throw new Error("BOOTSTRAP_ADMIN_PROVISION_FAILED");
+  return provisioned;
 }
 
 /**
  * La identidad puede provenir de Cloudflare Access, de una sesión interna segura o de una clave de servicio.
- * El administrador inicial se aprovisiona mediante BOOTSTRAP_ADMIN_EMAIL y, opcionalmente,
- * BOOTSTRAP_ADMIN_PASSWORD para habilitar el inicio de sesión interno.
+ * La ruta crítica de autenticación usa directamente el binding D1 para no depender del estado del adapter Prisma.
  */
 export async function requireApiIdentity(request: Request): Promise<ApiIdentity> {
-  const prisma = getPrismaClient();
   const accessEmail = await verifiedAccessEmail(request);
   const configuredKey = runtimeValue("INTERNAL_API_KEY");
   const bearer = request.headers.get("authorization");
   const serviceAuthorized = Boolean(configuredKey && bearer === `Bearer ${configuredKey}`);
 
   let source: ApiIdentity["source"] = "INTERNAL_SESSION";
-  let user = accessEmail
-    ? await prisma.user.findUnique({
-      where: { email: accessEmail },
-      include: { roles: { include: { role: true } } },
-    })
-    : null;
+  let user = accessEmail ? await findAuthUserByEmail(accessEmail) : null;
 
   if (accessEmail) {
     source = "CLOUDFLARE_ACCESS";
@@ -168,10 +270,7 @@ export async function requireApiIdentity(request: Request): Promise<ApiIdentity>
   }
 
   if (!user && serviceAuthorized) {
-    user = await prisma.user.findUnique({
-      where: { id: request.headers.get("x-user-id") ?? "" },
-      include: { roles: { include: { role: true } } },
-    });
+    user = await findAuthUserById(request.headers.get("x-user-id") ?? "");
     source = "INTERNAL_SERVICE";
   }
 
