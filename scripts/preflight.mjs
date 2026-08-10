@@ -58,6 +58,11 @@ if (packageJson.scripts?.build !== "next build") {
   throw new Error('package.json debe contener "build": "next build" para evitar recursión con OpenNext.');
 }
 
+const versionRoute = await readFile("app/api/version/route.ts", "utf8");
+if (/export\s+const\s+runtime\s*=\s*["\']edge["\']/.test(versionRoute)) {
+  throw new Error('app/api/version/route.ts no puede usar runtime="edge" con @opennextjs/cloudflare; use Node.js o elimine esa declaración.');
+}
+
 const loginPage = await readFile("app/login/page.tsx", "utf8");
 if (!loginPage.includes("function isLoginResponseBody")) {
   throw new Error("app/login/page.tsx no contiene el type guard isLoginResponseBody de v10.4+; probablemente se está desplegando una versión antigua.");

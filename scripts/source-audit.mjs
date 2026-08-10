@@ -221,6 +221,27 @@ if (!prismaClientVersion || prismaClientVersion !== prismaAdapterVersion || pris
   fail(`package.json: Prisma CLI, @prisma/client y @prisma/adapter-d1 deben coincidir. prisma=${prismaCliVersion ?? "?"}, client=${prismaClientVersion ?? "?"}, adapter=${prismaAdapterVersion ?? "?"}.`);
 }
 
+
+// OpenNext Cloudflare 1.x usa el runtime Node.js de Next.js. Una ruta Edge
+// puede compilar en Next y fallar recién durante el bundle de OpenNext.
+const edgeRuntimePattern = /export\s+const\s+runtime\s*=\s*["']edge["']/;
+async function auditNoEdgeRuntime(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await auditNoEdgeRuntime(fullPath);
+      continue;
+    }
+    if (!/\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(entry.name)) continue;
+    const source = await readFile(fullPath, "utf8");
+    if (edgeRuntimePattern.test(source)) {
+      fail(`${path.relative(root, fullPath)}: @opennextjs/cloudflare requiere runtime Node.js; elimine export const runtime = "edge".`);
+    }
+  }
+}
+await auditNoEdgeRuntime(path.join(root, "app"));
+
 for (const message of warnings) console.warn(`ADVERTENCIA: ${message}`);
 if (failures.length) {
   for (const message of failures) console.error(`ERROR: ${message}`);

@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { hashSessionToken } from "@/lib/auth/password";
 import { d1Database } from "@/lib/runtime-env";
 
-export async function POST(request: Request) {
+export async function POST() {
   const cookieStore = await cookies();
   const token = cookieStore.get("utem_budget_session")?.value;
   if (token) {

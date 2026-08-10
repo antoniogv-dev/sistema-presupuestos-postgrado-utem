@@ -309,7 +309,7 @@ input:disabled { background: var(--surface-muted); color: #52606b; }
 .tuition-toolbar label { min-width: 280px; flex: 1; }
 .numeric-input { min-width: 110px; width: 100%; text-align: right; }
 .program-filter-bar { grid-template-columns: minmax(260px, 2fr) minmax(170px, 1fr) minmax(170px, 1fr) auto; align-items: end; }
-.filter-actions { display: flex; gap: .55rem; align-items: end; }
+.filter-actions { display: flex; gap: .55rem; align-items: flex-end; }
 .form-actions-row { display: flex; gap: .7rem; flex-wrap: wrap; margin-top: 1rem; }
 .parameter-editor-grid { margin-bottom: 1rem; }
 .parameter-edit-table input { width: 100%; min-width: 115px; }
