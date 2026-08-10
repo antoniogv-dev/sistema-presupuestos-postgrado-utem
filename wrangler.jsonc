@@ -22,7 +22,7 @@
     "NEXT_PUBLIC_APP_NAME": "Sistema de Presupuestos de Postgrado UTEM",
     "CLOUDFLARE_ACCESS_TEAM_DOMAIN": "https://REEMPLAZAR_EQUIPO.cloudflareaccess.com",
     "CLOUDFLARE_ACCESS_AUD": "REEMPLAZAR_AUD_DE_ACCESS",
-    "BOOTSTRAP_ADMIN_EMAIL": "REEMPLAZAR_CORREO_UTEM"
+    "BOOTSTRAP_ADMIN_EMAIL": "manuel.gutierrez@utem.cl"
   },
   "observability": {
     "enabled": true
