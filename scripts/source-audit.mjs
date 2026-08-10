@@ -72,6 +72,14 @@ for (const file of auditedFiles) {
   }
 }
 
+const loginPageSource = await readFile(path.join(root, "app/login/page.tsx"), "utf8");
+if (!loginPageSource.includes("function isLoginResponseBody")) {
+  fail("app/login/page.tsx: falta el type guard isLoginResponseBody; el repositorio parece conservar una versión antigua del login.");
+}
+if (!loginPageSource.includes("const parsed: unknown = await response.json()")) {
+  fail("app/login/page.tsx: la respuesta JSON del login debe capturarse primero como unknown y validarse.");
+}
+
 const wrangler = JSON.parse(await readFile(path.join(root, "wrangler.jsonc"), "utf8"));
 const d1 = wrangler.d1_databases?.find((binding) => binding.binding === "DB");
 if (!d1) fail("wrangler.jsonc: falta el binding D1 DB.");

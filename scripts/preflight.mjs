@@ -9,6 +9,7 @@ const requiredFiles = [
   "open-next.config.ts",
   "wrangler.jsonc",
   "app/api/health/route.ts",
+  "app/api/version/route.ts",
   "app/api/parameters/route.ts",
   "app/api/programs/[programId]/route.ts",
   "app/api/budgets/[budgetId]/versions/route.ts",
@@ -24,6 +25,8 @@ if (nodeMajor !== 22) {
 }
 
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
+console.log(`Versión del proyecto detectada: ${packageJson.version ?? "sin versión"}`);
+
 
 function parseSemver(version) {
   const match = String(version ?? "").match(/^(\d+)\.(\d+)\.(\d+)/);
@@ -53,6 +56,14 @@ if (packageJson.devDependencies?.["eslint-config-next"] !== nextVersion) {
 
 if (packageJson.scripts?.build !== "next build") {
   throw new Error('package.json debe contener "build": "next build" para evitar recursión con OpenNext.');
+}
+
+const loginPage = await readFile("app/login/page.tsx", "utf8");
+if (!loginPage.includes("function isLoginResponseBody")) {
+  throw new Error("app/login/page.tsx no contiene el type guard isLoginResponseBody de v10.4+; probablemente se está desplegando una versión antigua.");
+}
+if (/return\s+await\s+response\.json\(\)\.catch/.test(loginPage)) {
+  throw new Error("app/login/page.tsx aún devuelve response.json() directamente; aplique la corrección de tipado v10.4+.");
 }
 
 const wrangler = JSON.parse(await readFile("wrangler.jsonc", "utf8"));
