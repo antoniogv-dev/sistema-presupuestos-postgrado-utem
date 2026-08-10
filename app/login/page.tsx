@@ -3,29 +3,36 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
+interface LoginErrorBody {
+  error?: unknown;
+  code?: unknown;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [errorCode, setErrorCode] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
     setMessage("");
+    setErrorCode("");
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const body: unknown = await response.json().catch(() => ({}));
-      const message = typeof body === "object" && body !== null && "error" in body
-        ? (body as { error?: unknown }).error
-        : undefined;
+      const body: LoginErrorBody = await response.json().catch(() => ({}));
+      const apiMessage = typeof body.error === "string" ? body.error.trim() : "";
+      const apiCode = typeof body.code === "string" ? body.code.trim() : "";
       if (!response.ok) {
-        throw new Error(typeof message === "string" && message.trim() ? message : "No fue posible iniciar sesión.");
+        setErrorCode(apiCode);
+        throw new Error(apiMessage || "No fue posible iniciar sesión.");
       }
       router.replace("/");
       router.refresh();
@@ -41,7 +48,10 @@ export default function LoginPage() {
       <span className="brand-kicker">UTEM · Escuela de Postgrado</span>
       <h1>Sistema de Presupuestos</h1>
       <p>Ingrese con su cuenta interna. Si la aplicación está protegida con Cloudflare Access, la sesión institucional también sigue siendo válida.</p>
-      {message ? <div className="notice warning" role="alert">{message}</div> : null}
+      {message ? <div className="notice warning" role="alert">
+        <div>{message}</div>
+        {errorCode ? <small>Código de diagnóstico: <strong>{errorCode}</strong></small> : null}
+      </div> : null}
       <form onSubmit={submit} className="login-form">
         <label>Correo institucional<input type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
         <label>Contraseña<input type="password" autoComplete="current-password" required minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} /></label>
