@@ -8,11 +8,16 @@ interface LoginResponseBody {
   code?: unknown;
 }
 
+function isLoginResponseBody(value: unknown): value is LoginResponseBody {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 async function readLoginResponse(response: Response): Promise<LoginResponseBody> {
   const contentType = response.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
-    return await response.json().catch(() => ({}));
+    const parsed: unknown = await response.json().catch(() => ({}));
+    return isLoginResponseBody(parsed) ? parsed : {};
   }
 
   const text = await response.text().catch(() => "");

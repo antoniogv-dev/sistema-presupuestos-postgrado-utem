@@ -61,6 +61,9 @@ for (const file of auditedFiles) {
   if (/response\.json\(\)[\s\S]{0,180}\bbody\.error\b/.test(content)) {
     fail(`${relative}: valide el resultado unknown de response.json() antes de leer body.error.`);
   }
+  if (/return\s+await\s+response\.json\(\)\.catch/.test(content)) {
+    fail(`${relative}: no devuelva response.json() directamente desde una función tipada; capture como unknown y aplique un type guard.`);
+  }
   if (/config\s*:\s*\{\s*\.\.\.\([^)]*config\s+as\s+object\)/.test(content)) {
     fail(`${relative}: no expanda configuraciones union mediante "as object"; use un helper tipado.`);
   }
