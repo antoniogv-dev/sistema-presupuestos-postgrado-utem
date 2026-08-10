@@ -1,6 +1,6 @@
 {
   "name": "sistema-presupuestos-postgrado-utem",
-  "version": "1.0.3-d1-web",
+  "version": "1.1.0-d1-web",
   "private": true,
   "description": "Sistema de Presupuestos de Postgrado UTEM para Cloudflare Workers y D1, desplegable desde GitHub y Cloudflare web.",
   "engines": {
@@ -71,6 +71,9 @@
       },
       "BOOTSTRAP_ADMIN_EMAIL": {
         "description": "Correo UTEM del administrador inicial; luego debe reducirse a un rol segregado."
+      },
+      "BOOTSTRAP_ADMIN_PASSWORD": {
+        "description": "Secreto de Cloudflare para la contraseña inicial del Administrador. No debe almacenarse en wrangler.jsonc ni en GitHub."
       }
     }
   }

@@ -27,7 +27,8 @@ export function programTypeParameters(parameters: InstitutionalParameters, type:
 export function tuitionForProgramYear(budget: CohortBudget, parameters: InstitutionalParameters, year: number): number {
   const customValues = budget.program.annualTuition;
   if (customValues && Object.keys(customValues).length > 0) return parameterForYear(customValues, year);
-  return parameterForYear(parameters.doctorateTuitionTemplate, year);
+  const typeTemplate = parameters.tuitionTemplates?.[budget.program.type];
+  return parameterForYear(typeTemplate && Object.keys(typeTemplate).length ? typeTemplate : parameters.doctorateTuitionTemplate, year);
 }
 
 function sumManualItems(items: BudgetItem[], year: number, categories: BudgetItem["category"][]): number {

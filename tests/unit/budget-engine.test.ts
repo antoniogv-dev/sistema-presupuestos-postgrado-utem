@@ -96,6 +96,17 @@ describe("motor financiero", () => {
     const result = calculateBudget(budget, institutionalParameters);
     expect(result.annualFlows[0].grossTuition).toBe(15 * 5000000);
   });
+
+  it("usa la plantilla de arancel correspondiente al tipo de programa cuando no existe arancel propio", () => {
+    for (const type of ["DOCTORADO", "MAGISTER_ACADEMICO", "MAGISTER_PROFESIONAL"] as const) {
+      const budget = clone(demoBudget);
+      budget.program.type = type;
+      budget.program.annualTuition = {};
+      const result = calculateBudget(budget, institutionalParameters);
+      const expected = institutionalParameters.tuitionTemplates[type][result.annualFlows[0].year];
+      expect(result.annualFlows[0].annualTuition).toBe(expected);
+    }
+  });
   it("aplica las becas de las plantillas académicas y sólo descuento en la profesional", () => {
     for (const type of ["DOCTORADO", "MAGISTER_ACADEMICO"] as const) {
       const source = clone(demoBudget); source.program.type = type;
@@ -137,6 +148,16 @@ describe("motor financiero", () => {
 });
 
 describe("circuito de revisión", () => {
+  it("permite al administrador operar el flujo sin convertir a lector o creador en gestores", () => {
+    const source = clone(demoBudget);
+    expect(canEditBudget(source, "ADMIN")).toBe(true);
+    expect(canEditBudget(source, "LECTOR")).toBe(false);
+    expect(canEditBudget(source, "CREADOR")).toBe(false);
+    const submitted = applyWorkflowAction(source, "ADMIN", "SUBMIT_VB", "Administrador");
+    expect(submitted.workflowStage).toBe("VISTO_BUENO");
+    expect(submitted.reviewHistory[0].role).toBe("GESTOR");
+  });
+
   it("cumple la secuencia Gestor, V°B° y Aprobación", () => {
     let budget = clone(demoBudget);
     expect(canEditBudget(budget, "GESTOR")).toBe(true);

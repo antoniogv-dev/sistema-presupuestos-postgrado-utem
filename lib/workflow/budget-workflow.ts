@@ -20,16 +20,16 @@ const TRANSITIONS: WorkflowTransition[] = [
 ];
 
 export function availableWorkflowActions(stage: WorkflowStage, role: AccessRole): WorkflowTransition[] {
-  return TRANSITIONS.filter((transition) => transition.fromStage === stage && transition.requiredRole === role);
+  return TRANSITIONS.filter((transition) => transition.fromStage === stage && (role === "ADMIN" || transition.requiredRole === role));
 }
 
 export function canEditBudget(budget: CohortBudget, role: AccessRole): boolean {
-  return role === "GESTOR" && budget.workflowStage === "GESTION" && budget.status !== "Aprobado";
+  return (role === "GESTOR" || role === "ADMIN") && budget.workflowStage === "GESTION" && budget.status !== "Aprobado";
 }
 
 export function canDeleteBudget(budget: CohortBudget, role: AccessRole): boolean {
-  if (budget.status === "Aprobado") return role === "APROBADOR";
-  return role === "GESTOR" && budget.workflowStage === "GESTION";
+  if (budget.status === "Aprobado") return role === "APROBADOR" || role === "ADMIN";
+  return (role === "GESTOR" || role === "ADMIN") && budget.workflowStage === "GESTION";
 }
 
 export function applyWorkflowAction(
@@ -42,12 +42,12 @@ export function applyWorkflowAction(
 ): CohortBudget {
   const transition = TRANSITIONS.find((candidate) => candidate.action === action);
   if (!transition) throw new Error("Acción de flujo desconocida.");
-  if (transition.requiredRole !== role) throw new Error("El rol seleccionado no puede ejecutar esta acción.");
+  if (role !== "ADMIN" && transition.requiredRole !== role) throw new Error("El rol seleccionado no puede ejecutar esta acción.");
   if (transition.fromStage !== budget.workflowStage) throw new Error("La acción no corresponde a la etapa actual del presupuesto.");
 
   const event: ReviewEvent = {
     id: `review-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    role,
+    role: role === "ADMIN" ? transition.requiredRole : role,
     decision: transition.decision,
     user,
     comment,

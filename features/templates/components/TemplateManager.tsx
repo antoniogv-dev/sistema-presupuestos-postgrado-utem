@@ -5,6 +5,7 @@ import type {
   BudgetTemplate,
   BudgetTemplateConfig,
   BudgetTemplateItem,
+  AccessRole,
   CostTemplateConfig,
   DiscountTemplateConfig,
   IncomeTemplateConfig,
@@ -14,6 +15,7 @@ import type {
   TuitionScholarshipTemplateConfig,
 } from "@/lib/calculations/types";
 import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
+import type { ApiIdentity } from "@/lib/mappers/budget-api";
 
 const STORAGE_KEY = "utem-postgrado-budget-templates-v5";
 const KINDS: TemplateItemKind[] = [
@@ -138,24 +140,42 @@ async function responseBody<T>(response: Response): Promise<T> {
   return body as T;
 }
 
+function canEditTemplates(roles: AccessRole[]): boolean {
+  return roles.includes("ADMIN") || roles.includes("GESTOR");
+}
+
 export function TemplateManager() {
   const [templates, setTemplates] = useState<BudgetTemplate[]>(defaultBudgetTemplates);
   const [activeType, setActiveType] = useState<ProgramType>("DOCTORADO");
+  const [identity, setIdentity] = useState<ApiIdentity | null>(null);
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   const template =
     templates.find((item) => item.programType === activeType) ?? templates[0];
+  const editable = canEditTemplates(identity?.roles ?? []);
 
   useEffect(() => {
-    void fetch("/api/templates", { cache: "no-store" })
-      .then((response) => responseBody<ApiBudgetTemplate[]>(response))
-      .then((records) => setTemplates(records.map(normalizeTemplate)))
-      .catch(() => {
+    void Promise.all([
+      fetch("/api/templates", { cache: "no-store" }),
+      fetch("/api/me", { cache: "no-store" }),
+    ])
+      .then(async ([templateResponse, meResponse]) => {
+        const [records, me] = await Promise.all([
+          responseBody<ApiBudgetTemplate[]>(templateResponse),
+          responseBody<ApiIdentity>(meResponse),
+        ]);
+        setTemplates(records.map(normalizeTemplate));
+        setIdentity(me);
+        setError("");
+      })
+      .catch((reason) => {
+        setError(reason instanceof Error ? reason.message : "No fue posible cargar las plantillas institucionales.");
         try {
           const saved = localStorage.getItem(STORAGE_KEY);
           if (saved) setTemplates(JSON.parse(saved) as BudgetTemplate[]);
         } catch {
-          // Se conservan las plantillas predeterminadas.
+          // Se conservan las plantillas predeterminadas como referencia de lectura.
         }
       });
   }, []);
@@ -234,6 +254,12 @@ export function TemplateManager() {
   };
 
   async function save() {
+    if (!editable) {
+      setError("Su rol puede consultar las plantillas, pero no modificarlas.");
+      return;
+    }
+    setMessage("");
+    setError("");
     const payload = {
       name: template.name,
       description: template.description,
@@ -254,14 +280,8 @@ export function TemplateManager() {
       const saved = await responseBody<ApiBudgetTemplate>(response);
       replace(normalizeTemplate(saved));
       setMessage("Plantilla actualizada en la base institucional.");
-    } catch {
-      const next = { ...template, version: template.version + 1 };
-      replace(next);
-      const updated = templates.map((item) =>
-        item.id === next.id ? next : item,
-      );
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      setMessage("Plantilla actualizada en modo local.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No fue posible guardar la plantilla en D1.");
     }
   }
 
@@ -275,12 +295,14 @@ export function TemplateManager() {
             aplicar la plantilla.
           </p>
         </div>
-        <button className="button primary" type="button" onClick={save}>
+        <button className="button primary" type="button" disabled={!editable} onClick={save}>
           Guardar plantilla
         </button>
       </div>
 
+      {error ? <div className="notice warning">{error}</div> : null}
       {message ? <div className="notice success">{message}</div> : null}
+      {!editable && identity ? <div className="notice info">Las plantillas están en modo solo lectura para su rol.</div> : null}
 
       <div className="parameter-tabs">
         {TYPES.map((type) => (
@@ -299,6 +321,7 @@ export function TemplateManager() {
         <label>
           Nombre
           <input
+            disabled={!editable}
             value={template.name}
             onChange={(event) =>
               replace({ ...template, name: event.target.value })
@@ -308,6 +331,7 @@ export function TemplateManager() {
         <label className="span-2">
           Descripción
           <input
+            disabled={!editable}
             value={template.description}
             onChange={(event) =>
               replace({ ...template, description: event.target.value })
@@ -317,6 +341,7 @@ export function TemplateManager() {
         <label>
           Estado
           <select
+            disabled={!editable}
             value={String(template.active)}
             onChange={(event) =>
               replace({ ...template, active: event.target.value === "true" })
@@ -330,7 +355,7 @@ export function TemplateManager() {
 
       <div className="template-toolbar">
         <span>Versión {template.version}</span>
-        <button className="button secondary" type="button" onClick={addItem}>
+        <button className="button secondary" type="button" disabled={!editable} onClick={addItem}>
           Agregar ítem
         </button>
       </div>
@@ -342,6 +367,7 @@ export function TemplateManager() {
               <label>
                 Nombre
                 <input
+                  disabled={!editable}
                   value={item.name}
                   onChange={(event) =>
                     updateItem(index, "name", event.target.value)
@@ -351,6 +377,7 @@ export function TemplateManager() {
               <label>
                 Tipo
                 <select
+                  disabled={!editable}
                   value={item.kind}
                   onChange={(event) =>
                     changeKind(index, event.target.value as TemplateItemKind)
@@ -366,6 +393,7 @@ export function TemplateManager() {
               <label className="compact-check">
                 <input
                   type="checkbox"
+                  disabled={!editable}
                   checked={item.active}
                   onChange={(event) =>
                     updateItem(index, "active", event.target.checked)
@@ -383,6 +411,7 @@ export function TemplateManager() {
             </div>
             <TemplateConfig
               item={item}
+              disabled={!editable}
               onChange={(key, value) => updateConfig(index, key, value)}
             />
           </article>
@@ -394,9 +423,11 @@ export function TemplateManager() {
 
 function TemplateConfig({
   item,
+  disabled,
   onChange,
 }: {
   item: BudgetTemplateItem;
+  disabled: boolean;
   onChange: (key: string, value: unknown) => void;
 }) {
   const config = item.config as unknown as Record<string, unknown>;
@@ -406,7 +437,7 @@ function TemplateConfig({
       <div className="template-item-config">
         <label>
           Porcentaje (%)
-          <input
+          <input disabled={disabled}
             type="number"
             min="0"
             max="100"
@@ -418,7 +449,7 @@ function TemplateConfig({
         </label>
         <label>
           Estudiantes
-          <input
+          <input disabled={disabled}
             type="number"
             min="0"
             value={Number(config.students ?? 0)}
@@ -436,7 +467,7 @@ function TemplateConfig({
       <div className="template-item-config">
         <label>
           Estudiantes
-          <select
+          <select disabled={disabled}
             value={String(config.studentMode ?? "TODOS_ACTIVOS")}
             onChange={(event) => onChange("studentMode", event.target.value)}
           >
@@ -446,7 +477,7 @@ function TemplateConfig({
         </label>
         <label>
           Cantidad
-          <input
+          <input disabled={disabled}
             type="number"
             min="0"
             value={Number(config.students ?? 0)}
@@ -457,7 +488,7 @@ function TemplateConfig({
         </label>
         <label>
           Cobertura (%)
-          <input
+          <input disabled={disabled}
             type="number"
             min="0"
             max="100"
@@ -476,7 +507,7 @@ function TemplateConfig({
       <div className="template-item-config">
         <label>
           Estudiantes
-          <select
+          <select disabled={disabled}
             value={String(config.studentMode ?? "TODOS_ACTIVOS")}
             onChange={(event) => onChange("studentMode", event.target.value)}
           >
@@ -486,7 +517,7 @@ function TemplateConfig({
         </label>
         <label>
           Cantidad
-          <input
+          <input disabled={disabled}
             type="number"
             min="0"
             value={Number(config.students ?? 0)}
@@ -497,7 +528,7 @@ function TemplateConfig({
         </label>
         <label>
           Meses por semestre
-          <input
+          <input disabled={disabled}
             type="number"
             min="0"
             max="12"
@@ -516,14 +547,14 @@ function TemplateConfig({
       <div className="template-item-config">
         <label>
           Categoría
-          <input
+          <input disabled={disabled}
             value={String(config.category ?? "Otros")}
             onChange={(event) => onChange("category", event.target.value)}
           />
         </label>
         <label>
           Monto
-          <input
+          <input disabled={disabled}
             type="number"
             min="0"
             value={Number(config.amount ?? 0)}
@@ -534,7 +565,7 @@ function TemplateConfig({
         </label>
         <label>
           Alcance
-          <select
+          <select disabled={disabled}
             value={String(config.costType ?? "Único de esta versión")}
             onChange={(event) => onChange("costType", event.target.value)}
           >
@@ -550,14 +581,14 @@ function TemplateConfig({
     <div className="template-item-config">
       <label>
         Tipo
-        <input
+        <input disabled={disabled}
           value={String(config.type ?? "Otro")}
           onChange={(event) => onChange("type", event.target.value)}
         />
       </label>
       <label>
         Monto unitario
-        <input
+        <input disabled={disabled}
           type="number"
           min="0"
           value={Number(config.amountPerStudent ?? 0)}
@@ -568,7 +599,7 @@ function TemplateConfig({
       </label>
       <label>
         Estudiantes
-        <input
+        <input disabled={disabled}
           type="number"
           min="0"
           value={Number(config.students ?? 1)}

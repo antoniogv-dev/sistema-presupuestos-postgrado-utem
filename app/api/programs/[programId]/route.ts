@@ -1,5 +1,5 @@
 import { z, ZodError } from "zod";
-import { apiError, hasAnyAccess, requireApiIdentity } from "@/lib/auth/api-access";
+import { apiError, hasAccess, requireApiIdentity } from "@/lib/auth/api-access";
 import { d1Id, d1Json, runD1Batch } from "@/lib/database/d1-atomic";
 import { getPrismaClient } from "@/lib/database/prisma";
 import { templateTypeFromTuitionSource, tuitionSourceFromDatabase } from "@/lib/programs/tuition-source";
@@ -12,7 +12,7 @@ const programSchema = z.object({
   faculty: z.string().trim().min(2).max(240),
   director: z.string().trim().min(2).max(200),
   officialDurationSemesters: z.number().int().min(1).max(16),
-  status: z.enum(["ACTIVO", "INACTIVO", "EN_DISENO"]).default("ACTIVO"),
+  status: z.enum(["ACTIVO", "INACTIVO", "EN_DISENO"]),
   costCenter: z.string().trim().max(100).optional().nullable(),
 });
 
@@ -23,7 +23,7 @@ const tuitionSourceSchema = z.enum([
   "PLANTILLA_MAGISTER_PROFESIONAL",
 ]);
 
-const createProgramSchema = programSchema.extend({
+const updateProgramSchema = programSchema.extend({
   annualTuitions: z.array(z.object({
     year: z.number().int().min(2000).max(2100),
     amount: z.number().int().nonnegative(),
@@ -31,60 +31,53 @@ const createProgramSchema = programSchema.extend({
   })).max(30).optional(),
 });
 
+type RouteContext = { params: Promise<{ programId: string }> };
+
 function json(value: unknown) {
   return JSON.parse(JSON.stringify(value, (_, item) => typeof item === "bigint" ? item.toString() : item));
 }
 
-function apiProgram<T extends { annualTuitions?: Array<{ source: string; templateType?: string | null }> }>(program: T) {
-  return {
-    ...program,
-    annualTuitions: program.annualTuitions?.map((tuition) => ({
-      ...tuition,
-      source: tuitionSourceFromDatabase(
-        tuition.source,
-        tuition.templateType as "DOCTORADO" | "MAGISTER_ACADEMICO" | "MAGISTER_PROFESIONAL" | "OTRO" | null | undefined,
-      ),
-    })),
-  };
-}
-
-export const dynamic = "force-dynamic";
-
-export async function GET(request: Request) {
+export async function GET(request: Request, context: RouteContext) {
   try {
     await requireApiIdentity(request);
-    const url = new URL(request.url);
-    const includeInactive = url.searchParams.get("includeInactive") === "1";
-    const programs = await getPrismaClient().program.findMany({
-      where: includeInactive ? undefined : { status: { not: "INACTIVO" } },
+    const { programId } = await context.params;
+    const program = await getPrismaClient().program.findUnique({
+      where: { id: programId },
       include: { annualTuitions: { orderBy: { year: "asc" } } },
-      orderBy: [{ type: "asc" }, { name: "asc" }],
     });
-    return Response.json(json(programs.map(apiProgram)));
+    if (!program) throw new Error("NOT_FOUND");
+    return Response.json(json({
+      ...program,
+      annualTuitions: program.annualTuitions.map((tuition) => ({
+        ...tuition,
+        source: tuitionSourceFromDatabase(tuition.source, tuition.templateType),
+      })),
+    }));
   } catch (error) {
     return apiError(error);
   }
 }
 
-export async function POST(request: Request) {
+export async function PUT(request: Request, context: RouteContext) {
   try {
     const identity = await requireApiIdentity(request);
-    if (!hasAnyAccess(identity, ["CREADOR", "GESTOR"])) throw new Error("FORBIDDEN");
-    const input = createProgramSchema.parse(await request.json());
+    if (!hasAccess(identity, "GESTOR")) throw new Error("FORBIDDEN");
+    const { programId } = await context.params;
+    const input = updateProgramSchema.parse(await request.json());
     const prisma = getPrismaClient();
-    const duplicate = await prisma.program.findUnique({ where: { code: input.code }, select: { id: true } });
+    const current = await prisma.program.findUnique({ where: { id: programId } });
+    if (!current) throw new Error("NOT_FOUND");
+    const duplicate = await prisma.program.findFirst({ where: { code: input.code, id: { not: programId } }, select: { id: true } });
     if (duplicate) throw new Error("CONFLICT");
 
-    const programId = d1Id("program");
     const database = d1Database();
     const statements: D1PreparedStatement[] = [
       database.prepare(`
-        INSERT INTO "Program" (
-          "id", "code", "name", "type", "faculty", "director", "officialDurationSemesters",
-          "status", "costCenter", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        UPDATE "Program"
+        SET "code" = ?, "name" = ?, "type" = ?, "faculty" = ?, "director" = ?,
+            "officialDurationSemesters" = ?, "status" = ?, "costCenter" = ?, "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "id" = ?
       `).bind(
-        programId,
         input.code,
         input.name,
         input.type,
@@ -93,6 +86,7 @@ export async function POST(request: Request) {
         input.officialDurationSemesters,
         input.status,
         input.costCenter || null,
+        programId,
       ),
     ];
 
@@ -103,6 +97,11 @@ export async function POST(request: Request) {
         INSERT INTO "ProgramAnnualTuition" (
           "id", "programId", "year", "amount", "source", "templateType", "createdAt", "updatedAt"
         ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT("programId", "year") DO UPDATE SET
+          "amount" = excluded."amount",
+          "source" = excluded."source",
+          "templateType" = excluded."templateType",
+          "updatedAt" = CURRENT_TIMESTAMP
       `).bind(
         d1Id("tuition"),
         programId,
@@ -114,18 +113,24 @@ export async function POST(request: Request) {
     }
 
     statements.push(database.prepare(`
-      INSERT INTO "AuditLog" ("id", "userId", "entity", "entityId", "action", "newValue", "createdAt")
-      VALUES (?, ?, 'Program', ?, 'CREATE_PROGRAM', ?, CURRENT_TIMESTAMP)
-    `).bind(d1Id("audit"), identity.userId, programId, d1Json(input)));
+      INSERT INTO "AuditLog" (
+        "id", "userId", "entity", "entityId", "action", "previousValue", "newValue", "createdAt"
+      ) VALUES (?, ?, 'Program', ?, 'UPDATE_PROGRAM', ?, ?, CURRENT_TIMESTAMP)
+    `).bind(d1Id("audit"), identity.userId, programId, d1Json(current), d1Json(input)));
 
-    // D1 batch es transaccional: programa, aranceles y auditoría se confirman o revierten juntos.
     await runD1Batch(statements);
 
-    const created = await prisma.program.findUnique({
+    const updated = await prisma.program.findUnique({
       where: { id: programId },
       include: { annualTuitions: { orderBy: { year: "asc" } } },
     });
-    return Response.json(json(created ? apiProgram(created) : null), { status: 201 });
+    return Response.json(json(updated ? {
+      ...updated,
+      annualTuitions: updated.annualTuitions.map((tuition) => ({
+        ...tuition,
+        source: tuitionSourceFromDatabase(tuition.source, tuition.templateType),
+      })),
+    } : null));
   } catch (error) {
     if (error instanceof ZodError) {
       return Response.json({ error: "Datos del programa inválidos.", issues: error.issues }, { status: 400 });

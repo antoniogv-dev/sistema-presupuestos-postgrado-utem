@@ -87,3 +87,26 @@ Desde el presupuesto puede exportar:
 ## 11. Demostración autónoma
 
 Abra `demo/index.html` para probar la aplicación sin instalar dependencias. Los cambios se almacenan únicamente en el navegador y no reemplazan Cloudflare D1 en producción.
+
+## Funciones v10
+
+### Programas
+- Use **Agregar programa** para crear una ficha real en D1.
+- Use **Modificar programa** en la fila correspondiente para actualizarla.
+- Defina criterios de búsqueda, tipo o estado y pulse **Aplicar filtros**; **Limpiar** restaura la vista inicial.
+- El arancel puede ser propio o provenir de la plantilla Doctoral, Magíster Académico o Magíster Profesional.
+
+### Parámetros generales
+Los usuarios Gestor o Administrador pueden modificar los valores visibles y pulsar **Guardar parámetros**. Los demás roles consultan los mismos valores en modo lectura.
+
+### Versiones
+Seleccione un presupuesto, una **Versión base**, una **Versión a comparar** y pulse **Comparar versiones** para obtener las diferencias de los snapshots guardados.
+
+### Administración
+El rol Administrador puede crear y modificar usuarios, establecer una contraseña, habilitar/deshabilitar cuentas y asignar: Administrador, Creador, Lector, Gestor, V°B° y Aprobador.
+
+### Exportaciones
+Desde **Importar y exportar** puede descargar XLSX y PDF del presupuesto seleccionado, XLSX/CSV del consolidado institucional y CSV de auditoría. El consolidado también ofrece **Exportar consolidado** directamente desde su pantalla.
+
+### Presupuestos
+La sección de estudiantes quedó separada de la carga académica. Las **Horas docentes directas** y **Horas docentes de reemplazo** se editan en tablas independientes, seguidas de una sección específica de **Becas**.

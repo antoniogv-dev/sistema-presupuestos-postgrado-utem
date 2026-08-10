@@ -183,8 +183,8 @@ No publique contraseñas, tokens ni claves en este archivo. El Database ID de D1
 Worker name: sistema-presupuestos-postgrado-utem
 Production branch: main
 Root directory: /
-Build command: npm run build
-Deploy command: npm run deploy
+Build command: npm install --include=dev --no-audit --no-fund && npm run build:cloudflare
+Deploy command: npm run deploy:cloudflare
 ```
 
 7. Para esta primera etapa, desactive los despliegues automáticos de ramas no productivas si la interfaz ofrece esa opción. Todas las ramas de preview compartirían el binding configurado en `wrangler.jsonc`; es más seguro incorporar posteriormente una base D1 separada para pruebas.
@@ -192,12 +192,19 @@ Deploy command: npm run deploy
 
 ### Qué hará el despliegue
 
-Cloudflare ejecutará:
+Configure además en **Settings → Build → Variables and secrets**:
 
 ```text
-npm install
-npm run build
-npm run deploy
+NODE_VERSION = 22
+SKIP_DEPENDENCY_INSTALL = 1
+```
+
+Cloudflare ejecutará explícitamente npm y luego:
+
+```text
+npm install --include=dev --no-audit --no-fund
+npm run build:cloudflare
+npm run deploy:cloudflare
 ```
 
 El último comando:
@@ -300,13 +307,15 @@ Confirme el cambio en `main`. Cloudflare detectará el commit y realizará un nu
 
 1. Abra la aplicación protegida.
 2. Inicie sesión con el correo configurado en `BOOTSTRAP_ADMIN_EMAIL`.
-3. En el primer acceso válido, el sistema crea ese usuario y le asigna temporalmente:
+3. En el primer acceso válido, si el correo coincide con `BOOTSTRAP_ADMIN_EMAIL`, el sistema reconcilia el usuario como **Antonio Gutiérrez** y le asigna:
+   - Administrador;
    - Gestor;
    - V°B°;
    - Aprobador.
-4. Abra **Administración**.
-5. Cree o habilite usuarios separados para cada función.
-6. Reduzca posteriormente los roles del administrador inicial para respetar la segregación de funciones.
+4. Si desea habilitar también el inicio de sesión interno, agregue en Cloudflare **Workers & Pages → Worker → Settings → Variables and Secrets** el secreto `BOOTSTRAP_ADMIN_PASSWORD`. No lo escriba en `wrangler.jsonc` ni en GitHub.
+5. Abra **Administración**.
+6. Cree o habilite usuarios separados y asigne cualquiera de los seis roles: Administrador, Creador, Lector, Gestor, V°B° o Aprobador.
+7. Mantenga el rol Administrador sólo donde sea necesario y separe formulación, revisión y aprobación.
 
 Recomendación de operación:
 
@@ -451,6 +460,7 @@ Migrations directory: migrations
 Tipo: Self-hosted
 Identidad: institucional
 Variables: TEAM_DOMAIN + AUD + BOOTSTRAP_ADMIN_EMAIL
+Secret opcional: BOOTSTRAP_ADMIN_PASSWORD
 ```
 
 ---
@@ -462,6 +472,7 @@ Salvo que exista una revisión técnica, no cambie:
 ```text
 migrations/0001_initial.sql
 migrations/0002_seed.sql
+migrations/0003_functional_improvements.sql
 lib/calculations/
 lib/database/d1-atomic.ts
 lib/auth/api-access.ts

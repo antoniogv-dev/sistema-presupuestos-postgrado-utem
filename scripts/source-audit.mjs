@@ -94,6 +94,83 @@ for (const variable of [
   }
 }
 
+
+
+// Controles funcionales v10: evitar regresiones hacia datos demo o roles incompletos.
+const programPage = await readFile(path.join(root, "app/programas/page.tsx"), "utf8");
+if (/import\s*\{[^}]*\bprograms\b[^}]*\}\s*from\s*["']@\/lib\/demo-data["']/.test(programPage)) {
+  fail("app/programas/page.tsx: el maestro de programas no puede depender del catálogo demo.");
+}
+if (!programPage.includes("Aplicar filtros") || !programPage.includes("Modificar programa")) {
+  fail("app/programas/page.tsx: faltan controles funcionales de filtro o modificación.");
+}
+for (const source of ["PLANTILLA_DOCTORADO", "PLANTILLA_MAGISTER_ACADEMICO", "PLANTILLA_MAGISTER_PROFESIONAL"]) {
+  if (!programPage.includes(source)) fail(`app/programas/page.tsx: falta la fuente de arancel ${source}.`);
+}
+
+for (const relative of ["app/consolidado/page.tsx", "app/importar-exportar/page.tsx", "app/versiones/page.tsx"]) {
+  const content = await readFile(path.join(root, relative), "utf8");
+  if (/\bdemoBudgets?\b/.test(content)) fail(`${relative}: no debe exportar, consolidar ni comparar usando presupuestos demo.`);
+}
+
+const adminRoute = await readFile(path.join(root, "app/api/admin/users/route.ts"), "utf8");
+for (const role of ["ADMIN", "CREADOR", "LECTOR", "GESTOR", "VISTO_BUENO", "APROBADOR"]) {
+  if (!adminRoute.includes(`"${role}"`)) fail(`app/api/admin/users/route.ts: falta el rol ${role}.`);
+}
+
+const tuitionRoute = await readFile(path.join(root, "app/api/programs/[programId]/tuition/route.ts"), "utf8");
+if (!tuitionRoute.includes("PLANTILLA_MAGISTER_ACADEMICO") || !tuitionRoute.includes("PLANTILLA_MAGISTER_PROFESIONAL")) {
+  fail("La API de aranceles debe aceptar plantillas doctoral, magíster académico y magíster profesional.");
+}
+
+const budgetWorkspace = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
+for (const heading of ["Estudiantes y graduación", "Horas docentes directas", "Horas docentes de reemplazo", "Becas"]) {
+  if (!budgetWorkspace.includes(heading)) fail(`BudgetWorkspace: falta la sección separada “${heading}”.`);
+}
+
+// Barreras adicionales v10 para las fallas reportadas en producción.
+const dashboardPage = await readFile(path.join(root, "app/page.tsx"), "utf8");
+if (/\bdemoBudgets?\b/.test(dashboardPage)) {
+  fail("app/page.tsx: el panel principal no debe depender de presupuestos demo.");
+}
+
+const programsPostRoute = await readFile(path.join(root, "app/api/programs/route.ts"), "utf8");
+if (!programsPostRoute.includes("annualTuitions") || !programsPostRoute.includes("runD1Batch")) {
+  fail("app/api/programs/route.ts: el alta de programas debe guardar programa, aranceles y auditoría de forma atómica.");
+}
+
+const parametersPage = await readFile(path.join(root, "app/parametros/page.tsx"), "utf8");
+const parametersRoute = await readFile(path.join(root, "app/api/parameters/route.ts"), "utf8");
+if (!parametersPage.includes("Guardar parámetros") || !parametersPage.includes("/api/parameters")) {
+  fail("app/parametros/page.tsx: los parámetros generales deben poder guardarse en D1.");
+}
+if (!parametersRoute.includes("export async function PUT") || !parametersRoute.includes("runD1Batch")) {
+  fail("app/api/parameters/route.ts: falta persistencia atómica de parámetros generales.");
+}
+
+const versionsPage = await readFile(path.join(root, "app/versiones/page.tsx"), "utf8");
+if (!versionsPage.includes("Comparar versiones") || !versionsPage.includes("Versión base") || !versionsPage.includes("Versión a comparar")) {
+  fail("app/versiones/page.tsx: la comparación debe permitir seleccionar dos versiones y ejecutar la comparación.");
+}
+
+const exportDownload = await readFile(path.join(root, "lib/export/download.ts"), "utf8");
+for (const exportFunction of ["downloadBudgetXlsx", "downloadBudgetPdf", "downloadConsolidationXlsx"]) {
+  if (!exportDownload.includes(`export function ${exportFunction}`)) {
+    fail(`lib/export/download.ts: falta la exportación funcional ${exportFunction}.`);
+  }
+}
+
+const adminMigration = await readFile(path.join(root, "migrations/0003_functional_improvements.sql"), "utf8");
+for (const marker of ["'ADMIN'", "'CREADOR'", "'LECTOR'", 'CREATE TABLE IF NOT EXISTS "UserSession"', 'ADD COLUMN "passwordHash"']) {
+  if (!adminMigration.includes(marker)) fail(`0003_functional_improvements.sql: falta ${marker}.`);
+}
+
+const adminAccess = await readFile(path.join(root, "lib/auth/api-access.ts"), "utf8");
+if (!adminAccess.includes("Antonio Gutiérrez") || !adminAccess.includes("BOOTSTRAP_ADMIN_EMAIL") || !adminAccess.includes("BOOTSTRAP_ADMIN_PASSWORD")) {
+  fail("lib/auth/api-access.ts: falta el aprovisionamiento seguro del administrador inicial Antonio Gutiérrez.");
+}
+
+
 for (const message of warnings) console.warn(`ADVERTENCIA: ${message}`);
 if (failures.length) {
   for (const message of failures) console.error(`ERROR: ${message}`);

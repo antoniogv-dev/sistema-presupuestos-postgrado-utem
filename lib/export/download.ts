@@ -1,24 +1,38 @@
 "use client";
 
 import type { BudgetResult, CohortBudget } from "../calculations/types";
+import type { ConsolidationGroup } from "../calculations/consolidation";
 import { createFinancialReportPdf } from "./pdf";
-import { buildFinancialReport } from "./report-model";
+import { buildFinancialReport, type FinancialReport } from "./report-model";
 import { createFinancialReportXlsx } from "./xlsx";
 
 function slug(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function download(bytes: Uint8Array, type: string, filename: string) {
-  const blob = new Blob([bytes], { type });
+function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
+  anchor.style.display = "none";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  // Se difiere la revocación para permitir que navegadores/WebViews completen la descarga.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function download(bytes: Uint8Array, type: string, filename: string) {
+  // Copia a un ArrayBuffer propio para evitar incompatibilidades de tipado BlobPart
+  // con Uint8Array<ArrayBufferLike> en TypeScript/DOM recientes.
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  triggerDownload(new Blob([copy.buffer], { type }), filename);
+}
+
+export function downloadTextFile(content: string, type: string, filename: string) {
+  triggerDownload(new Blob([content], { type }), filename);
 }
 
 export function downloadBudgetXlsx(budget: CohortBudget, result: BudgetResult) {
@@ -29,4 +43,65 @@ export function downloadBudgetXlsx(budget: CohortBudget, result: BudgetResult) {
 export function downloadBudgetPdf(budget: CohortBudget, result: BudgetResult) {
   const report = buildFinancialReport(budget, result);
   download(createFinancialReportPdf(report), "application/pdf", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-v${budget.version}.pdf`);
+}
+
+function csvCell(value: unknown): string {
+  const text = value == null ? "" : String(value);
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+
+export function consolidationReport(group: ConsolidationGroup): FinancialReport {
+  return {
+    title: `Consolidado · ${group.label}`,
+    subtitle: `${group.budgetCount} presupuesto(s) incluidos · costos compartidos normalizados`,
+    years: group.rows.map((row) => row.year),
+    generatedAt: new Date().toISOString(),
+    rows: [
+      { label: "INGRESOS CONSOLIDADOS", values: group.rows.map((row) => row.grossIncome), tone: "income", bold: true, valueKind: "currency" },
+      { label: "EGRESOS BRUTOS", values: group.rows.map((row) => -row.grossExpenses), tone: "expense", valueKind: "currency" },
+      { label: "EGRESOS NORMALIZADOS", values: group.rows.map((row) => -row.normalizedExpenses), tone: "section", bold: true, valueKind: "currency" },
+      { label: "DUPLICIDAD EVITADA", values: group.rows.map((row) => row.duplicateAvoided), tone: "income", valueKind: "currency" },
+      { label: "FLUJO NETO CONSOLIDADO", values: group.rows.map((row) => row.netFlow), tone: "result", bold: true, valueKind: "currency" },
+    ],
+  };
+}
+
+export function downloadConsolidationXlsx(group: ConsolidationGroup) {
+  download(
+    createFinancialReportXlsx(consolidationReport(group)),
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    `${slug(group.label)}.xlsx`,
+  );
+}
+
+export function consolidationCsv(group: ConsolidationGroup): string {
+  const rows = [
+    ["Agrupación", group.label],
+    ["Presupuestos incluidos", group.budgetCount],
+    [],
+    ["Año", "Ingresos", "Egresos brutos", "Egresos normalizados", "Duplicidad evitada", "Flujo neto"],
+    ...group.rows.map((row) => [row.year, row.grossIncome, row.grossExpenses, row.normalizedExpenses, row.duplicateAvoided, row.netFlow]),
+  ];
+  return `\uFEFF${rows.map((row) => row.map(csvCell).join(";")).join("\r\n")}`;
+}
+
+export function downloadConsolidationCsv(group: ConsolidationGroup) {
+  downloadTextFile(consolidationCsv(group), "text/csv;charset=utf-8", `${slug(group.label)}.csv`);
+}
+
+export function auditCsv(budget: CohortBudget): string {
+  const rows = [
+    ["Programa", budget.program.code],
+    ["Cohorte", budget.cohortName],
+    ["Versión", budget.version],
+    [],
+    ["Fecha", "Usuario", "Rol", "Decisión", "Etapa origen", "Etapa destino", "Comentario"],
+    ...budget.reviewHistory.map((event) => [event.createdAt, event.user, event.role, event.decision, event.fromStage, event.toStage, event.comment ?? ""]),
+  ];
+  return `\uFEFF${rows.map((row) => row.map(csvCell).join(";")).join("\r\n")}`;
+}
+
+export function downloadAuditCsv(budget: CohortBudget) {
+  downloadTextFile(auditCsv(budget), "text/csv;charset=utf-8", `${slug(budget.program.code)}-${budget.startYear}-auditoria-v${budget.version}.csv`);
 }

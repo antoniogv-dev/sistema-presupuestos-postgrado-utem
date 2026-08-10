@@ -26,6 +26,12 @@ export const institutionalParameters: InstitutionalParameters = {
   replacementHour: 23152,
   maintenanceScholarshipMonthly: yearly([577500, 606375, 636694, 668529, 701956]),
   doctorateTuitionTemplate: yearly([4023852, 4182884, 4348182, 4519991, 4745991]),
+  tuitionTemplates: {
+    DOCTORADO: yearly([4023852, 4182884, 4348182, 4519991, 4745991]),
+    MAGISTER_ACADEMICO: yearly([4023852, 4182884, 4348182, 4519991, 4745991]),
+    MAGISTER_PROFESIONAL: yearly([4350000, 4567500, 4795875, 5035669, 5287452]),
+    OTRO: yearly([0, 0, 0, 0, 0]),
+  },
   annualEnrollmentFee: yearly([192150, 201758, 211846, 222439, 233561]),
   annualAdjustmentRate: 0.05,
   planningHorizonYears: 6,

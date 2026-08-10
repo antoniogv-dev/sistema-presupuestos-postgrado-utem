@@ -1,14 +1,10 @@
 import { ProgramType } from "@prisma/client";
 import { z } from "zod";
-import { apiError, hasAccess, requireApiIdentity } from "@/lib/auth/api-access";
+import { apiError, hasAnyAccess, requireApiIdentity } from "@/lib/auth/api-access";
 import { d1Id, d1Json, runD1Batch } from "@/lib/database/d1-atomic";
 import { getPrismaClient } from "@/lib/database/prisma";
 import { d1Database } from "@/lib/runtime-env";
-import {
-  ApprovalDecision,
-  ApprovalLevel,
-  BudgetStatus,
-} from "@prisma/client";
+
 const createSchema = z.object({
   programId: z.string().min(1),
   cohortName: z.string().trim().min(3),
@@ -64,7 +60,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const identity = await requireApiIdentity(request);
-    if (!hasAccess(identity, "GESTOR")) throw new Error("FORBIDDEN");
+    if (!hasAnyAccess(identity, ["CREADOR", "GESTOR"])) throw new Error("FORBIDDEN");
     const input = createSchema.parse(await request.json());
     const prisma = getPrismaClient();
     const program = await prisma.program.findUnique({ where: { id: input.programId }, select: { type: true } });

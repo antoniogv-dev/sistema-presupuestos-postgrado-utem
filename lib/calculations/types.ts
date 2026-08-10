@@ -1,8 +1,8 @@
 export type ProgramType = "DOCTORADO" | "MAGISTER_ACADEMICO" | "MAGISTER_PROFESIONAL" | "OTRO";
 export type SemesterNumber = 1 | 2;
 export type BudgetStatus = "Borrador" | "En revisión" | "Observado" | "Aprobado" | "Reemplazado";
-export type TuitionSource = "PROPIO" | "PLANTILLA_DOCTORADO";
-export type AccessRole = "GESTOR" | "VISTO_BUENO" | "APROBADOR";
+export type TuitionSource = "PROPIO" | "PLANTILLA_DOCTORADO" | "PLANTILLA_MAGISTER_ACADEMICO" | "PLANTILLA_MAGISTER_PROFESIONAL";
+export type AccessRole = "ADMIN" | "CREADOR" | "LECTOR" | "GESTOR" | "VISTO_BUENO" | "APROBADOR";
 export type WorkflowStage = "GESTION" | "VISTO_BUENO" | "APROBACION" | "FINALIZADO";
 export type ReviewDecision = "ENVIADO" | "VISTO_BUENO" | "OBSERVADO" | "APROBADO" | "RECHAZADO";
 export type TemplateItemKind = "DESCUENTO" | "BECA_ARANCEL" | "BECA_MANUTENCION" | "COSTO" | "INGRESO_EXTRAORDINARIO";
@@ -41,6 +41,7 @@ export interface InstitutionalParameters {
   replacementHour: number;
   maintenanceScholarshipMonthly: Record<number, number>;
   doctorateTuitionTemplate: Record<number, number>;
+  tuitionTemplates: Record<ProgramType, Record<number, number>>;
   annualEnrollmentFee: Record<number, number>;
   annualAdjustmentRate: number;
   planningHorizonYears: number;

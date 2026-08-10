@@ -300,3 +300,61 @@ input:disabled { background: var(--surface-muted); color: #52606b; }
 /* Plantillas y ajustes presupuestarios v3 */
 .section-heading-action{display:flex;align-items:center;justify-content:flex-end;gap:1rem;flex-wrap:wrap}.section-heading-action p{margin:0}.template-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem;margin:1rem 0}.template-card{border:1px solid var(--border);border-radius:.6rem;padding:1rem;display:grid;gap:.65rem;background:var(--surface)}.template-card.selected{outline:2px solid var(--primary);outline-offset:1px}.template-card span,.template-card small{display:block}.template-card p{margin:0}.setting-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.8rem;margin:1rem 0}.setting-card{display:flex!important;align-items:flex-start;gap:.75rem;border:1px solid var(--border);border-radius:.55rem;padding:.9rem;background:var(--surface-muted)}.setting-card input{width:1.15rem;height:1.15rem;margin-top:.15rem}.setting-card span{display:grid;gap:.2rem}.setting-card small{font-weight:400}.editable-list input,.editable-list select{min-width:110px;width:100%}.editable-list td:first-child input+input{margin-top:.35rem}.period-inputs{display:flex;gap:.35rem;min-width:145px}.period-inputs select{min-width:68px}.template-manager{margin-bottom:1.25rem}.template-toolbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:1rem 0}.template-items{display:grid;gap:.8rem}.template-item-card{border:1px solid var(--border);border-radius:.6rem;padding:1rem;background:var(--surface-muted)}.template-item-head{display:grid;grid-template-columns:minmax(220px,2fr) minmax(180px,1fr) auto auto;gap:.75rem;align-items:end}.template-item-config{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-top:.8rem}.compact-check{display:flex!important;flex-direction:row!important;align-items:center;gap:.4rem;padding-bottom:.7rem}.compact-check input{width:auto}.span-2{grid-column:span 2}.danger-text{color:var(--danger)!important}.budget-selector th small{display:block;font-weight:400;margin-top:.2rem}.notice ul{margin:.5rem 0 0;padding-left:1.2rem}
 @media(max-width:760px){.template-item-head{grid-template-columns:1fr}.span-2{grid-column:auto}.section-heading-action{justify-content:flex-start}.editable-list{min-width:900px}}
+
+/* Mejoras funcionales v10: CRUD real, filtros, parámetros, roles, comparador y exportaciones */
+.program-editor { border-top: 4px solid var(--navy); }
+.program-form-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tuition-editor { margin-top: 1.2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.tuition-toolbar { display: flex; align-items: flex-end; gap: .75rem; margin-bottom: .9rem; flex-wrap: wrap; }
+.tuition-toolbar label { min-width: 280px; flex: 1; }
+.numeric-input { min-width: 110px; width: 100%; text-align: right; }
+.program-filter-bar { grid-template-columns: minmax(260px, 2fr) minmax(170px, 1fr) minmax(170px, 1fr) auto; align-items: end; }
+.filter-actions { display: flex; gap: .55rem; align-items: end; }
+.form-actions-row { display: flex; gap: .7rem; flex-wrap: wrap; margin-top: 1rem; }
+.parameter-editor-grid { margin-bottom: 1rem; }
+.parameter-edit-table input { width: 100%; min-width: 115px; }
+.parameter-tabs .active { background: var(--navy); border-color: var(--navy); color: white; }
+.version-compare-controls { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto; gap: .8rem; align-items: end; margin-bottom: 1rem; }
+.version-diff-table td { max-width: 380px; overflow-wrap: anywhere; }
+.enabled-exports button:disabled { opacity: .55; cursor: not-allowed; }
+.enabled-exports button:not(:disabled):hover { background: var(--surface-subtle); }
+.roles-six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.user-admin-form { display: grid; gap: 1rem; }
+.role-checkboxes { border: 1px solid var(--line); border-radius: 7px; padding: 1rem; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; }
+.role-checkboxes legend { font-weight: 800; padding: 0 .35rem; }
+.role-checkboxes label { display: flex; align-items: flex-start; gap: .55rem; padding: .7rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-subtle); }
+.role-checkboxes label span { display: grid; gap: .15rem; }
+.role-checkboxes small { color: var(--muted); }
+.row-actions { display: flex; gap: .65rem; flex-wrap: wrap; }
+.login-page { min-height: 100vh; display: grid; place-items: center; padding: 2rem; background: #eef3f7; }
+.login-card { width: min(480px, 100%); background: white; border: 1px solid var(--line); border-radius: 10px; padding: 2rem; box-shadow: 0 14px 40px rgba(18,48,72,.10); }
+.login-card h1 { margin: .4rem 0 .6rem; color: var(--navy); }
+.login-card > p { color: var(--muted); }
+.login-form { display: grid; gap: .9rem; margin-top: 1rem; }
+.user-chip { gap: .55rem; }
+.user-logout { margin-left: .35rem; white-space: nowrap; }
+.workspace-actions { display: flex; gap: .55rem; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
+.budget-selector { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }
+.budget-selector > div:first-child { display: flex; gap: .7rem; flex-wrap: wrap; flex: 1; }
+.budget-selector label { min-width: 220px; }
+.input-like { min-height: 42px; border: 1px solid var(--line); border-radius: 4px; padding: .55rem .65rem; display: flex; align-items: center; background: var(--surface-subtle); }
+.academic-hours-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.subpanel { border: 1px solid var(--line); border-radius: 7px; padding: 1rem; background: var(--surface-subtle); }
+.subpanel h3 { margin: 0 0 .3rem; color: var(--navy); }
+.subpanel > p { margin: 0 0 .8rem; color: var(--muted); }
+.empty-state { text-align: center; padding: 2.5rem; }
+.empty-state h2 { color: var(--navy); }
+
+@media (max-width: 1100px) {
+  .program-form-grid, .roles-six, .role-checkboxes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .program-filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filter-actions { align-items: stretch; }
+  .academic-hours-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .program-form-grid, .roles-six, .role-checkboxes, .program-filter-bar, .version-compare-controls { grid-template-columns: 1fr; }
+  .filter-actions, .workspace-actions, .budget-selector, .budget-selector > div:first-child { display: grid; grid-template-columns: 1fr; width: 100%; }
+  .budget-selector { align-items: stretch; }
+  .workspace-actions .button, .filter-actions .button { width: 100%; }
+  .tuition-toolbar { align-items: stretch; }
+}

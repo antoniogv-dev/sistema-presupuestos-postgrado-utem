@@ -1,94 +1,82 @@
-# Sistema de Presupuestos de Postgrado UTEM — edición D1 web
+# Sistema de Presupuestos de Postgrado UTEM — v10 · GitHub web + Cloudflare D1
 
-Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado.
+Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con **GitHub web**, **Cloudflare Workers/OpenNext**, **Cloudflare D1** y **Cloudflare Access**, sin PostgreSQL ni Hyperdrive.
 
-Esta edición fue preparada específicamente para una implementación administrada desde:
+## Mejoras funcionales v10
 
-- **GitHub web**, como repositorio, control de cambios y revisión.
-- **Cloudflare web**, como plataforma de compilación y despliegue.
-- **Cloudflare D1**, como base de datos SQL administrada.
-- **Cloudflare Access**, como puerta de acceso institucional.
-
-No requiere PostgreSQL, Hyperdrive ni una variable `DATABASE_URL` en producción.
-
-## Funciones incluidas
-
-- Programas y cohortes presupuestarias.
-- Arancel anual personalizado por programa.
-- Plantillas editables para Doctorado, Magíster Académico y Magíster Profesional.
-- Becas de arancel y manutención.
-- Descuentos configurables.
-- Ingresos extraordinarios.
-- Gastos y costos únicos o compartidos.
-- Normalización de costos compartidos y alertas de duplicidad.
-- Arrastre inicial autorizado.
-- Matrículas equivalentes y estudiantes aproximados.
-- Guía de tesis según estudiantes en graduación.
-- Overhead igual a cero para programas académicos.
-- Consolidado institucional, académico, profesional y por programa.
-- Exportación XLSX y PDF.
-- Flujo de acceso Gestor → V°B° → Aprobación.
-- Versionamiento, auditoría y eliminación lógica.
+- **Programas**: alta real en D1, modificación, filtros aplicables por texto/tipo/estado y edición de aranceles en la misma operación.
+- **Arancel por programa**: fuente propia o plantilla **Doctorado**, **Magíster Académico** o **Magíster Profesional**.
+- **Parámetros generales**: edición y persistencia D1 de parámetros comunes y por tipo de programa.
+- **Versiones**: selección de presupuesto, versión base y versión comparada, con diferencias de snapshots.
+- **Administración**: rol `ADMIN`, además de `CREADOR`, `LECTOR`, `GESTOR`, `VISTO_BUENO` y `APROBADOR`.
+- **Administrador inicial**: aprovisionamiento seguro de **Antonio Gutiérrez** mediante `BOOTSTRAP_ADMIN_EMAIL`; la contraseña inicial opcional usa el secreto `BOOTSTRAP_ADMIN_PASSWORD`.
+- **Credenciales internas**: PBKDF2-SHA256, sal aleatoria y sesiones HTTP-only; nunca se guarda la contraseña en texto plano.
+- **Exportaciones**: XLSX/PDF por presupuesto, CSV de auditoría y XLSX/CSV del consolidado institucional.
+- **Presupuestos**: orden funcional renovado; “Estudiantes y graduación”, “Horas docentes directas”, “Horas docentes de reemplazo” y “Becas” quedan en secciones distintas.
+- **Panel principal y consolidado**: trabajan con datos persistidos en D1, no con presupuestos demostrativos.
+- **Auditoría preventiva**: `preflight`, auditoría de fuentes, TypeScript, ESLint y pruebas se ejecutan antes del build OpenNext.
 
 ## Arquitectura
 
 ```text
 GitHub web
    │
-   ├── código, ramas, pull requests y GitHub Actions
-   │
+   ├── código, ramas, pull requests y CI
    ▼
 Cloudflare Workers Builds
    │
-   ├── npm run build
-   ├── npm run deploy
-   └── aplica migraciones D1 pendientes
-   │
+   ├── npm install
+   ├── quality:cloudflare
+   ├── OpenNext build
+   └── migraciones D1 pendientes + deploy
    ▼
-Next.js + OpenNext en Cloudflare Workers
+Next.js en Cloudflare Workers
    │
-   ├── Cloudflare Access
+   ├── Cloudflare Access / sesión interna
    └── binding DB
           │
           ▼
       Cloudflare D1
 ```
 
-## Inicio recomendado
+## Configuración de Cloudflare Builds
 
-1. Lea `GUIA_IMPLEMENTACION_GITHUB_CLOUDFLARE_D1_WEB.md`.
-2. Cree la base D1 desde Cloudflare web.
-3. Reemplace los valores `REEMPLAZAR_*` de `wrangler.jsonc`.
-4. Cargue el contenido de esta carpeta en un repositorio privado mediante GitHub web.
-5. Conecte el repositorio desde **Workers & Pages**.
-6. Use:
+Variables de build recomendadas:
 
 ```text
-Build command: npm run build
-Deploy command: npm run deploy
-Production branch: main
-Root directory: /
+NODE_VERSION = 22
+SKIP_DEPENDENCY_INSTALL = 1
 ```
 
-7. Configure Cloudflare Access y vuelva a desplegar.
-8. Ingrese con el correo indicado en `BOOTSTRAP_ADMIN_EMAIL`.
+Build command:
+
+```bash
+npm install --include=dev --no-audit --no-fund && npm run build:cloudflare
+```
+
+Deploy command:
+
+```bash
+npm run deploy:cloudflare
+```
 
 ## Base de datos D1
 
-El repositorio contiene dos migraciones versionadas:
+El repositorio contiene tres migraciones versionadas:
 
 ```text
 migrations/0001_initial.sql
 migrations/0002_seed.sql
+migrations/0003_functional_improvements.sql
 ```
 
-El comando de despliegue ejecuta automáticamente:
+El despliegue aplica automáticamente las migraciones pendientes mediante:
 
 ```bash
 wrangler d1 migrations apply DB --remote
 ```
 
-No ejecute manualmente estas migraciones desde la consola SQL de D1, porque se perdería la trazabilidad de migraciones aplicadas.
+Una base que ya tenga 0001 y 0002 **no debe recrearse**: la actualización v10 agrega 0003.
 
 La verificación posterior está en:
 
@@ -96,47 +84,52 @@ La verificación posterior está en:
 database/d1/VERIFICAR_D1.sql
 ```
 
-## Persistencia y consistencia
+## Administrador inicial
 
-Prisma se utiliza para lecturas tipadas y operaciones simples mediante `@prisma/adapter-d1`. Las escrituras críticas que modifican varias tablas utilizan `D1Database.batch()` para obtener ejecución atómica en D1. Esto se aplica, entre otros, a:
+Configure en Cloudflare Workers > Settings > Variables and Secrets:
 
-- creación y actualización completa de presupuestos;
-- versionamiento y auditoría;
-- asignación de roles;
-- aplicación de plantillas;
-- transiciones de V°B° y aprobación;
-- eliminación lógica.
+- `BOOTSTRAP_ADMIN_EMAIL`: correo real de Antonio Gutiérrez.
+- `BOOTSTRAP_ADMIN_PASSWORD`: **Secret** opcional para habilitar el acceso interno inicial. No lo agregue a `wrangler.jsonc` ni a GitHub.
 
-## Demostración autónoma
+Cuando la identidad configurada ingresa por Cloudflare Access —o usa la ruta interna con el secreto configurado— el sistema reconcilia el usuario como **Antonio Gutiérrez** y le asigna `ADMIN`, `GESTOR`, `VISTO_BUENO` y `APROBADOR`. Después, desde Administración puede crear usuarios y distribuir funciones con mayor segregación.
 
-Abra `demo/index.html` para revisar la interfaz sin conectarse a Cloudflare. La demostración guarda los cambios en el navegador y no modifica D1.
+## Roles
+
+- `ADMIN`: administración total de usuarios, programas, parámetros y operaciones funcionales.
+- `CREADOR`: alta de programas y presupuestos, sin aprobación.
+- `LECTOR`: consulta sin escritura.
+- `GESTOR`: modificación y formulación.
+- `VISTO_BUENO`: revisión técnica.
+- `APROBADOR`: aprobación final.
+
+## Consistencia D1
+
+Las operaciones críticas que afectan varias tablas —alta de programas con aranceles, actualización de parámetros, usuarios, presupuestos, versiones y auditoría— se ejecutan mediante `D1Database.batch()` para evitar persistencias parciales.
 
 ## Validación automatizada
 
-GitHub Actions ejecuta:
+`npm run build:cloudflare` ejecuta primero:
 
-```bash
-npm install --no-audit --no-fund
-npm run verify
+```text
+Prisma generate
+→ preflight
+→ source audit
+→ TypeScript
+→ ESLint
+→ motor financiero
+→ Vitest
+→ pruebas autónomas
+→ OpenNext
 ```
 
-La verificación comprende:
+Esto está diseñado para detectar varios problemas en una sola compilación antes de entrar a OpenNext.
 
-- generación del cliente Prisma;
-- preflight de configuración D1;
-- TypeScript estricto;
-- motor financiero;
-- pruebas unitarias;
-- pruebas autónomas;
-- build OpenNext para Cloudflare.
+## Documentación v10
 
-## Documentación
-
-- `GUIA_IMPLEMENTACION_GITHUB_CLOUDFLARE_D1_WEB.md`: instalación completa, sólo mediante interfaces web.
-- `CHECKLIST_D1_WEB.md`: lista de control de puesta en marcha.
-- `CAMBIOS_D1.md`: diferencias respecto de la edición PostgreSQL.
-- `VERIFICACION_D1_WEB.md`: controles ejecutados sobre esta entrega.
+- `ACTUALIZACION_GITHUB_WEB_V10.md`: actualización de un repositorio ya desplegado.
+- `CAMBIOS_V10_MEJORAS_FUNCIONALES.md`: detalle de las mejoras implementadas.
+- `VERIFICACION_V10.md`: pruebas realizadas y limitaciones de verificación.
+- `GUIA_IMPLEMENTACION_GITHUB_CLOUDFLARE_D1_WEB.md`: instalación inicial.
+- `migrations/LEAME.md`: orden y propósito de migraciones D1.
 - `docs/formulas.md`: reglas financieras.
 - `docs/manual-usuario.md`: operación funcional.
-- `docs/arquitectura.md`: arquitectura técnica.
-- `docs/decisiones-y-pendientes.md`: decisiones y validaciones institucionales pendientes.
