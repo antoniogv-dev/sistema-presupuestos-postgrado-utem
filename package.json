@@ -2,7 +2,7 @@
   "name": "sistema-presupuestos-postgrado-utem",
   "version": "1.0.17-d1-web",
   "private": true,
-  "description": "Sistema de Presupuestos de Postgrado UTEM para Cloudflare Workers y D1, desplegable desde GitHub y Cloudflare web.",
+  "description": "Sistema de Presupuestos de Postgrado UTEM.",
   "engines": {
     "node": ">=22 <23",
     "npm": ">=10"
@@ -21,7 +21,7 @@
     "test:e2e": "playwright test",
     "test:engine": "node scripts/clean-engine-build.mjs && tsc -p tsconfig.engine.json",
     "preflight": "node scripts/preflight.mjs",
-    "db:generate": "npm run db:validate && prisma generate --no-engine",
+    "db:generate": "npm run db:validate && prisma generate",
     "db:migrations:apply": "wrangler d1 migrations apply DB --remote",
     "db:migrations:list": "wrangler d1 migrations list DB --remote",
     "deploy:cloudflare": "npm run db:migrations:apply && opennextjs-cloudflare deploy",
