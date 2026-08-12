@@ -60,6 +60,20 @@ const itemSchema = z.object({
   note: z.string().optional(),
   originTemplateItemKey: z.string().optional(),
 });
+const annualOverrideSchema = z.object({
+  year: z.number().int().min(2000).max(2100),
+  directTeachingHourValue: z.number().nonnegative(),
+  annualEnrollmentFee: z.number().int().nonnegative(),
+  thesisGuidancePerGraduatingStudent: z.number().int().nonnegative(),
+  annualDirection: z.number().int().nonnegative(),
+  directionProrated: z.boolean().default(false),
+  directionAllocationRate: z.number().min(0).max(1).default(1),
+  annualAssistance: z.number().int().nonnegative(),
+  assistanceProrated: z.boolean().default(false),
+  assistanceAllocationRate: z.number().min(0).max(1).default(1),
+  centralOverheadRate: z.number().min(0).max(1).default(0),
+  facultyOverheadRate: z.number().min(0).max(1).default(0),
+});
 const updateSchema = z.object({
   programId: z.string().min(1).optional(),
   cohortName: z.string().trim().min(3).optional(),
@@ -69,6 +83,9 @@ const updateSchema = z.object({
   initialStudents: z.number().int().min(0).optional(),
   facultyOverheadRate: z.number().min(0).max(1).optional(),
   enrollmentRecognitionRate: z.number().min(0).max(1).optional(),
+  programVersionLabel: z.string().trim().min(1).max(80).optional(),
+  scholarshipsEnabled: z.boolean().optional(),
+  annualOverrides: z.array(annualOverrideSchema).max(20).optional(),
   authorizedInitialCarryover: z.number().int().optional(),
   includeAuthorizedCarryover: z.boolean().optional(),
   normalizeSharedCosts: z.boolean().optional(),
@@ -90,6 +107,7 @@ function isAcademic(type: ProgramType) {
   return type === ProgramType.DOCTORADO || type === ProgramType.MAGISTER_ACADEMICO;
 }
 type D1BindValue = string | number | null;
+
 const includeAll = {
   program: { include: { annualTuitions: { orderBy: { year: "asc" as const } } } },
   appliedTemplate: true,
@@ -98,6 +116,7 @@ const includeAll = {
   discounts: true,
   externalIncome: true,
   items: true,
+  annualOverrides: { orderBy: { year: "asc" as const } },
   versions: { orderBy: { number: "desc" as const } },
   approvals: { orderBy: { createdAt: "desc" as const } },
   workflowEvents: {
@@ -143,15 +162,14 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
       : current.program;
     if (!effectiveProgram) throw new Error("NOT_FOUND");
 
-    const { semesters, discounts, externalIncome, items, changeNote, ...header } = input;
+    const { semesters, discounts, externalIncome, items, annualOverrides, changeNote, ...header } = input;
     const nextVersion = (current.versions[0]?.number ?? 0) + 1;
     const nextStatus = current.status === BudgetStatus.OBSERVADO ? BudgetStatus.BORRADOR : current.status;
     const database = d1Database();
     const statements: D1PreparedStatement[] = [];
     const assignments: string[] = [];
-const values: D1BindValue[] = [];
-
-const assign = (column: string, value: D1BindValue) => {
+    const values: D1BindValue[] = [];
+    const assign = (column: string, value: D1BindValue) => {
       assignments.push(`"${column}" = ?`);
       values.push(value);
     };
@@ -165,6 +183,8 @@ const assign = (column: string, value: D1BindValue) => {
     if (isAcademic(effectiveProgram.type)) assign("facultyOverheadRate", 0);
     else if (header.facultyOverheadRate !== undefined) assign("facultyOverheadRate", header.facultyOverheadRate);
     if (header.enrollmentRecognitionRate !== undefined) assign("enrollmentRecognitionRate", header.enrollmentRecognitionRate);
+    if (header.programVersionLabel !== undefined) assign("programVersionLabel", header.programVersionLabel);
+    if (header.scholarshipsEnabled !== undefined) assign("scholarshipsEnabled", header.scholarshipsEnabled ? 1 : 0);
     if (header.authorizedInitialCarryover !== undefined) assign("authorizedInitialCarryover", header.authorizedInitialCarryover);
     if (header.includeAuthorizedCarryover !== undefined) assign("includeAuthorizedCarryover", header.includeAuthorizedCarryover ? 1 : 0);
     if (header.normalizeSharedCosts !== undefined) assign("normalizeSharedCosts", header.normalizeSharedCosts ? 1 : 0);
@@ -302,6 +322,26 @@ const assign = (column: string, value: D1BindValue) => {
       }
     }
 
+    if (annualOverrides) {
+      statements.push(database.prepare(`DELETE FROM "BudgetAnnualOverride" WHERE "budgetId" = ?`).bind(budgetId));
+      for (const annual of annualOverrides) {
+        statements.push(database.prepare(`
+          INSERT INTO "BudgetAnnualOverride" (
+            "id", "budgetId", "year", "directTeachingHourValue", "annualEnrollmentFee",
+            "thesisGuidancePerGraduatingStudent", "annualDirection", "directionProrated",
+            "directionAllocationRate", "annualAssistance", "assistanceProrated",
+            "assistanceAllocationRate", "centralOverheadRate", "facultyOverheadRate"
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          d1Id("annual-override"), budgetId, annual.year, annual.directTeachingHourValue,
+          annual.annualEnrollmentFee, annual.thesisGuidancePerGraduatingStudent, annual.annualDirection,
+          annual.directionProrated ? 1 : 0, annual.directionAllocationRate, annual.annualAssistance,
+          annual.assistanceProrated ? 1 : 0, annual.assistanceAllocationRate,
+          annual.centralOverheadRate, annual.facultyOverheadRate,
+        ));
+      }
+    }
+
     const versionId = d1Id("budget-version");
     const snapshot = {
       budget: {
@@ -314,6 +354,7 @@ const assign = (column: string, value: D1BindValue) => {
       discounts,
       externalIncome,
       items,
+      annualOverrides,
     };
     statements.push(
       database.prepare(`

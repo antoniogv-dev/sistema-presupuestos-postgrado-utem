@@ -62,7 +62,7 @@ export default function ImportExportPage() {
 
       <section className="panel">
         <div className="panel-title"><div><h2>Exportaciones</h2><p>Seleccione un presupuesto para exportar su flujo individual o auditoría.</p></div></div>
-        <label>Presupuesto<select value={selectedId} disabled={loading || !budgets.length} onChange={(event) => setSelectedId(event.target.value)}><option value="">Seleccione</option>{budgets.map((budget) => <option key={budget.id} value={budget.id}>{budget.program.code} · {budget.cohortName} · V{budget.version}</option>)}</select></label>
+        <label>Presupuesto<select value={selectedId} disabled={loading || !budgets.length} onChange={(event) => setSelectedId(event.target.value)}><option value="">Seleccione</option>{budgets.map((budget) => <option key={budget.id} value={budget.id}>{budget.program.code} · {budget.cohortName} · Versión {budget.programVersionLabel} · R{budget.version}</option>)}</select></label>
         <div className="export-list enabled-exports">
           <button type="button" disabled={!selected || !result} onClick={() => selected && result && runExport(() => downloadBudgetXlsx(selected, result), "Flujo individual exportado a Excel.")}><span><strong>Flujo individual</strong><small>Excel (.xlsx) con detalle financiero</small></span><span>Exportar XLSX</span></button>
           <button type="button" disabled={!selected || !result} onClick={() => selected && result && runExport(() => downloadBudgetPdf(selected, result), "Reporte de viabilidad exportado a PDF.")}><span><strong>Reporte de viabilidad</strong><small>PDF con resultado y advertencias</small></span><span>Exportar PDF</span></button>

@@ -21,6 +21,7 @@ export interface Program {
   costCenter?: string;
   annualTuition?: Record<number, number>;
   tuitionSource?: TuitionSource;
+  versionLabel?: string;
 }
 
 export interface ProgramTypeParameters {
@@ -177,6 +178,21 @@ export interface ReviewEvent {
   toStage: WorkflowStage;
 }
 
+export interface BudgetAnnualOverride {
+  year: number;
+  directTeachingHourValue: number;
+  annualEnrollmentFee: number;
+  thesisGuidancePerGraduatingStudent: number;
+  annualDirection: number;
+  directionProrated: boolean;
+  directionAllocationRate: number;
+  annualAssistance: number;
+  assistanceProrated: boolean;
+  assistanceAllocationRate: number;
+  centralOverheadRate: number;
+  facultyOverheadRate: number;
+}
+
 export interface CohortBudget {
   id: string;
   program: Program;
@@ -189,6 +205,8 @@ export interface CohortBudget {
   workflowStage: WorkflowStage;
   facultyOverheadRate: number;
   enrollmentRecognitionRate: number;
+  programVersionLabel: string;
+  scholarshipsEnabled: boolean;
   authorizedInitialCarryover: number;
   includeAuthorizedCarryover: boolean;
   normalizeSharedCosts: boolean;
@@ -198,6 +216,7 @@ export interface CohortBudget {
   appliedTemplateVersion?: number;
   responsible: string;
   version: number;
+  annualOverrides: BudgetAnnualOverride[];
   createdAt: string;
   updatedAt?: string;
   deletedAt?: string;
@@ -222,6 +241,9 @@ export interface AnnualFlow {
   roundedEquivalentStudents: number;
   badDebt: number;
   netTuitionIncome: number;
+  grossEnrollmentFee: number;
+  enrollmentDiscounts: number;
+  netEnrollmentFee: number;
   recognizedEnrollmentFee: number;
   externalIncome: number;
   otherIncome: number;
@@ -244,6 +266,9 @@ export interface AnnualFlow {
   perDiem: number;
   otherCosts: number;
   centralOverhead: number;
+  overheadBase: number;
+  centralOverheadRate: number;
+  facultyOverheadRate: number;
   facultyOverhead: number;
   totalExpenses: number;
   netFlow: number;

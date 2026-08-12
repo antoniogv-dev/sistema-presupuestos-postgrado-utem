@@ -140,6 +140,7 @@ model Program {
   officialDurationSemesters Int
   status                    ProgramStatus @default(ACTIVO)
   costCenter                String?
+  versionLabel              String        @default("1")
   createdAt                 DateTime       @default(now())
   updatedAt                 DateTime       @updatedAt
   budgets                   CohortBudget[]
@@ -212,6 +213,8 @@ model CohortBudget {
   workflowStage              WorkflowStage @default(GESTION)
   facultyOverheadRate        Decimal
   enrollmentRecognitionRate Decimal
+  programVersionLabel        String        @default("1")
+  scholarshipsEnabled        Boolean       @default(true)
   authorizedInitialCarryover BigInt        @default(0)
   includeAuthorizedCarryover Boolean        @default(true)
   normalizeSharedCosts       Boolean        @default(true)
@@ -236,6 +239,7 @@ model CohortBudget {
   externalIncome             ExternalIncome[]
   items                      BudgetItem[]
   annualFlows                AnnualFinancialFlow[]
+  annualOverrides            BudgetAnnualOverride[]
   approvals                  Approval[]
   auditLogs                  AuditLog[]
   workflowEvents             BudgetWorkflowEvent[]
@@ -403,6 +407,28 @@ model SharedCostRule {
   description String?
   program     Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
   @@unique([programId, category])
+}
+
+
+model BudgetAnnualOverride {
+  id                               String       @id @default(cuid())
+  budgetId                         String
+  year                             Int
+  directTeachingHourValue          Decimal
+  annualEnrollmentFee              BigInt
+  thesisGuidancePerGraduatingStudent BigInt
+  annualDirection                  BigInt
+  directionProrated                Boolean      @default(false)
+  directionAllocationRate          Decimal      @default(1)
+  annualAssistance                 BigInt
+  assistanceProrated               Boolean      @default(false)
+  assistanceAllocationRate         Decimal      @default(1)
+  centralOverheadRate              Decimal      @default(0)
+  facultyOverheadRate              Decimal      @default(0)
+  budget                           CohortBudget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@unique([budgetId, year])
+  @@index([year])
 }
 
 model AnnualFinancialFlow {

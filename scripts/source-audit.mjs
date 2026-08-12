@@ -29,6 +29,10 @@ if (/npm run build:cloudflare/.test(packageJson.scripts?.build ?? "")) {
   fail('El script "build" no puede volver a llamar a "build:cloudflare".');
 }
 
+if ((packageJson.scripts?.["db:generate"] ?? "").includes("--no-engine")) {
+  fail('El script "db:generate" no debe usar --no-engine con Prisma + D1 + OpenNext.');
+}
+
 async function sourceFiles(directory) {
   const output = [];
   for (const entry of await readdir(directory)) {
@@ -160,7 +164,7 @@ if (!parametersRoute.includes("export async function PUT") || !parametersRoute.i
 }
 
 const versionsPage = await readFile(path.join(root, "app/versiones/page.tsx"), "utf8");
-if (!versionsPage.includes("Comparar versiones") || !versionsPage.includes("Versión base") || !versionsPage.includes("Versión a comparar")) {
+if (!versionsPage.includes("Comparar versiones") || !versionsPage.includes("Revisión interna base") || !versionsPage.includes("Revisión interna a comparar")) {
   fail("app/versiones/page.tsx: la comparación debe permitir seleccionar dos versiones y ejecutar la comparación.");
 }
 
@@ -181,6 +185,41 @@ if (!adminAccess.includes("Antonio Gutiérrez") || !adminAccess.includes("BOOTST
   fail("lib/auth/api-access.ts: falta el aprovisionamiento seguro del administrador inicial Antonio Gutiérrez.");
 }
 
+
+const passwordSource = await readFile(path.join(root, "lib/auth/password.ts"), "utf8");
+if (!passwordSource.includes("100_000") || passwordSource.includes("120_000")) {
+  fail("lib/auth/password.ts: PBKDF2 debe respetar el máximo efectivo de 100.000 iteraciones del runtime de Cloudflare usado por este proyecto.");
+}
+const v108Migration = await readFile(path.join(root, "migrations/0004_budget_professional_parameters.sql"), "utf8");
+for (const marker of ['CREATE TABLE "BudgetAnnualOverride"', '"programVersionLabel"', '"scholarshipsEnabled"']) {
+  if (!v108Migration.includes(marker)) fail(`0004_budget_professional_parameters.sql: falta ${marker}.`);
+}
+const budgetWorkspaceV108 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
+for (const marker of [
+  "Versión del programa / plan",
+  "Revisión interna",
+  "Gastos institucionales comprometidos/prorrateables",
+  "Matrícula bruta",
+  "INGRESOS TOTAL (sin matrícula)",
+  "Valor hora docente directa",
+  "Guía de tesis por graduando",
+  "Habilitar becas",
+  "otra(s) versión(es) aprobada(s)",
+  "PercentCell",
+]) {
+  if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.8 ${marker}.`);
+}
+const engineV108 = await readFile(path.join(root, "lib/calculations/budget-engine.ts"), "utf8");
+for (const marker of [
+  'item.periodicity === "Anual"',
+  "const totalIncome = netTuitionIncome + externalIncome + otherIncome",
+  "const overheadBase = Math.max(0, grossTuition - discounts - badDebt)",
+  "budget.scholarshipsEnabled",
+  "directionAllocationRate",
+  "annualEnrollmentFee",
+]) {
+  if (!engineV108.includes(marker)) fail(`budget-engine.ts: falta la regla v10.8 ${marker}.`);
+}
 
 const prismaFactory = await readFile(path.join(root, "lib/database/prisma.ts"), "utf8");
 // Analice sólo código ejecutable: los comentarios explicativos pueden mencionar

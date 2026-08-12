@@ -1,8 +1,8 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.8 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con **GitHub web**, **Cloudflare Workers/OpenNext**, **Cloudflare D1** y **Cloudflare Access**, sin PostgreSQL ni Hyperdrive.
 
-## Mejoras funcionales v10
+## Mejoras funcionales v10.8
 
 - **Programas**: alta real en D1, modificación, filtros aplicables por texto/tipo/estado y edición de aranceles en la misma operación.
 - **Arancel por programa**: fuente propia o plantilla **Doctorado**, **Magíster Académico** o **Magíster Profesional**.
@@ -15,6 +15,9 @@ Aplicación institucional para formular, revisar, consolidar y exportar presupue
 - **Presupuestos**: orden funcional renovado; “Estudiantes y graduación”, “Horas docentes directas”, “Horas docentes de reemplazo” y “Becas” quedan en secciones distintas.
 - **Panel principal y consolidado**: trabajan con datos persistidos en D1, no con presupuestos demostrativos.
 - **Auditoría preventiva**: `preflight`, auditoría de fuentes, TypeScript, ESLint y pruebas se ejecutan antes del build OpenNext.
+- **Parámetros profesionales v10.8**: matrícula anual con descuentos fuera de `INGRESOS TOTAL`, hora docente directa y guía de tesis editables por año, Dirección/Asistencia prorrateables y overhead anual.
+- **Versión del programa/plan**: editable e independiente de la revisión interna del presupuesto.
+- **Becas profesionales**: deshabilitadas por defecto y habilitables expresamente.
 
 ## Arquitectura
 
@@ -62,12 +65,13 @@ npm run deploy:cloudflare
 
 ## Base de datos D1
 
-El repositorio contiene tres migraciones versionadas:
+El repositorio contiene cuatro migraciones versionadas:
 
 ```text
 migrations/0001_initial.sql
 migrations/0002_seed.sql
 migrations/0003_functional_improvements.sql
+migrations/0004_budget_professional_parameters.sql
 ```
 
 El despliegue aplica automáticamente las migraciones pendientes mediante:
@@ -76,7 +80,7 @@ El despliegue aplica automáticamente las migraciones pendientes mediante:
 wrangler d1 migrations apply DB --remote
 ```
 
-Una base que ya tenga 0001 y 0002 **no debe recrearse**: la actualización v10 agrega 0003.
+Una base v10.7 que ya tenga 0001–0003 **no debe recrearse**: la actualización v10.8 agrega únicamente 0004.
 
 La verificación posterior está en:
 
@@ -124,9 +128,12 @@ Prisma generate
 
 Esto está diseñado para detectar varios problemas en una sola compilación antes de entrar a OpenNext.
 
-## Documentación v10
+## Documentación v10.8
 
-- `ACTUALIZACION_GITHUB_WEB_V10.md`: actualización de un repositorio ya desplegado.
+- `ACTUALIZACION_GITHUB_WEB_V10_8.md`: actualización recomendada de una instalación v10.7 ya desplegada.
+- `CAMBIOS_V10_8_PARAMETROS_PROFESIONALES.md`: detalle funcional y fórmulas incorporadas en v10.8.
+- `VERIFICACION_V10_8.md`: verificaciones ejecutadas y comprobaciones posteriores al deploy.
+- `ACTUALIZACION_GITHUB_WEB_V10.md`: referencia histórica de v10.
 - `CAMBIOS_V10_MEJORAS_FUNCIONALES.md`: detalle de las mejoras implementadas.
 - `VERIFICACION_V10.md`: pruebas realizadas y limitaciones de verificación.
 - `GUIA_IMPLEMENTACION_GITHUB_CLOUDFLARE_D1_WEB.md`: instalación inicial.

@@ -1,6 +1,7 @@
 import { getActivePeriods } from "@/lib/calculations/periods";
 import type {
   AccessRole,
+  BudgetAnnualOverride,
   CohortBudget,
   ExternalIncome,
   Program,
@@ -34,6 +35,7 @@ export type ApiProgram = {
   officialDurationSemesters: number;
   status: "ACTIVO" | "INACTIVO" | "EN_DISENO";
   costCenter?: string | null;
+  versionLabel?: string | null;
   annualTuitions?: ApiTuition[];
 };
 
@@ -49,6 +51,8 @@ export type ApiBudgetRecord = {
   workflowStage: CohortBudget["workflowStage"];
   facultyOverheadRate: string | number;
   enrollmentRecognitionRate: string | number;
+  programVersionLabel?: string | null;
+  scholarshipsEnabled?: boolean | number;
   authorizedInitialCarryover: string | number;
   includeAuthorizedCarryover?: boolean;
   normalizeSharedCosts?: boolean;
@@ -69,6 +73,7 @@ export type ApiBudgetRecord = {
   discounts?: Array<Record<string, unknown>>;
   externalIncome?: Array<Record<string, unknown>>;
   items?: Array<Record<string, unknown>>;
+  annualOverrides?: Array<Record<string, unknown>>;
   versions?: Array<{ id?: string; number: number; status?: string; snapshot?: unknown; changeNote?: string | null; createdAt?: string }>;
   workflowEvents?: Array<{
     id: string;
@@ -141,16 +146,13 @@ export function toProgram(record: ApiProgram): Program {
         ? "Inactivo"
         : "En diseño",
     costCenter: record.costCenter ?? undefined,
+    versionLabel: record.versionLabel?.trim() || "1",
     annualTuition,
     tuitionSource,
   };
 }
 
-export function emptySemester(
-  year: number,
-  semester: 1 | 2,
-  students = 0,
-): SemesterParameters {
+export function emptySemester(year: number, semester: 1 | 2, students = 0): SemesterParameters {
   return {
     year,
     semester,
@@ -190,6 +192,23 @@ function workflowDecision(action: string): ReviewDecision {
     FINAL_OBSERVE: "RECHAZADO",
   };
   return table[action] ?? "OBSERVADO";
+}
+
+function annualOverride(item: Record<string, unknown>): BudgetAnnualOverride {
+  return {
+    year: numberValue(item.year),
+    directTeachingHourValue: numberValue(item.directTeachingHourValue),
+    annualEnrollmentFee: numberValue(item.annualEnrollmentFee),
+    thesisGuidancePerGraduatingStudent: numberValue(item.thesisGuidancePerGraduatingStudent),
+    annualDirection: numberValue(item.annualDirection),
+    directionProrated: Boolean(item.directionProrated),
+    directionAllocationRate: numberValue(item.directionAllocationRate ?? 1),
+    annualAssistance: numberValue(item.annualAssistance),
+    assistanceProrated: Boolean(item.assistanceProrated),
+    assistanceAllocationRate: numberValue(item.assistanceAllocationRate ?? 1),
+    centralOverheadRate: numberValue(item.centralOverheadRate),
+    facultyOverheadRate: numberValue(item.facultyOverheadRate),
+  };
 }
 
 export function toBudget(record: ApiBudgetRecord): CohortBudget {
@@ -234,6 +253,8 @@ export function toBudget(record: ApiBudgetRecord): CohortBudget {
     workflowStage: record.workflowStage,
     facultyOverheadRate: numberValue(record.facultyOverheadRate),
     enrollmentRecognitionRate: numberValue(record.enrollmentRecognitionRate),
+    programVersionLabel: record.programVersionLabel?.trim() || record.program.versionLabel?.trim() || "1",
+    scholarshipsEnabled: record.scholarshipsEnabled === undefined ? record.program.type !== "MAGISTER_PROFESIONAL" : Boolean(record.scholarshipsEnabled),
     authorizedInitialCarryover: numberValue(record.authorizedInitialCarryover),
     includeAuthorizedCarryover: record.includeAuthorizedCarryover ?? true,
     normalizeSharedCosts: record.normalizeSharedCosts ?? true,
@@ -247,6 +268,7 @@ export function toBudget(record: ApiBudgetRecord): CohortBudget {
     updatedAt: record.updatedAt,
     notes: record.notes ?? undefined,
     semesters: activeSemesters,
+    annualOverrides: (record.annualOverrides ?? []).map(annualOverride).sort((a, b) => a.year - b.year),
     discounts: (record.discounts ?? []).map((item) => ({
       id: String(item.id),
       name: String(item.name),
@@ -277,12 +299,10 @@ export function toBudget(record: ApiBudgetRecord): CohortBudget {
       description: String(item.description ?? ""),
       category: String(item.category) as CohortBudget["manualItems"][number]["category"],
       year: numberValue(item.year),
-      semester: item.semester == null ? undefined : numberValue(item.semester) as 1 | 2,
+      semester: item.semester ? numberValue(item.semester) as 1 | 2 : undefined,
       amount: numberValue(item.amount),
-      costType: String(item.costType) === "COMPARTIDO"
-        ? "Compartido con otras cohortes"
-        : "Único de esta versión",
-      periodicity: String(item.periodicity ?? "Único") as CohortBudget["manualItems"][number]["periodicity"],
+      costType: String(item.costType) === "COMPARTIDO" ? "Compartido con otras cohortes" : "Único de esta versión",
+      periodicity: String(item.periodicity) as CohortBudget["manualItems"][number]["periodicity"],
       note: typeof item.note === "string" ? item.note : undefined,
       originTemplateItemKey: typeof item.originTemplateItemKey === "string" ? item.originTemplateItemKey : undefined,
     })),

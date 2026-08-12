@@ -107,6 +107,10 @@ export function applyBudgetTemplate(source: CohortBudget, template: BudgetTempla
     }
   }
 
+  if (template.items.some((item) => item.active && (item.kind === "BECA_ARANCEL" || item.kind === "BECA_MANUTENCION"))) {
+    budget.scholarshipsEnabled = true;
+  }
+
   budget.appliedTemplateId = template.id;
   budget.appliedTemplateCode = template.code;
   budget.appliedTemplateVersion = template.version;

@@ -44,10 +44,10 @@ export const institutionalParameters: InstitutionalParameters = {
 };
 
 export const programs: Program[] = [
-  { id: "mgp", code: "MGP", name: "Magíster en Gestión de Personas", type: "MAGISTER_PROFESIONAL", faculty: "Facultad de Administración y Economía", director: "Leonardo Gatica", officialDurationSemesters: 4, status: "Activo", costCenter: "01080300-021", annualTuition: yearly([4350000, 4567500, 4795875, 5035669, 5287452]), tuitionSource: "PROPIO" },
-  { id: "docmip", code: "DOCMIP", name: "Doctorado en Ciencias de Materiales e Ingeniería de Procesos", type: "DOCTORADO", faculty: "Facultad de Ciencias Naturales, Matemática y del Medio Ambiente", director: "Abdoulaye Thiam", officialDurationSemesters: 8, status: "Activo", costCenter: "01080300-011", annualTuition: { ...institutionalParameters.doctorateTuitionTemplate }, tuitionSource: "PLANTILLA_DOCTORADO" },
-  { id: "mq", code: "MQ", name: "Magíster en Química", type: "MAGISTER_ACADEMICO", faculty: "Facultad de Ciencias Naturales, Matemática y del Medio Ambiente", director: "Katherine Paredes", officialDurationSemesters: 4, status: "Activo", annualTuition: yearly([4023852, 4182884, 4348182, 4519991, 4745991]), tuitionSource: "PROPIO" },
-  { id: "mees", code: "MEES", name: "Magíster en Eficiencia Energética y Sustentabilidad", type: "MAGISTER_PROFESIONAL", faculty: "Facultad de Ingeniería", director: "Siva Avudaiappan", officialDurationSemesters: 4, status: "Activo", annualTuition: yearly([4150000, 4357500, 4575375, 4804144, 5044351]), tuitionSource: "PROPIO" },
+  { id: "mgp", code: "MGP", name: "Magíster en Gestión de Personas", type: "MAGISTER_PROFESIONAL", faculty: "Facultad de Administración y Economía", director: "Leonardo Gatica", officialDurationSemesters: 4, status: "Activo", versionLabel: "1", costCenter: "01080300-021", annualTuition: yearly([4350000, 4567500, 4795875, 5035669, 5287452]), tuitionSource: "PROPIO" },
+  { id: "docmip", code: "DOCMIP", name: "Doctorado en Ciencias de Materiales e Ingeniería de Procesos", type: "DOCTORADO", faculty: "Facultad de Ciencias Naturales, Matemática y del Medio Ambiente", director: "Abdoulaye Thiam", officialDurationSemesters: 8, status: "Activo", versionLabel: "1", costCenter: "01080300-011", annualTuition: { ...institutionalParameters.doctorateTuitionTemplate }, tuitionSource: "PLANTILLA_DOCTORADO" },
+  { id: "mq", code: "MQ", name: "Magíster en Química", type: "MAGISTER_ACADEMICO", faculty: "Facultad de Ciencias Naturales, Matemática y del Medio Ambiente", director: "Katherine Paredes", officialDurationSemesters: 4, status: "Activo", versionLabel: "1", annualTuition: yearly([4023852, 4182884, 4348182, 4519991, 4745991]), tuitionSource: "PROPIO" },
+  { id: "mees", code: "MEES", name: "Magíster en Eficiencia Energética y Sustentabilidad", type: "MAGISTER_PROFESIONAL", faculty: "Facultad de Ingeniería", director: "Siva Avudaiappan", officialDurationSemesters: 4, status: "Activo", versionLabel: "1", annualTuition: yearly([4150000, 4357500, 4575375, 4804144, 5044351]), tuitionSource: "PROPIO" },
 ];
 
 function semesters(startYear: number, startSemester: 1 | 2, duration: number, students: number) {
@@ -82,13 +82,16 @@ function baseBudget(id: string, program: Program, startYear: number, startSemest
     status,
     workflowStage: status === "Aprobado" ? "FINALIZADO" : "GESTION",
     facultyOverheadRate: program.type === "MAGISTER_PROFESIONAL" ? 0.10 : 0,
-    enrollmentRecognitionRate: 0.50,
+    enrollmentRecognitionRate: 0,
+    programVersionLabel: program.versionLabel ?? "1",
+    scholarshipsEnabled: program.type !== "MAGISTER_PROFESIONAL",
     authorizedInitialCarryover: 0,
     includeAuthorizedCarryover: true,
     normalizeSharedCosts: true,
     alertPotentialDuplicates: true,
     responsible: "M. Antonio Gutiérrez Varas",
     version: status === "Aprobado" ? 3 : 1,
+    annualOverrides: [],
     createdAt: "2026-08-02",
     notes: "Presupuesto de demostración para formulación institucional.",
     semesters: semesters(startYear, startSemester, program.officialDurationSemesters, students),

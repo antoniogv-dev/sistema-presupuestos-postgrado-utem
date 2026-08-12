@@ -24,7 +24,8 @@ describe("motor financiero", () => {
     const first = result.annualFlows[0];
     const rate = institutionalParameters.byProgramType.MAGISTER_PROFESIONAL.badDebtRate;
     expect(first.badDebt).toBeCloseTo(first.tuitionAfterBenefits * rate, 2);
-    expect(first.recognizedEnrollmentFee).toBeGreaterThan(0);
+    expect(first.grossEnrollmentFee).toBeGreaterThan(0);
+    expect(first.recognizedEnrollmentFee).toBe(0);
   });
 
   it("aplica overhead sólo a programas profesionales", () => {
@@ -60,6 +61,73 @@ describe("motor financiero", () => {
     const last = calculateBudget(budget, institutionalParameters).annualFlows.at(-1)!;
     const unit = institutionalParameters.byProgramType.MAGISTER_PROFESIONAL.thesisGuidancePerGraduatingStudent[last.year];
     expect(last.thesisGuidanceCost).toBe(7 * unit);
+  });
+
+  it("cobra matrícula una vez por cada dos semestres, aplica descuentos y no la suma a ingresos total", () => {
+    const budget = clone(demoBudget);
+    budget.enrollmentRecognitionRate = 1;
+    budget.semesters.forEach((semester) => { semester.activeStudents = 10; });
+    budget.discounts = [{ id: "mat", name: "Convenio", percentage: 0.2, students: 5, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 2 }];
+    const result = calculateBudget(budget, institutionalParameters);
+    const first = result.annualFlows[0];
+    const enrollment = institutionalParameters.annualEnrollmentFee[first.year];
+    expect(first.grossEnrollmentFee).toBe(10 * enrollment);
+    expect(first.enrollmentDiscounts).toBe(5 * enrollment * 0.2);
+    expect(first.recognizedEnrollmentFee).toBe(first.netEnrollmentFee);
+    expect(first.totalIncome).toBe(first.netTuitionIncome + first.externalIncome + first.otherIncome);
+  });
+
+  it("permite sobrescribir por año hora directa y guía de tesis", () => {
+    const budget = clone(demoBudget);
+    budget.annualOverrides = [{
+      year: 2027, directTeachingHourValue: 30000, annualEnrollmentFee: 200000, thesisGuidancePerGraduatingStudent: 500000,
+      annualDirection: 4000000, directionProrated: false, directionAllocationRate: 1, annualAssistance: 2000000,
+      assistanceProrated: false, assistanceAllocationRate: 1, centralOverheadRate: 0.2, facultyOverheadRate: 0.1,
+    }];
+    budget.semesters.filter((s) => s.year === 2027).forEach((s) => { s.directTeachingHours = 10; s.graduatingStudents = 2; });
+    const flow = calculateBudget(budget, institutionalParameters).annualFlows[0];
+    expect(flow.directTeachingCost).toBe(20 * 30000);
+    expect(flow.thesisGuidanceCost).toBe(2 * 500000);
+  });
+
+  it("repite un costo anual en todos los años activos desde su año de inicio", () => {
+    const budget = clone(demoBudget);
+    budget.manualItems = [{ id: "annual", name: "Soporte anual", description: "", category: "Honorarios no académicos", year: 2027, amount: 1000000, costType: "Único de esta versión", periodicity: "Anual" }];
+    const flows = calculateBudget(budget, institutionalParameters).annualFlows;
+    expect(flows.map((flow) => flow.nonAcademicHonoraria)).toEqual(flows.map(() => 1000000));
+  });
+
+  it("calcula overhead anual sobre arancel bruto menos descuentos menos incobrables", () => {
+    const budget = clone(demoBudget);
+    budget.annualOverrides = [{
+      year: 2027, directTeachingHourValue: 1, annualEnrollmentFee: 1, thesisGuidancePerGraduatingStudent: 0,
+      annualDirection: 0, directionProrated: false, directionAllocationRate: 1, annualAssistance: 0, assistanceProrated: false,
+      assistanceAllocationRate: 1, centralOverheadRate: 0.25, facultyOverheadRate: 0.05,
+    }];
+    const flow = calculateBudget(budget, institutionalParameters).annualFlows[0];
+    expect(flow.overheadBase).toBeCloseTo(Math.max(0, flow.grossTuition - flow.discounts - flow.badDebt), 2);
+    expect(flow.centralOverhead).toBeCloseTo(flow.overheadBase * 0.25, 2);
+    expect(flow.facultyOverhead).toBeCloseTo(flow.overheadBase * 0.05, 2);
+  });
+
+  it("prorratea dirección y asistencia al 50 por ciento cuando se configura", () => {
+    const budget = clone(demoBudget);
+    budget.annualOverrides = [{
+      year: 2027, directTeachingHourValue: 1, annualEnrollmentFee: 1, thesisGuidancePerGraduatingStudent: 0,
+      annualDirection: 4152675, directionProrated: true, directionAllocationRate: 0.5, annualAssistance: 2000000,
+      assistanceProrated: true, assistanceAllocationRate: 0.5, centralOverheadRate: 0, facultyOverheadRate: 0,
+    }];
+    const flow = calculateBudget(budget, institutionalParameters).annualFlows[0];
+    expect(flow.direction).toBeCloseTo(4152675 * 0.5, 2);
+    expect(flow.assistance).toBe(1000000);
+  });
+
+  it("mantiene becas deshabilitadas en profesional hasta habilitación explícita", () => {
+    const budget = clone(demoBudget);
+    budget.scholarshipsEnabled = false;
+    budget.semesters.forEach((semester) => { semester.internalTuitionScholarshipStudents = 5; semester.maintenanceScholarshipStudents = 5; semester.maintenanceScholarshipMonths = 6; });
+    const flows = calculateBudget(budget, institutionalParameters).annualFlows;
+    expect(flows.every((flow) => flow.internalTuitionScholarships === 0 && flow.maintenanceScholarships === 0)).toBe(true);
   });
 
   it("reconoce ingreso externo sólo en el año configurado", () => {

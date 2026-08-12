@@ -1,22 +1,24 @@
-# Subida mediante GitHub web
+# Sistema de Presupuestos de Postgrado UTEM — v10.8
 
-Al descomprimir este paquete, debe subir a GitHub **el contenido de esta carpeta**, no la carpeta contenedora ni el ZIP.
+Para actualizar una instalación v10.7 ya operativa, use preferentemente:
 
-En la raíz del repositorio deben verse, entre otros:
+`actualizacion-v10-8-parametros-profesionales-github-web.zip`
 
-- `.github/`
-- `app/`
-- `features/`
-- `lib/`
-- `migrations/`
-- `prisma/`
-- `package.json`
-- `wrangler.jsonc`
+La guía exacta está en:
 
-La carpeta `migrations/` contiene:
+`ACTUALIZACION_GITHUB_WEB_V10_8.md`
 
-- `0001_initial.sql`
-- `0002_seed.sql`
-- `LEAME.md`
+La versión esperada después del despliegue es:
 
-Si GitHub web no permite subir toda la carpeta de una vez, cree manualmente la carpeta `migrations` y cargue dentro los dos archivos SQL.
+- aplicación: `1.0.18-d1-web`
+- release: `v10.8`
+- migraciones D1: `0001` a `0004`
+
+La actualización conserva las correcciones de producción ya estabilizadas:
+
+- PBKDF2: `100_000` iteraciones;
+- Prisma: `prisma generate` sin `--no-engine`;
+- binding D1: `DB`;
+- autenticación y sesiones existentes.
+
+No reemplace su `wrangler.jsonc` productivo si usa el paquete completo como referencia. El paquete incremental no incluye ese archivo.

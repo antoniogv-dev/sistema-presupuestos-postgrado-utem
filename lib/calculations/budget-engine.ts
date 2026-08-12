@@ -1,6 +1,7 @@
 import { getActivePeriods, getActiveYears, isPeriodWithinRange, periodKey } from "./periods";
 import type {
   AnnualFlow,
+  BudgetAnnualOverride,
   BudgetItem,
   BudgetResult,
   CohortBudget,
@@ -12,10 +13,11 @@ import type {
 
 const sum = (values: number[]) => values.reduce((acc, value) => acc + value, 0);
 const nonNegative = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? Number(value) : 0);
+const clampRate = (value: number | undefined) => Math.min(1, Math.max(0, Number.isFinite(value) ? Number(value) : 0));
 
 export function parameterForYear(values: Record<number, number>, year: number): number {
   if (values[year] !== undefined) return values[year];
-  const available = Object.keys(values).map(Number).sort((a, b) => a - b);
+  const available = Object.keys(values).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
   const previous = available.filter((candidate) => candidate <= year).at(-1);
   return previous !== undefined ? values[previous] : values[available[0]] ?? 0;
 }
@@ -31,8 +33,76 @@ export function tuitionForProgramYear(budget: CohortBudget, parameters: Institut
   return parameterForYear(typeTemplate && Object.keys(typeTemplate).length ? typeTemplate : parameters.doctorateTuitionTemplate, year);
 }
 
-function sumManualItems(items: BudgetItem[], year: number, categories: BudgetItem["category"][]): number {
-  return sum(items.filter((item) => item.year === year && categories.includes(item.category)).map((item) => nonNegative(item.amount)));
+export function defaultAnnualOverrideForYear(
+  budget: Pick<CohortBudget, "program" | "facultyOverheadRate">,
+  parameters: InstitutionalParameters,
+  year: number,
+): BudgetAnnualOverride {
+  const scoped = programTypeParameters(parameters, budget.program.type);
+  const overhead = overheadApplies(budget.program.type);
+  return {
+    year,
+    directTeachingHourValue: parameterForYear(parameters.teachingHour, year),
+    annualEnrollmentFee: parameterForYear(parameters.annualEnrollmentFee, year),
+    thesisGuidancePerGraduatingStudent: parameterForYear(scoped.thesisGuidancePerGraduatingStudent, year),
+    annualDirection: parameterForYear(scoped.annualDirection, year),
+    directionProrated: false,
+    directionAllocationRate: 1,
+    annualAssistance: parameterForYear(scoped.annualAssistance, year),
+    assistanceProrated: false,
+    assistanceAllocationRate: 1,
+    centralOverheadRate: overhead ? scoped.centralOverheadRate : 0,
+    facultyOverheadRate: overhead ? (budget.facultyOverheadRate ?? scoped.facultyOverheadRate) : 0,
+  };
+}
+
+export function resolvedAnnualOverrideForYear(
+  budget: CohortBudget,
+  parameters: InstitutionalParameters,
+  year: number,
+): BudgetAnnualOverride {
+  const fallback = defaultAnnualOverrideForYear(budget, parameters, year);
+  const stored = budget.annualOverrides?.find((item) => item.year === year);
+  if (!stored) return fallback;
+  return {
+    ...fallback,
+    ...stored,
+    year,
+    directionAllocationRate: clampRate(stored.directionAllocationRate),
+    assistanceAllocationRate: clampRate(stored.assistanceAllocationRate),
+    centralOverheadRate: clampRate(stored.centralOverheadRate),
+    facultyOverheadRate: clampRate(stored.facultyOverheadRate),
+  };
+}
+
+export function hydrateAnnualOverrides(budget: CohortBudget, parameters: InstitutionalParameters): CohortBudget {
+  const years = getActiveYears(getActivePeriods(budget.startYear, budget.startSemester, budget.durationSemesters));
+  return {
+    ...budget,
+    annualOverrides: years.map((year) => resolvedAnnualOverrideForYear(budget, parameters, year)),
+  };
+}
+
+function semesterOrdinal(year: number, semester: 1 | 2): number {
+  return year * 2 + semester;
+}
+
+function manualItemMultiplier(item: BudgetItem, budget: CohortBudget, year: number): number {
+  if (item.periodicity === "Único") return item.year === year ? 1 : 0;
+  if (year < item.year) return 0;
+
+  if (item.periodicity === "Anual") return 1;
+
+  const activePeriods = getActivePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
+    .filter((period) => period.year === year);
+  const startOrdinal = semesterOrdinal(item.year, item.semester ?? 1);
+  return activePeriods.filter((period) => semesterOrdinal(period.year, period.semester) >= startOrdinal).length;
+}
+
+function sumManualItems(budget: CohortBudget, year: number, categories: BudgetItem["category"][]): number {
+  return sum(budget.manualItems
+    .filter((item) => categories.includes(item.category))
+    .map((item) => nonNegative(item.amount) * manualItemMultiplier(item, budget, year)));
 }
 
 function thesisStudentsForSemester(budget: CohortBudget, semester: SemesterParameters): number {
@@ -61,17 +131,26 @@ export function validateBudget(budget: CohortBudget): string[] {
       .filter((discount) => isPeriodWithinRange(semester.year, semester.semester, discount.startYear, discount.startSemester, discount.endYear, discount.endSemester))
       .reduce((acc, discount) => acc + discount.students, 0);
     if (discounts > semester.activeStudents) warnings.push(`${semester.year}-${semester.semester}: los descuentos superan los estudiantes activos.`);
-    if (discounts + semester.internalTuitionScholarshipStudents > semester.activeStudents) {
+    if (budget.scholarshipsEnabled && discounts + semester.internalTuitionScholarshipStudents > semester.activeStudents) {
       warnings.push(`${semester.year}-${semester.semester}: descuentos y becas internas superan los estudiantes activos.`);
     }
     if (nonNegative(semester.graduatingStudents) > nonNegative(semester.activeStudents)) {
       warnings.push(`${semester.year}-${semester.semester}: los estudiantes en graduación superan los estudiantes activos.`);
     }
   }
-  if (budget.facultyOverheadRate < 0 || budget.facultyOverheadRate > 1) warnings.push("El overhead de facultad debe estar entre 0 % y 100 %.");
   if (budget.enrollmentRecognitionRate < 0 || budget.enrollmentRecognitionRate > 1) warnings.push("El reconocimiento de matrícula debe estar entre 0 % y 100 %.");
-  if (!overheadApplies(budget.program.type) && budget.facultyOverheadRate > 0) {
-    warnings.push("El overhead configurado se ignora porque los doctorados y magísteres académicos no están afectos a overhead.");
+  for (const item of budget.annualOverrides ?? []) {
+    for (const [label, rate] of [
+      ["prorrateo de dirección", item.directionAllocationRate],
+      ["prorrateo de asistencia", item.assistanceAllocationRate],
+      ["overhead central", item.centralOverheadRate],
+      ["overhead de facultad", item.facultyOverheadRate],
+    ] as const) {
+      if (rate < 0 || rate > 1) warnings.push(`${item.year}: el ${label} debe estar entre 0 % y 100 %.`);
+    }
+  }
+  if (!overheadApplies(budget.program.type) && (budget.annualOverrides ?? []).some((item) => item.centralOverheadRate > 0 || item.facultyOverheadRate > 0)) {
+    warnings.push("Los valores de overhead se ignoran porque los doctorados y magísteres académicos no están afectos a overhead.");
   }
   return [...new Set(warnings)];
 }
@@ -84,19 +163,24 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
   const scoped = programTypeParameters(parameters, budget.program.type);
   let previousAccumulated = budget.includeAuthorizedCarryover ? budget.authorizedInitialCarryover : 0;
 
+  const enrollmentChargePeriods = new Set(
+    periods.filter((_, index) => index % 2 === 0).map((period) => periodKey(period.year, period.semester)),
+  );
+
   const annualFlows: AnnualFlow[] = years.map((year, yearIndex) => {
     const yearPeriods = periods.filter((period) => period.year === year);
     const semesters = yearPeriods.map((period) => semesterMap.get(periodKey(period.year, period.semester))).filter(Boolean) as SemesterParameters[];
     const annualTuition = tuitionForProgramYear(budget, parameters, year);
     const tuitionFactor = semesters.length * 0.5;
+    const override = resolvedAnnualOverrideForYear(budget, parameters, year);
 
     const grossTuition = sum(semesters.map((semester) => nonNegative(semester.activeStudents) * annualTuition * 0.5));
     const discounts = sum(semesters.flatMap((semester) => budget.discounts
       .filter((discount) => isPeriodWithinRange(semester.year, semester.semester, discount.startYear, discount.startSemester, discount.endYear, discount.endSemester))
-      .map((discount) => nonNegative(discount.students) * annualTuition * 0.5 * nonNegative(discount.percentage))));
-    const internalTuitionScholarships = sum(semesters.map((semester) =>
-      nonNegative(semester.internalTuitionScholarshipStudents) * annualTuition * 0.5 * nonNegative(semester.internalTuitionScholarshipCoverage),
-    ));
+      .map((discount) => nonNegative(discount.students) * annualTuition * 0.5 * clampRate(discount.percentage))));
+    const internalTuitionScholarships = budget.scholarshipsEnabled ? sum(semesters.map((semester) =>
+      nonNegative(semester.internalTuitionScholarshipStudents) * annualTuition * 0.5 * clampRate(semester.internalTuitionScholarshipCoverage),
+    )) : 0;
 
     const tuitionAfterBenefits = Math.max(0, grossTuition - discounts - internalTuitionScholarships);
     const equivalentDenominator = annualTuition * tuitionFactor;
@@ -104,43 +188,57 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
     const roundedEquivalentStudents = Math.ceil(equivalentEnrollments);
     const badDebt = tuitionAfterBenefits * scoped.badDebtRate;
     const netTuitionIncome = tuitionAfterBenefits - badDebt;
-    const recognizedEnrollmentFee = sum(semesters.map((semester) =>
-      nonNegative(semester.activeStudents) * parameterForYear(parameters.annualEnrollmentFee, semester.year) * 0.5 * budget.enrollmentRecognitionRate,
-    ));
+
+    const enrollmentSemesters = semesters.filter((semester) => enrollmentChargePeriods.has(periodKey(semester.year, semester.semester)));
+    const grossEnrollmentFee = sum(enrollmentSemesters.map((semester) => nonNegative(semester.activeStudents) * nonNegative(override.annualEnrollmentFee)));
+    const enrollmentDiscounts = sum(enrollmentSemesters.flatMap((semester) => budget.discounts
+      .filter((discount) => isPeriodWithinRange(semester.year, semester.semester, discount.startYear, discount.startSemester, discount.endYear, discount.endSemester))
+      .map((discount) => nonNegative(discount.students) * nonNegative(override.annualEnrollmentFee) * clampRate(discount.percentage))));
+    const netEnrollmentFee = Math.max(0, grossEnrollmentFee - enrollmentDiscounts);
+    const recognizedEnrollmentFee = netEnrollmentFee * clampRate(budget.enrollmentRecognitionRate);
+
     const externalIncome = sum(budget.externalIncome.filter((income) => income.year === year).map((income) => nonNegative(income.students) * nonNegative(income.amountPerStudent)));
     const otherIncome = 0;
-    const totalIncome = netTuitionIncome + recognizedEnrollmentFee + externalIncome + otherIncome;
+    // La matrícula se muestra y controla en el flujo, pero no forma parte de INGRESOS TOTAL.
+    const totalIncome = netTuitionIncome + externalIncome + otherIncome;
 
-    const directTeachingCost = sum(semesters.map((semester) => nonNegative(semester.directTeachingHours) * parameterForYear(parameters.teachingHour, semester.year)));
+    const directTeachingCost = sum(semesters.map((semester) => nonNegative(semester.directTeachingHours) * nonNegative(override.directTeachingHourValue)));
     const replacementTeachingCost = sum(semesters.map((semester) => nonNegative(semester.replacementTeachingHours) * parameters.replacementHour));
     const graduatingStudents = Math.max(0, ...semesters.map((semester) => {
       const explicit = semester.graduatingStudents;
       return explicit === undefined ? inferredGraduatingStudents(budget, semester) : nonNegative(explicit);
     }));
-    const thesisGuidanceCost = graduatingStudents * parameterForYear(scoped.thesisGuidancePerGraduatingStudent, year);
-    const manualAcademicHonoraria = sumManualItems(budget.manualItems, year, ["Honorarios académicos"]);
+    const thesisGuidanceCost = graduatingStudents * nonNegative(override.thesisGuidancePerGraduatingStudent);
+    const manualAcademicHonoraria = sumManualItems(budget, year, ["Honorarios académicos"]);
     const academicHonoraria = directTeachingCost + replacementTeachingCost + thesisGuidanceCost + manualAcademicHonoraria;
     const thesisStudents = Math.max(0, ...semesters.map((semester) => thesisStudentsForSemester(budget, semester)));
-    const nonAcademicHonoraria = sumManualItems(budget.manualItems, year, ["Honorarios no académicos"]);
+    const nonAcademicHonoraria = sumManualItems(budget, year, ["Honorarios no académicos"]);
 
-    const direction = parameterForYear(scoped.annualDirection, year) + sumManualItems(budget.manualItems, year, ["Dirección"]);
-    const assistance = parameterForYear(scoped.annualAssistance, year) + sumManualItems(budget.manualItems, year, ["Asistencia"]);
-    const operational = parameterForYear(scoped.referenceOperational, year) + sumManualItems(budget.manualItems, year, ["Gastos operacionales", "Bienes y servicios"]);
-    const software = parameterForYear(scoped.softwareLicenses, year) + sumManualItems(budget.manualItems, year, ["Software"]);
-    const diffusion = parameterForYear(scoped.diffusionAdmission, year) + sumManualItems(budget.manualItems, year, ["Difusión"]);
-    const maintenanceScholarships = sum(semesters.map((semester) =>
+    const directionBase = nonNegative(override.annualDirection) * (override.directionProrated ? clampRate(override.directionAllocationRate) : 1);
+    const assistanceBase = nonNegative(override.annualAssistance) * (override.assistanceProrated ? clampRate(override.assistanceAllocationRate) : 1);
+    const direction = directionBase + sumManualItems(budget, year, ["Dirección"]);
+    const assistance = assistanceBase + sumManualItems(budget, year, ["Asistencia"]);
+    const operational = parameterForYear(scoped.referenceOperational, year) + sumManualItems(budget, year, ["Gastos operacionales", "Bienes y servicios"]);
+    const software = parameterForYear(scoped.softwareLicenses, year) + sumManualItems(budget, year, ["Software"]);
+    const diffusion = parameterForYear(scoped.diffusionAdmission, year) + sumManualItems(budget, year, ["Difusión"]);
+    const maintenanceScholarships = (budget.scholarshipsEnabled ? sum(semesters.map((semester) =>
       nonNegative(semester.maintenanceScholarshipStudents)
       * nonNegative(semester.maintenanceScholarshipMonths)
       * parameterForYear(parameters.maintenanceScholarshipMonthly, semester.year),
-    )) + sumManualItems(budget.manualItems, year, ["Becas de manutención"]);
+    )) : 0) + sumManualItems(budget, year, ["Becas de manutención"]);
     const congressesInternships = parameterForYear(scoped.congressesInternships, year)
-      + sumManualItems(budget.manualItems, year, ["Congresos", "Pasantías"]);
-    const booksPublications = sumManualItems(budget.manualItems, year, ["Libros y publicaciones"]);
-    const travelFreight = sumManualItems(budget.manualItems, year, ["Pasajes y fletes"]);
-    const perDiem = sumManualItems(budget.manualItems, year, ["Viáticos"]);
-    const otherCosts = sumManualItems(budget.manualItems, year, ["Otros"]);
-    const centralOverhead = overheadApplies(budget.program.type) ? netTuitionIncome * scoped.centralOverheadRate : 0;
-    const facultyOverhead = overheadApplies(budget.program.type) ? netTuitionIncome * budget.facultyOverheadRate : 0;
+      + sumManualItems(budget, year, ["Congresos", "Pasantías"]);
+    const booksPublications = sumManualItems(budget, year, ["Libros y publicaciones"]);
+    const travelFreight = sumManualItems(budget, year, ["Pasajes y fletes"]);
+    const perDiem = sumManualItems(budget, year, ["Viáticos"]);
+    const otherCosts = sumManualItems(budget, year, ["Otros"]);
+
+    // Base solicitada: arancel bruto - descuentos de arancel - incobrables.
+    const overheadBase = Math.max(0, grossTuition - discounts - badDebt);
+    const centralOverheadRate = overheadApplies(budget.program.type) ? clampRate(override.centralOverheadRate) : 0;
+    const facultyOverheadRate = overheadApplies(budget.program.type) ? clampRate(override.facultyOverheadRate) : 0;
+    const centralOverhead = overheadBase * centralOverheadRate;
+    const facultyOverhead = overheadBase * facultyOverheadRate;
     const totalExpenses = academicHonoraria + nonAcademicHonoraria + direction + assistance + operational + software + diffusion
       + maintenanceScholarships + congressesInternships + booksPublications + travelFreight + perDiem + otherCosts + centralOverhead + facultyOverhead;
     const netFlow = totalIncome - totalExpenses;
@@ -162,6 +260,9 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
       roundedEquivalentStudents,
       badDebt,
       netTuitionIncome,
+      grossEnrollmentFee,
+      enrollmentDiscounts,
+      netEnrollmentFee,
       recognizedEnrollmentFee,
       externalIncome,
       otherIncome,
@@ -184,6 +285,9 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
       perDiem,
       otherCosts,
       centralOverhead,
+      overheadBase,
+      centralOverheadRate,
+      facultyOverheadRate,
       facultyOverhead,
       totalExpenses,
       netFlow,

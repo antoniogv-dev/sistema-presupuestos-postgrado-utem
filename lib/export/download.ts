@@ -37,12 +37,12 @@ export function downloadTextFile(content: string, type: string, filename: string
 
 export function downloadBudgetXlsx(budget: CohortBudget, result: BudgetResult) {
   const report = buildFinancialReport(budget, result);
-  download(createFinancialReportXlsx(report), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-v${budget.version}.xlsx`);
+  download(createFinancialReportXlsx(report), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.xlsx`);
 }
 
 export function downloadBudgetPdf(budget: CohortBudget, result: BudgetResult) {
   const report = buildFinancialReport(budget, result);
-  download(createFinancialReportPdf(report), "application/pdf", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-v${budget.version}.pdf`);
+  download(createFinancialReportPdf(report), "application/pdf", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.pdf`);
 }
 
 function csvCell(value: unknown): string {
@@ -94,7 +94,8 @@ export function auditCsv(budget: CohortBudget): string {
   const rows = [
     ["Programa", budget.program.code],
     ["Cohorte", budget.cohortName],
-    ["Versión", budget.version],
+    ["Versión del programa", budget.programVersionLabel],
+    ["Revisión interna", `R${budget.version}`],
     [],
     ["Fecha", "Usuario", "Rol", "Decisión", "Etapa origen", "Etapa destino", "Comentario"],
     ...budget.reviewHistory.map((event) => [event.createdAt, event.user, event.role, event.decision, event.fromStage, event.toStage, event.comment ?? ""]),
@@ -103,5 +104,5 @@ export function auditCsv(budget: CohortBudget): string {
 }
 
 export function downloadAuditCsv(budget: CohortBudget) {
-  downloadTextFile(auditCsv(budget), "text/csv;charset=utf-8", `${slug(budget.program.code)}-${budget.startYear}-auditoria-v${budget.version}.csv`);
+  downloadTextFile(auditCsv(budget), "text/csv;charset=utf-8", `${slug(budget.program.code)}-${budget.startYear}-auditoria-version-${slug(budget.programVersionLabel)}-r${budget.version}.csv`);
 }

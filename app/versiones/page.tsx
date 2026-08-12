@@ -125,12 +125,12 @@ export default function VersionsPage() {
     <section className="panel">
       <div className="panel-title"><div><h2>Comparar versiones</h2><p>{data ? `${data.program.name} · ${data.cohortName}` : "Seleccione un presupuesto para comenzar."}</p></div></div>
       <div className="version-compare-controls">
-        <label>Versión base<select value={baseId} disabled={!data?.versions.length} onChange={(event) => setBaseId(event.target.value)}>{data?.versions.map((version) => <option value={version.id} key={version.id}>Versión {version.number} · {displayStatus(version.status)}</option>)}</select></label>
-        <label>Versión a comparar<select value={compareId} disabled={!data?.versions.length} onChange={(event) => setCompareId(event.target.value)}>{data?.versions.map((version) => <option value={version.id} key={version.id}>Versión {version.number} · {displayStatus(version.status)}</option>)}</select></label>
+        <label>Revisión interna base<select value={baseId} disabled={!data?.versions.length} onChange={(event) => setBaseId(event.target.value)}>{data?.versions.map((version) => <option value={version.id} key={version.id}>Revisión R{version.number} · {displayStatus(version.status)}</option>)}</select></label>
+        <label>Revisión interna a comparar<select value={compareId} disabled={!data?.versions.length} onChange={(event) => setCompareId(event.target.value)}>{data?.versions.map((version) => <option value={version.id} key={version.id}>Revisión R{version.number} · {displayStatus(version.status)}</option>)}</select></label>
         <button className="button primary" type="button" disabled={!baseId || !compareId || (data?.versions.length ?? 0) < 2} onClick={compare}>Comparar versiones</button>
       </div>
       {(data?.versions.length ?? 0) < 2 ? <div className="notice info"><p>Se requieren al menos dos versiones para generar una comparación.</p></div> : null}
-      {comparison ? <div className="table-wrap"><table className="data-table version-diff-table"><thead><tr><th>Campo</th><th>Versión base</th><th>Versión comparada</th></tr></thead><tbody>{comparison.length ? comparison.map((item) => <tr key={item.path}><th>{item.path}</th><td>{item.base}</td><td>{item.compared}</td></tr>) : <tr><td colSpan={3}>No se detectaron diferencias entre las versiones seleccionadas.</td></tr>}</tbody></table></div> : null}
+      {comparison ? <div className="table-wrap"><table className="data-table version-diff-table"><thead><tr><th>Campo</th><th>Revisión interna base</th><th>Versión comparada</th></tr></thead><tbody>{comparison.length ? comparison.map((item) => <tr key={item.path}><th>{item.path}</th><td>{item.base}</td><td>{item.compared}</td></tr>) : <tr><td colSpan={3}>No se detectaron diferencias entre las versiones seleccionadas.</td></tr>}</tbody></table></div> : null}
     </section>
 
     <section className="panel">

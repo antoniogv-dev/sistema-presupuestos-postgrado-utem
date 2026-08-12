@@ -6,6 +6,7 @@ const requiredFiles = [
   "migrations/0001_initial.sql",
   "migrations/0002_seed.sql",
   "migrations/0003_functional_improvements.sql",
+  "migrations/0004_budget_professional_parameters.sql",
   "open-next.config.ts",
   "wrangler.jsonc",
   "app/api/health/route.ts",
@@ -87,7 +88,7 @@ if (!d1.database_id || /REEMPLAZAR|PLACEHOLDER/i.test(d1.database_id)) {
 const migrations = (await readdir("migrations"))
   .filter((name) => /^\d{4}_.+\.sql$/.test(name))
   .sort();
-if (migrations.length < 3) throw new Error("Se requieren al menos las migraciones 0001, 0002 y 0003.");
+if (migrations.length < 4) throw new Error("Se requieren al menos las migraciones 0001, 0002, 0003 y 0004.");
 if (new Set(migrations.map((name) => name.slice(0, 4))).size !== migrations.length) {
   throw new Error("Hay números de migración D1 duplicados.");
 }

@@ -35,6 +35,7 @@ type ProgramForm = {
   officialDurationSemesters: number;
   status: ProgramStatus;
   costCenter: string;
+  versionLabel: string;
   tuitionSource: TuitionSource;
   annualTuition: Record<number, number>;
 };
@@ -53,6 +54,7 @@ function emptyForm(years: number[]): ProgramForm {
     officialDurationSemesters: 8,
     status: "ACTIVO",
     costCenter: "",
+    versionLabel: "1",
     tuitionSource: "PLANTILLA_DOCTORADO",
     annualTuition: Object.fromEntries(years.map((year) => [year, 0])),
   };
@@ -81,6 +83,7 @@ function formFromRecord(record: ApiProgram, years: number[]): ProgramForm {
     officialDurationSemesters: record.officialDurationSemesters,
     status: record.status,
     costCenter: record.costCenter ?? "",
+    versionLabel: record.versionLabel ?? "1",
     tuitionSource: sourceFromApi(record),
     annualTuition: annual,
   };
@@ -212,6 +215,7 @@ export default function ProgramsPage() {
         officialDurationSemesters: form.officialDurationSemesters,
         status: form.status,
         costCenter: form.costCenter || null,
+        versionLabel: form.versionLabel.trim() || "1",
         annualTuitions: tuitionValues,
       };
       const programResponse = await fetch(form.id ? `/api/programs/${form.id}` : "/api/programs", {
@@ -252,6 +256,7 @@ export default function ProgramsPage() {
           <label>Director/a<input required value={form.director} onChange={(event) => setForm({ ...form, director: event.target.value })} /></label>
           <label>Duración (semestres)<input type="number" min="1" max="16" value={form.officialDurationSemesters} onChange={(event) => setForm({ ...form, officialDurationSemesters: numberValue(event.target.value) })} /></label>
           <label>Centro de costo<input value={form.costCenter} onChange={(event) => setForm({ ...form, costCenter: event.target.value })} /></label>
+          <label>Versión del programa / plan<input required value={form.versionLabel} onChange={(event) => setForm({ ...form, versionLabel: event.target.value })} /></label>
           <label>Estado<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as ProgramStatus })}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </div>
 
@@ -285,7 +290,7 @@ export default function ProgramsPage() {
 
     <section className="panel">
       <div className="panel-title"><div><h2>Programas</h2><p>{loading ? "Cargando…" : `${filtered.length} de ${records.length} programas visibles.`}</p></div></div>
-      <div className="table-wrap"><table className="data-table"><thead><tr><th>Código</th><th>Programa</th><th>Tipo</th><th>Facultad</th><th>Director</th><th>Duración</th><th className="numeric">Arancel 2027</th><th>Fuente</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
+      <div className="table-wrap"><table className="data-table"><thead><tr><th>Código</th><th>Programa</th><th>Versión</th><th>Tipo</th><th>Facultad</th><th>Director</th><th>Duración</th><th className="numeric">Arancel 2027</th><th>Fuente</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
         {!loading && filtered.length ? filtered.map((program) => {
           const tuition2027 = program.annualTuitions?.find((item) => item.year === 2027);
           const source = tuition2027
@@ -294,11 +299,12 @@ export default function ProgramsPage() {
           return <tr key={program.id}>
             <th>{program.code}</th>
             <td><strong>{program.name}</strong><small>{program.costCenter ? `Centro de costo ${program.costCenter}` : "Sin centro de costo registrado"}</small></td>
+            <td>{program.versionLabel ?? "1"}</td>
             <td>{typeLabels[program.type]}</td><td>{program.faculty}</td><td>{program.director}</td><td>{program.officialDurationSemesters} semestres</td>
             <td className="numeric">{formatCLP(numberValue(tuition2027?.amount))}</td><td>{tuitionSourceLabel(source)}</td><td><StatusBadge status={statusLabels[program.status]} /></td>
             <td><button className="text-button" type="button" disabled={!canModify(roles)} onClick={() => startEdit(program)}>Modificar programa</button></td>
           </tr>;
-        }) : <tr><td colSpan={10}>{loading ? "Cargando programas…" : "No hay programas que coincidan con los filtros."}</td></tr>}
+        }) : <tr><td colSpan={11}>{loading ? "Cargando programas…" : "No hay programas que coincidan con los filtros."}</td></tr>}
       </tbody></table></div>
     </section>
   </AppShell>;

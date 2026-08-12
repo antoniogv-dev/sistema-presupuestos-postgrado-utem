@@ -1,0 +1,42 @@
+Sistema de Presupuestos de Postgrado UTEM
+Release: v10.8
+Versión: 1.0.18-d1-web
+
+Objetivo: parámetros profesionales, matrícula anual informativa, prorrateos y versión de programa/plan.
+
+Cambios funcionales principales:
+1. Hora docente directa editable por año/presupuesto.
+2. Matrícula: un cobro por cada dos semestres activos, con descuentos, visible en flujo y excluida de INGRESOS TOTAL.
+3. Guía de tesis editable por año.
+4. Costos Anuales repetidos desde su año de inicio hasta el término.
+5. Overhead central/facultad por año sobre arancel bruto - descuentos - incobrables.
+6. Versión del programa/plan editable, separada de Revisión interna Rn.
+7. Becas profesionales deshabilitadas por defecto, con habilitación explícita.
+8. Reconocimiento de matrícula inicial 0 %.
+9. Porcentajes visibles en escala 0-100 con símbolo %.
+10. Asistencia anual editable y prorrateable.
+11. Compromisos/prorrateo con otras versiones aprobadas y superpuestas; una versión adicional sugiere 50 %.
+
+Persistencia:
+- nueva migración migrations/0004_budget_professional_parameters.sql
+- nueva tabla BudgetAnnualOverride
+- Program.versionLabel
+- CohortBudget.programVersionLabel
+- CohortBudget.scholarshipsEnabled
+
+Correcciones de producción preservadas:
+- PBKDF2 = 100_000 iteraciones.
+- db:generate = npm run db:validate && prisma generate
+- NO se usa --no-engine.
+
+Verificación local:
+- motor TypeScript: compila.
+- pruebas autónomas: 12/12.
+- aserciones funcionales v10.8: correctas.
+- migraciones 0001-0004 en SQLite limpio: correctas.
+- preflight: correcto.
+- source audit: correcto (con advertencias esperadas por marcadores del wrangler de referencia).
+- sintaxis TS/TSX modificada: correcta.
+
+Nota:
+El entorno de empaquetado no tuvo acceso al registro npm para reinstalar dependencias, por lo que el build integral Next/Prisma/OpenNext/Vitest debe completarse en Cloudflare Workers Builds durante el despliegue.

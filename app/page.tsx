@@ -74,7 +74,7 @@ export default function HomePage() {
         <div className="table-wrap"><table className="data-table"><thead><tr><th>Programa y cohorte</th><th>Periodo</th><th>Estado</th><th>Versión</th><th className="numeric">Resultado final</th></tr></thead><tbody>
           {recent.length ? recent.map((budget) => {
             const result = calculateBudget(budget, parameters);
-            return <tr key={budget.id}><td><strong>{budget.program.code}</strong><small>{budget.cohortName}</small></td><td>{budget.startYear}-{budget.startSemester} · {budget.durationSemesters} sem.</td><td><StatusBadge status={budget.status} /></td><td>v{budget.version}</td><td className={`numeric ${result.finalAccumulatedFlow >= 0 ? "positive-text" : "negative-text"}`}>{formatCLP(result.finalAccumulatedFlow)}</td></tr>;
+            return <tr key={budget.id}><td><strong>{budget.program.code}</strong><small>{budget.cohortName}</small></td><td>{budget.startYear}-{budget.startSemester} · {budget.durationSemesters} sem.</td><td><StatusBadge status={budget.status} /></td><td>Versión {budget.programVersionLabel}<small>Revisión R{budget.version}</small></td><td className={`numeric ${result.finalAccumulatedFlow >= 0 ? "positive-text" : "negative-text"}`}>{formatCLP(result.finalAccumulatedFlow)}</td></tr>;
           }) : <tr><td colSpan={5}>{loading ? "Cargando presupuestos…" : "No existen presupuestos registrados."}</td></tr>}
         </tbody></table></div>
       </section>

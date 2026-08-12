@@ -14,6 +14,7 @@ const programSchema = z.object({
   officialDurationSemesters: z.number().int().min(1).max(16),
   status: z.enum(["ACTIVO", "INACTIVO", "EN_DISENO"]).default("ACTIVO"),
   costCenter: z.string().trim().max(100).optional().nullable(),
+  versionLabel: z.string().trim().min(1).max(80).default("1"),
 });
 
 const tuitionSourceSchema = z.enum([
@@ -81,8 +82,8 @@ export async function POST(request: Request) {
       database.prepare(`
         INSERT INTO "Program" (
           "id", "code", "name", "type", "faculty", "director", "officialDurationSemesters",
-          "status", "costCenter", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          "status", "costCenter", "versionLabel", "createdAt", "updatedAt"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `).bind(
         programId,
         input.code,
@@ -93,6 +94,7 @@ export async function POST(request: Request) {
         input.officialDurationSemesters,
         input.status,
         input.costCenter || null,
+        input.versionLabel,
       ),
     ];
 
