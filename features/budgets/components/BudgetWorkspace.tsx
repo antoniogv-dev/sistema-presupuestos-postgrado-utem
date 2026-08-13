@@ -358,9 +358,11 @@ export function BudgetWorkspace() {
   }
 
   function manualCostAmount(year: number, categories: readonly BudgetItem["category"][]): number {
-    return budget.manualItems
+    if (!budget) return 0;
+    const currentBudget = budget;
+    return currentBudget.manualItems
       .filter((item) => categories.includes(item.category))
-      .reduce((total, item) => total + manualItemAmountForYear(item, budget, year), 0);
+      .reduce((total, item) => total + manualItemAmountForYear(item, currentBudget, year), 0);
   }
 
   function updateEditableFlowCost(
