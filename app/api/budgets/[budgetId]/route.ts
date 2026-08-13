@@ -64,6 +64,7 @@ const annualOverrideSchema = z.object({
   year: z.number().int().min(2000).max(2100),
   directTeachingHourValue: z.number().nonnegative(),
   annualEnrollmentFee: z.number().int().nonnegative(),
+  annualTuition: z.number().int().positive(),
   thesisGuidancePerGraduatingStudent: z.number().int().nonnegative(),
   annualDirection: z.number().int().nonnegative(),
   directionProrated: z.boolean().default(false),
@@ -327,14 +328,14 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
       for (const annual of annualOverrides) {
         statements.push(database.prepare(`
           INSERT INTO "BudgetAnnualOverride" (
-            "id", "budgetId", "year", "directTeachingHourValue", "annualEnrollmentFee",
+            "id", "budgetId", "year", "directTeachingHourValue", "annualEnrollmentFee", "annualTuition",
             "thesisGuidancePerGraduatingStudent", "annualDirection", "directionProrated",
             "directionAllocationRate", "annualAssistance", "assistanceProrated",
             "assistanceAllocationRate", "centralOverheadRate", "facultyOverheadRate"
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           d1Id("annual-override"), budgetId, annual.year, annual.directTeachingHourValue,
-          annual.annualEnrollmentFee, annual.thesisGuidancePerGraduatingStudent, annual.annualDirection,
+          annual.annualEnrollmentFee, annual.annualTuition, annual.thesisGuidancePerGraduatingStudent, annual.annualDirection,
           annual.directionProrated ? 1 : 0, annual.directionAllocationRate, annual.annualAssistance,
           annual.assistanceProrated ? 1 : 0, annual.assistanceAllocationRate,
           annual.centralOverheadRate, annual.facultyOverheadRate,

@@ -26,9 +26,12 @@ export function programTypeParameters(parameters: InstitutionalParameters, type:
   return parameters.byProgramType[type] ?? parameters.byProgramType.OTRO;
 }
 
-export function tuitionForProgramYear(budget: CohortBudget, parameters: InstitutionalParameters, year: number): number {
+export function tuitionForProgramYear(budget: Pick<CohortBudget, "program">, parameters: InstitutionalParameters, year: number): number {
   const customValues = budget.program.annualTuition;
-  if (customValues && Object.keys(customValues).length > 0) return parameterForYear(customValues, year);
+  if (customValues && Object.keys(customValues).length > 0) {
+    const positiveValues = Object.fromEntries(Object.entries(customValues).filter(([, value]) => nonNegative(value) > 0));
+    if (Object.keys(positiveValues).length > 0) return parameterForYear(positiveValues, year);
+  }
   const typeTemplate = parameters.tuitionTemplates?.[budget.program.type];
   return parameterForYear(typeTemplate && Object.keys(typeTemplate).length ? typeTemplate : parameters.doctorateTuitionTemplate, year);
 }
@@ -44,6 +47,7 @@ export function defaultAnnualOverrideForYear(
     year,
     directTeachingHourValue: parameterForYear(parameters.teachingHour, year),
     annualEnrollmentFee: parameterForYear(parameters.annualEnrollmentFee, year),
+    annualTuition: tuitionForProgramYear(budget, parameters, year),
     thesisGuidancePerGraduatingStudent: parameterForYear(scoped.thesisGuidancePerGraduatingStudent, year),
     annualDirection: parameterForYear(scoped.annualDirection, year),
     directionProrated: false,
@@ -64,10 +68,14 @@ export function resolvedAnnualOverrideForYear(
   const fallback = defaultAnnualOverrideForYear(budget, parameters, year);
   const stored = budget.annualOverrides?.find((item) => item.year === year);
   if (!stored) return fallback;
+  const storedTuition = nonNegative(stored.annualTuition);
   return {
     ...fallback,
     ...stored,
     year,
+    // Un arancel 0 en un año activo se interpreta como dato faltante, no como arancel válido.
+    // Esto permite recuperar cohortes antiguas que sólo tenían informado el primer año.
+    annualTuition: storedTuition > 0 ? storedTuition : fallback.annualTuition,
     directionAllocationRate: clampRate(stored.directionAllocationRate),
     assistanceAllocationRate: clampRate(stored.assistanceAllocationRate),
     centralOverheadRate: clampRate(stored.centralOverheadRate),
@@ -87,7 +95,7 @@ function semesterOrdinal(year: number, semester: 1 | 2): number {
   return year * 2 + semester;
 }
 
-function manualItemMultiplier(item: BudgetItem, budget: CohortBudget, year: number): number {
+export function manualItemMultiplier(item: BudgetItem, budget: CohortBudget, year: number): number {
   if (item.periodicity === "Único") return item.year === year ? 1 : 0;
   if (year < item.year) return 0;
 
@@ -99,10 +107,14 @@ function manualItemMultiplier(item: BudgetItem, budget: CohortBudget, year: numb
   return activePeriods.filter((period) => semesterOrdinal(period.year, period.semester) >= startOrdinal).length;
 }
 
+export function manualItemAmountForYear(item: BudgetItem, budget: CohortBudget, year: number): number {
+  return nonNegative(item.amount) * manualItemMultiplier(item, budget, year);
+}
+
 function sumManualItems(budget: CohortBudget, year: number, categories: BudgetItem["category"][]): number {
   return sum(budget.manualItems
     .filter((item) => categories.includes(item.category))
-    .map((item) => nonNegative(item.amount) * manualItemMultiplier(item, budget, year)));
+    .map((item) => manualItemAmountForYear(item, budget, year)));
 }
 
 function thesisStudentsForSemester(budget: CohortBudget, semester: SemesterParameters): number {
@@ -170,9 +182,9 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
   const annualFlows: AnnualFlow[] = years.map((year, yearIndex) => {
     const yearPeriods = periods.filter((period) => period.year === year);
     const semesters = yearPeriods.map((period) => semesterMap.get(periodKey(period.year, period.semester))).filter(Boolean) as SemesterParameters[];
-    const annualTuition = tuitionForProgramYear(budget, parameters, year);
-    const tuitionFactor = semesters.length * 0.5;
     const override = resolvedAnnualOverrideForYear(budget, parameters, year);
+    const annualTuition = nonNegative(override.annualTuition);
+    const tuitionFactor = semesters.length * 0.5;
 
     const grossTuition = sum(semesters.map((semester) => nonNegative(semester.activeStudents) * annualTuition * 0.5));
     const discounts = sum(semesters.flatMap((semester) => budget.discounts
@@ -191,11 +203,11 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
 
     const enrollmentSemesters = semesters.filter((semester) => enrollmentChargePeriods.has(periodKey(semester.year, semester.semester)));
     const grossEnrollmentFee = sum(enrollmentSemesters.map((semester) => nonNegative(semester.activeStudents) * nonNegative(override.annualEnrollmentFee)));
-    const enrollmentDiscounts = sum(enrollmentSemesters.flatMap((semester) => budget.discounts
-      .filter((discount) => isPeriodWithinRange(semester.year, semester.semester, discount.startYear, discount.startSemester, discount.endYear, discount.endSemester))
-      .map((discount) => nonNegative(discount.students) * nonNegative(override.annualEnrollmentFee) * clampRate(discount.percentage))));
-    const netEnrollmentFee = Math.max(0, grossEnrollmentFee - enrollmentDiscounts);
-    const recognizedEnrollmentFee = netEnrollmentFee * clampRate(budget.enrollmentRecognitionRate);
+    // Los descuentos de cohorte se aplican exclusivamente al arancel.
+    // La matrícula es un valor anual informativo y no recibe descuentos.
+    const enrollmentDiscounts = 0;
+    const netEnrollmentFee = grossEnrollmentFee;
+    const recognizedEnrollmentFee = grossEnrollmentFee * clampRate(budget.enrollmentRecognitionRate);
 
     const externalIncome = sum(budget.externalIncome.filter((income) => income.year === year).map((income) => nonNegative(income.students) * nonNegative(income.amountPerStudent)));
     const otherIncome = 0;
@@ -231,6 +243,7 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
     const booksPublications = sumManualItems(budget, year, ["Libros y publicaciones"]);
     const travelFreight = sumManualItems(budget, year, ["Pasajes y fletes"]);
     const perDiem = sumManualItems(budget, year, ["Viáticos"]);
+    const foodBeverages = sumManualItems(budget, year, ["Alimentos y bebidas"]);
     const otherCosts = sumManualItems(budget, year, ["Otros"]);
 
     // Base solicitada: arancel bruto - descuentos de arancel - incobrables.
@@ -240,7 +253,7 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
     const centralOverhead = overheadBase * centralOverheadRate;
     const facultyOverhead = overheadBase * facultyOverheadRate;
     const totalExpenses = academicHonoraria + nonAcademicHonoraria + direction + assistance + operational + software + diffusion
-      + maintenanceScholarships + congressesInternships + booksPublications + travelFreight + perDiem + otherCosts + centralOverhead + facultyOverhead;
+      + maintenanceScholarships + congressesInternships + booksPublications + travelFreight + perDiem + foodBeverages + otherCosts + centralOverhead + facultyOverhead;
     const netFlow = totalIncome - totalExpenses;
     const startingCarryover = yearIndex === 0 ? (budget.includeAuthorizedCarryover ? budget.authorizedInitialCarryover : 0) : previousAccumulated;
     const accumulatedFlow = startingCarryover + netFlow;
@@ -283,6 +296,7 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
       booksPublications,
       travelFreight,
       perDiem,
+      foodBeverages,
       otherCosts,
       centralOverhead,
       overheadBase,

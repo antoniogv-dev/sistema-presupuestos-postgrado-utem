@@ -416,6 +416,7 @@ model BudgetAnnualOverride {
   year                             Int
   directTeachingHourValue          Decimal
   annualEnrollmentFee              BigInt
+  annualTuition                    BigInt       @default(0)
   thesisGuidancePerGraduatingStudent BigInt
   annualDirection                  BigInt
   directionProrated                Boolean      @default(false)

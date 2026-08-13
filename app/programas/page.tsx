@@ -70,9 +70,24 @@ function sourceFromApi(record: ApiProgram): TuitionSource {
   );
 }
 
+function completeAnnualTuition(values: Record<number, number>, years: number[]): Record<number, number> {
+  const ordered = [...years].sort((a, b) => a - b);
+  const positive = ordered.filter((year) => numberValue(values[year]) > 0);
+  if (!positive.length) return Object.fromEntries(ordered.map((year) => [year, 0]));
+  return Object.fromEntries(ordered.map((year) => {
+    const exact = numberValue(values[year]);
+    if (exact > 0) return [year, exact];
+    const previous = positive.filter((candidate) => candidate < year).at(-1);
+    const next = positive.find((candidate) => candidate > year);
+    const sourceYear = previous ?? next ?? positive[0];
+    return [year, numberValue(values[sourceYear])];
+  }));
+}
+
 function formFromRecord(record: ApiProgram, years: number[]): ProgramForm {
   const annual = Object.fromEntries(years.map((year) => [year, 0]));
   for (const value of record.annualTuitions ?? []) annual[value.year] = numberValue(value.amount);
+  const completedAnnual = completeAnnualTuition(annual, years);
   return {
     id: record.id,
     code: record.code,
@@ -85,7 +100,7 @@ function formFromRecord(record: ApiProgram, years: number[]): ProgramForm {
     costCenter: record.costCenter ?? "",
     versionLabel: record.versionLabel ?? "1",
     tuitionSource: sourceFromApi(record),
-    annualTuition: annual,
+    annualTuition: completedAnnual,
   };
 }
 
@@ -201,9 +216,10 @@ export default function ProgramsPage() {
     setMessage("");
     setError("");
     try {
+      const completedAnnual = completeAnnualTuition(form.annualTuition, years);
       const tuitionValues = years.map((year) => ({
         year,
-        amount: Math.round(form.annualTuition[year] ?? 0),
+        amount: Math.round(completedAnnual[year] ?? 0),
         source: form.tuitionSource,
       }));
       const payload = {

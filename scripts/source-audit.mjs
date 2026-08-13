@@ -199,7 +199,7 @@ for (const marker of [
   "Versión del programa / plan",
   "Revisión interna",
   "Gastos institucionales comprometidos/prorrateables",
-  "Matrícula bruta",
+  "Matrícula anual (informativa, sin descuentos)",
   "INGRESOS TOTAL (sin matrícula)",
   "Valor hora docente directa",
   "Guía de tesis por graduando",
@@ -209,6 +209,24 @@ for (const marker of [
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.8 ${marker}.`);
 }
+
+const v109Migration = await readFile(path.join(root, "migrations/0005_cashflow_costs_and_annual_tuition.sql"), "utf8");
+for (const marker of ['ADD COLUMN "annualTuition"', 'ProgramAnnualTuition']) {
+  if (!v109Migration.includes(marker)) fail(`0005_cashflow_costs_and_annual_tuition.sql: falta ${marker}.`);
+}
+for (const marker of [
+  '"Alimentos y bebidas"',
+  'Arancel anual',
+  'Matrícula anual (informativa, sin descuentos)',
+  'Gastos operacionales / Bienes y servicios',
+  'Otros costos y gastos',
+]) {
+  if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.9 ${marker}.`);
+}
+for (const forbidden of ['label="Descuentos matrícula"', 'label="Matrícula neta"']) {
+  if (budgetWorkspaceV108.includes(forbidden)) fail(`BudgetWorkspace.tsx: v10.9 no debe mostrar ${forbidden} en el flujo.`);
+}
+
 const engineV108 = await readFile(path.join(root, "lib/calculations/budget-engine.ts"), "utf8");
 for (const marker of [
   'item.periodicity === "Anual"',
@@ -217,8 +235,41 @@ for (const marker of [
   "budget.scholarshipsEnabled",
   "directionAllocationRate",
   "annualEnrollmentFee",
+  "annualTuition",
+  "foodBeverages",
 ]) {
   if (!engineV108.includes(marker)) fail(`budget-engine.ts: falta la regla v10.8 ${marker}.`);
+}
+
+const v110Migration = await readFile(path.join(root, "migrations/0006_repair_annual_tuition_and_enrollment_rules.sql"), "utf8");
+if (!v110Migration.includes('WHERE COALESCE("annualTuition", 0) <= 0')) {
+  fail("0006_repair_annual_tuition_and_enrollment_rules.sql: falta reparación defensiva de aranceles en cero.");
+}
+for (const marker of [
+  '"Alimentos y bebidas"',
+  'Matrícula anual (informativa, sin descuentos)',
+  'Detalle de costos y gastos registrados',
+  'manualItemAmountForYear',
+  'FUNCTIONAL_RELEASE = "v10.10"',
+]) {
+  if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.10 ${marker}.`);
+}
+for (const forbidden of [
+  'label="Descuentos matrícula"',
+  'label="Matrícula neta"',
+  'Matrícula anual (informativa, descuentos aplicados)',
+]) {
+  if (budgetWorkspaceV108.includes(forbidden)) fail(`BudgetWorkspace.tsx: v10.10 no debe contener ${forbidden}.`);
+}
+if (!engineV108.includes("const enrollmentDiscounts = 0;")) {
+  fail("budget-engine.ts: la matrícula no debe recibir descuentos; enrollmentDiscounts debe ser 0.");
+}
+if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fallback.annualTuition")) {
+  fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
+}
+const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
+if (!appShellV110.includes("v10.10") || !appShellV110.includes("1.0.20-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.10 para detectar despliegues parciales o antiguos.");
 }
 
 const prismaFactory = await readFile(path.join(root, "lib/database/prisma.ts"), "utf8");

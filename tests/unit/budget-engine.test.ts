@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateBudget, overheadApplies } from "@/lib/calculations/budget-engine";
+import { calculateBudget, defaultAnnualOverrideForYear, overheadApplies } from "@/lib/calculations/budget-engine";
 import { buildConsolidationGroups, consolidateBudgets, detectPotentialDuplicateCosts } from "@/lib/calculations/consolidation";
 import { demoBudget, institutionalParameters, secondDemoBudget } from "@/lib/demo-data";
 import { applyWorkflowAction, canDeleteBudget, canEditBudget } from "@/lib/workflow/budget-workflow";
@@ -63,7 +63,7 @@ describe("motor financiero", () => {
     expect(last.thesisGuidanceCost).toBe(7 * unit);
   });
 
-  it("cobra matrícula una vez por cada dos semestres, aplica descuentos y no la suma a ingresos total", () => {
+  it("cobra matrícula una vez por cada dos semestres, no aplica descuentos y no la suma a ingresos total", () => {
     const budget = clone(demoBudget);
     budget.enrollmentRecognitionRate = 1;
     budget.semesters.forEach((semester) => { semester.activeStudents = 10; });
@@ -72,15 +72,16 @@ describe("motor financiero", () => {
     const first = result.annualFlows[0];
     const enrollment = institutionalParameters.annualEnrollmentFee[first.year];
     expect(first.grossEnrollmentFee).toBe(10 * enrollment);
-    expect(first.enrollmentDiscounts).toBe(5 * enrollment * 0.2);
-    expect(first.recognizedEnrollmentFee).toBe(first.netEnrollmentFee);
+    expect(first.enrollmentDiscounts).toBe(0);
+    expect(first.netEnrollmentFee).toBe(first.grossEnrollmentFee);
+    expect(first.recognizedEnrollmentFee).toBe(first.grossEnrollmentFee);
     expect(first.totalIncome).toBe(first.netTuitionIncome + first.externalIncome + first.otherIncome);
   });
 
   it("permite sobrescribir por año hora directa y guía de tesis", () => {
     const budget = clone(demoBudget);
     budget.annualOverrides = [{
-      year: 2027, directTeachingHourValue: 30000, annualEnrollmentFee: 200000, thesisGuidancePerGraduatingStudent: 500000,
+      year: 2027, directTeachingHourValue: 30000, annualEnrollmentFee: 200000, annualTuition: 5000000, thesisGuidancePerGraduatingStudent: 500000,
       annualDirection: 4000000, directionProrated: false, directionAllocationRate: 1, annualAssistance: 2000000,
       assistanceProrated: false, assistanceAllocationRate: 1, centralOverheadRate: 0.2, facultyOverheadRate: 0.1,
     }];
@@ -88,6 +89,39 @@ describe("motor financiero", () => {
     const flow = calculateBudget(budget, institutionalParameters).annualFlows[0];
     expect(flow.directTeachingCost).toBe(20 * 30000);
     expect(flow.thesisGuidanceCost).toBe(2 * 500000);
+  });
+
+  it("mantiene arancel anual configurable en cada año activo del presupuesto", () => {
+    const budget = clone(demoBudget);
+    budget.annualOverrides = [
+      { ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2027), annualTuition: 5000000 },
+      { ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2028), annualTuition: 5500000 },
+    ];
+    const flows = calculateBudget(budget, institutionalParameters).annualFlows;
+    expect(flows.find((flow) => flow.year === 2027)?.annualTuition).toBe(5000000);
+    expect(flows.find((flow) => flow.year === 2028)?.annualTuition).toBe(5500000);
+  });
+
+  it("recupera el arancel de un año activo cuando un registro histórico quedó en cero", () => {
+    const budget = clone(demoBudget);
+    budget.program.annualTuition = { 2027: 3250000, 2028: 3412500 };
+    budget.annualOverrides = [
+      { ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2027), annualTuition: 3250000 },
+      { ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2028), annualTuition: 0 },
+    ];
+    const flows = calculateBudget(budget, institutionalParameters).annualFlows;
+    expect(flows.find((flow) => flow.year === 2027)?.grossTuition).toBeGreaterThan(0);
+    expect(flows.find((flow) => flow.year === 2028)?.annualTuition).toBe(3412500);
+    expect(flows.find((flow) => flow.year === 2028)?.grossTuition).toBeGreaterThan(0);
+    expect(flows.find((flow) => flow.year === 2028)?.totalIncome).toBeGreaterThan(0);
+  });
+
+  it("incorpora alimentos y bebidas como costo y gasto del flujo", () => {
+    const budget = clone(demoBudget);
+    budget.manualItems = [{ id: "food", name: "Coffee break", description: "Actividad", category: "Alimentos y bebidas", year: 2027, amount: 350000, costType: "Único de esta versión", periodicity: "Único" }];
+    const flow = calculateBudget(budget, institutionalParameters).annualFlows.find((item) => item.year === 2027)!;
+    expect(flow.foodBeverages).toBe(350000);
+    expect(flow.totalExpenses).toBeGreaterThanOrEqual(350000);
   });
 
   it("repite un costo anual en todos los años activos desde su año de inicio", () => {
@@ -100,7 +134,7 @@ describe("motor financiero", () => {
   it("calcula overhead anual sobre arancel bruto menos descuentos menos incobrables", () => {
     const budget = clone(demoBudget);
     budget.annualOverrides = [{
-      year: 2027, directTeachingHourValue: 1, annualEnrollmentFee: 1, thesisGuidancePerGraduatingStudent: 0,
+      year: 2027, directTeachingHourValue: 1, annualEnrollmentFee: 1, annualTuition: 5000000, thesisGuidancePerGraduatingStudent: 0,
       annualDirection: 0, directionProrated: false, directionAllocationRate: 1, annualAssistance: 0, assistanceProrated: false,
       assistanceAllocationRate: 1, centralOverheadRate: 0.25, facultyOverheadRate: 0.05,
     }];
@@ -113,7 +147,7 @@ describe("motor financiero", () => {
   it("prorratea dirección y asistencia al 50 por ciento cuando se configura", () => {
     const budget = clone(demoBudget);
     budget.annualOverrides = [{
-      year: 2027, directTeachingHourValue: 1, annualEnrollmentFee: 1, thesisGuidancePerGraduatingStudent: 0,
+      year: 2027, directTeachingHourValue: 1, annualEnrollmentFee: 1, annualTuition: 5000000, thesisGuidancePerGraduatingStudent: 0,
       annualDirection: 4152675, directionProrated: true, directionAllocationRate: 0.5, annualAssistance: 2000000,
       assistanceProrated: true, assistanceAllocationRate: 0.5, centralOverheadRate: 0, facultyOverheadRate: 0,
     }];

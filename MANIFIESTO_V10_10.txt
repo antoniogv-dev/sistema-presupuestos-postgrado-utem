@@ -1,0 +1,6 @@
+Sistema de Presupuestos de Postgrado UTEM
+Release: v10.10
+Versión: 1.0.20-d1-web
+Actualización acumulativa sobre v10.8/v10.9.
+No sobrescribir wrangler.jsonc productivo en actualización incremental.
+Migraciones nuevas/cumulativas: 0005 y 0006.

@@ -1,3 +1,4 @@
+import { manualItemAmountForYear } from "../calculations/budget-engine";
 import type { BudgetResult, CohortBudget } from "../calculations/types";
 
 export type ReportRowTone = "income" | "expense" | "section" | "result" | "plain";
@@ -30,10 +31,8 @@ export function buildFinancialReport(budget: CohortBudget, result: BudgetResult)
     years: result.years,
     generatedAt: new Date().toISOString(),
     rows: [
-      { label: "Matrícula bruta", values: positive("grossEnrollmentFee"), tone: "income", valueKind: "currency" },
-      { label: "Descuentos matrícula", values: negative("enrollmentDiscounts"), tone: "income", valueKind: "currency" },
-      { label: "Matrícula neta", values: positive("netEnrollmentFee"), tone: "income", valueKind: "currency" },
-      { label: "Matrícula reconocida (informativa; no suma a ingresos total)", values: positive("recognizedEnrollmentFee"), tone: "income", valueKind: "currency" },
+      { label: "Matrícula anual (informativa, sin descuentos; no suma a ingresos total)", values: positive("grossEnrollmentFee"), tone: "income", valueKind: "currency" },
+      ...(budget.enrollmentRecognitionRate > 0 ? [{ label: "Matrícula reconocida (informativa; no suma a ingresos total)", values: positive("recognizedEnrollmentFee"), tone: "income" as const, valueKind: "currency" as const }] : []),
       { label: "Arancel bruto", values: positive("grossTuition"), tone: "income", valueKind: "currency" },
       { label: "Descuentos", values: negative("discounts"), tone: "income", valueKind: "currency" },
       { label: "Beca de excelencia académica (arancel)", values: negative("internalTuitionScholarships"), tone: "income", valueKind: "currency" },
@@ -45,6 +44,7 @@ export function buildFinancialReport(budget: CohortBudget, result: BudgetResult)
       { label: "Docentes convenio / honorario", values: negative("directTeachingCost"), tone: "expense", valueKind: "currency" },
       { label: "Docentes hora de reemplazo", values: negative("replacementTeachingCost"), tone: "expense", valueKind: "currency" },
       { label: "Pago docente tesista / guía de tesis", values: negative("thesisGuidanceCost"), tone: "expense", valueKind: "currency" },
+      { label: "Honorarios académicos adicionales", values: negative("manualAcademicHonoraria"), tone: "expense", valueKind: "currency" },
       { label: "COSTOS ACADÉMICOS", values: negative("academicHonoraria"), tone: "section", bold: true, valueKind: "currency" },
       { label: "Director programa", values: negative("direction"), tone: "expense", valueKind: "currency" },
       { label: "Asistente de Dirección", values: negative("assistance"), tone: "expense", valueKind: "currency" },
@@ -59,10 +59,19 @@ export function buildFinancialReport(budget: CohortBudget, result: BudgetResult)
       { label: "VIÁTICOS HONORARIOS NACIONALES", values: negative("perDiem"), tone: "section", bold: true, valueKind: "currency" },
       { label: "Licencias, APIs y servicios de nube", values: negative("software"), tone: "expense", valueKind: "currency" },
       { label: "ADQUISICIÓN DE PROGRAMAS, LICENCIAS Y NUBE", values: negative("software"), tone: "section", bold: true, valueKind: "currency" },
-      { label: "Giro para rendir / gastos menores", values: negative("operational"), tone: "expense", valueKind: "currency" },
-      { label: "OTROS SERVICIOS", values: f.map((flow) => -(flow.operational + flow.otherCosts)), tone: "section", bold: true, valueKind: "currency" },
+      { label: "Gastos operacionales / bienes y servicios", values: negative("operational"), tone: "expense", valueKind: "currency" },
+      { label: "Congresos y pasantías", values: negative("congressesInternships"), tone: "expense", valueKind: "currency" },
+      { label: "Alimentos y bebidas", values: negative("foodBeverages"), tone: "expense", valueKind: "currency" },
+      { label: "Otros costos y gastos", values: negative("otherCosts"), tone: "expense", valueKind: "currency" },
+      { label: "OTROS SERVICIOS", values: f.map((flow) => -(flow.operational + flow.foodBeverages + flow.otherCosts)), tone: "section", bold: true, valueKind: "currency" },
       { label: "Becas por pasantías y manutención", values: f.map((flow) => -(flow.maintenanceScholarships + flow.congressesInternships)), tone: "expense", valueKind: "currency" },
       { label: "AYUDAS INTERNAS", values: f.map((flow) => -(flow.maintenanceScholarships + flow.congressesInternships)), tone: "section", bold: true, valueKind: "currency" },
+      ...budget.manualItems.map((item) => ({
+        label: `Costo registrado: ${item.name} · ${item.category} (detalle; ya incluido en costos y gastos)`,
+        values: result.years.map((year) => -manualItemAmountForYear(item, budget, year)),
+        tone: "plain" as const,
+        valueKind: "currency" as const,
+      })),
       { label: "Base overhead", values: positive("overheadBase"), tone: "plain", valueKind: "currency" },
       { label: "Overhead Central", values: negative("centralOverhead"), tone: "expense", valueKind: "currency" },
       { label: "Overhead Facultad", values: negative("facultyOverhead"), tone: "expense", valueKind: "currency" },

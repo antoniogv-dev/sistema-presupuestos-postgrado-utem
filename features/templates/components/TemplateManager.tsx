@@ -17,6 +17,10 @@ import type {
 import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
 import type { ApiIdentity } from "@/lib/mappers/budget-api";
 
+const COST_CATEGORIES = [
+  "Honorarios académicos", "Honorarios no académicos", "Dirección", "Asistencia", "Gastos operacionales", "Software", "Difusión", "Congresos", "Pasantías", "Becas de manutención", "Bienes y servicios", "Libros y publicaciones", "Pasajes y fletes", "Viáticos", "Alimentos y bebidas", "Otros",
+] as const;
+
 const STORAGE_KEY = "utem-postgrado-budget-templates-v5";
 const KINDS: TemplateItemKind[] = [
   "DESCUENTO",
@@ -547,10 +551,12 @@ function TemplateConfig({
       <div className="template-item-config">
         <label>
           Categoría
-          <input disabled={disabled}
+          <select disabled={disabled}
             value={String(config.category ?? "Otros")}
             onChange={(event) => onChange("category", event.target.value)}
-          />
+          >
+            {COST_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+          </select>
         </label>
         <label>
           Monto

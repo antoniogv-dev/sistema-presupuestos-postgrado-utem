@@ -65,6 +65,7 @@ export const budgetAnnualOverrideSchema = z.object({
   year: z.number().int().min(2000).max(2100),
   directTeachingHourValue: z.number().min(0),
   annualEnrollmentFee: nonNegativeInteger,
+  annualTuition: z.number().int().positive(),
   thesisGuidancePerGraduatingStudent: nonNegativeInteger,
   annualDirection: nonNegativeInteger,
   directionProrated: z.boolean(),

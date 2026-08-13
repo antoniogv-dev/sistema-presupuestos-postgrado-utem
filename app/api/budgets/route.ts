@@ -9,6 +9,7 @@ const annualOverrideSchema = z.object({
   year: z.number().int().min(2000).max(2100),
   directTeachingHourValue: z.number().nonnegative(),
   annualEnrollmentFee: z.number().int().nonnegative(),
+  annualTuition: z.number().int().positive(),
   thesisGuidancePerGraduatingStudent: z.number().int().nonnegative(),
   annualDirection: z.number().int().nonnegative(),
   directionProrated: z.boolean().default(false),
@@ -59,14 +60,14 @@ function appendAnnualOverrides(
   for (const item of annualOverrides) {
     statements.push(database.prepare(`
       INSERT INTO "BudgetAnnualOverride" (
-        "id", "budgetId", "year", "directTeachingHourValue", "annualEnrollmentFee",
+        "id", "budgetId", "year", "directTeachingHourValue", "annualEnrollmentFee", "annualTuition",
         "thesisGuidancePerGraduatingStudent", "annualDirection", "directionProrated",
         "directionAllocationRate", "annualAssistance", "assistanceProrated",
         "assistanceAllocationRate", "centralOverheadRate", "facultyOverheadRate"
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       d1Id("annual-override"), budgetId, item.year, item.directTeachingHourValue,
-      item.annualEnrollmentFee, item.thesisGuidancePerGraduatingStudent, item.annualDirection,
+      item.annualEnrollmentFee, item.annualTuition, item.thesisGuidancePerGraduatingStudent, item.annualDirection,
       item.directionProrated ? 1 : 0, item.directionAllocationRate, item.annualAssistance,
       item.assistanceProrated ? 1 : 0, item.assistanceAllocationRate,
       item.centralOverheadRate, item.facultyOverheadRate,

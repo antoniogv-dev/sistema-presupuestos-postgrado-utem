@@ -199,6 +199,7 @@ function annualOverride(item: Record<string, unknown>): BudgetAnnualOverride {
     year: numberValue(item.year),
     directTeachingHourValue: numberValue(item.directTeachingHourValue),
     annualEnrollmentFee: numberValue(item.annualEnrollmentFee),
+    annualTuition: numberValue(item.annualTuition),
     thesisGuidancePerGraduatingStudent: numberValue(item.thesisGuidancePerGraduatingStudent),
     annualDirection: numberValue(item.annualDirection),
     directionProrated: Boolean(item.directionProrated),
