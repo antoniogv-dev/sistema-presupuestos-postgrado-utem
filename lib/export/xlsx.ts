@@ -170,6 +170,69 @@ function buildParameterSheet(report: ParameterReport): string {
 <autoFilter ref="A4:E${report.rows.length + 4}"/>
 <pageMargins left="0.25" right="0.25" top="0.35" bottom="0.35" header="0.2" footer="0.2"/>
 <pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0" paperSize="9"/>
+
+</worksheet>`;
+}
+
+/**
+ * Hoja inicial autocontenida: muestra primero el flujo y, a continuación,
+ * TODOS los parámetros utilizados en el cálculo. De esta forma la trazabilidad
+ * queda visible incluso en visores que abren sólo la primera pestaña del XLSX.
+ */
+function buildCompleteBudgetSheet(report: FinancialReport, parameterReport: ParameterReport): string {
+  const lastCol = columnName(Math.max(report.years.length + 1, 5));
+  const rows: string[] = [];
+  rows.push(`<row r="1" ht="26" customHeight="1"><c r="A1" s="1" t="inlineStr"><is><t>${xml(report.title)}</t></is></c></row>`);
+  rows.push(`<row r="2" ht="22" customHeight="1"><c r="A2" s="29" t="inlineStr"><is><t>${xml(report.subtitle)}</t></is></c></row>`);
+  rows.push(`<row r="3" ht="20" customHeight="1"><c r="A3" s="35" t="inlineStr"><is><t>FLUJO PRESUPUESTARIO</t></is></c></row>`);
+  rows.push(`<row r="4" ht="20" customHeight="1"><c r="A4" s="2" t="inlineStr"><is><t>DETALLE</t></is></c>${report.years.map((year, index) => `<c r="${columnName(index + 2)}4" s="2" t="n"><v>${year}</v></c>`).join("")}</row>`);
+
+  report.rows.forEach((row, rowIndex) => {
+    const excelRow = rowIndex + 5;
+    const labelStyle = styleForRow(row);
+    const valueStyle = numericStyle(row);
+    rows.push(`<row r="${excelRow}" ht="20" customHeight="1"><c r="A${excelRow}" s="${labelStyle}" t="inlineStr"><is><t>${xml(row.label)}</t></is></c>${row.values.map((value, index) => `<c r="${columnName(index + 2)}${excelRow}" s="${valueStyle}" t="n"><v>${Number.isFinite(value) ? value : 0}</v></c>`).join("")}</row>`);
+  });
+
+  const parameterTitleRow = report.rows.length + 7;
+  const parameterHeaderRow = parameterTitleRow + 2;
+  rows.push(`<row r="${parameterTitleRow}" ht="28" customHeight="1"><c r="A${parameterTitleRow}" s="1" t="inlineStr"><is><t>PARÁMETROS COMPLETOS UTILIZADOS EN EL CÁLCULO</t></is></c></row>`);
+  rows.push(`<row r="${parameterTitleRow + 1}" ht="22" customHeight="1"><c r="A${parameterTitleRow + 1}" s="29" t="inlineStr"><is><t>${xml(parameterReport.subtitle)}</t></is></c></row>`);
+  rows.push(`<row r="${parameterHeaderRow}" ht="22" customHeight="1"><c r="A${parameterHeaderRow}" s="2" t="inlineStr"><is><t>SECCIÓN</t></is></c><c r="B${parameterHeaderRow}" s="2" t="inlineStr"><is><t>PARÁMETRO</t></is></c><c r="C${parameterHeaderRow}" s="2" t="inlineStr"><is><t>PERIODO</t></is></c><c r="D${parameterHeaderRow}" s="2" t="inlineStr"><is><t>VALOR</t></is></c><c r="E${parameterHeaderRow}" s="2" t="inlineStr"><is><t>UNIDAD / DETALLE</t></is></c></row>`);
+
+  parameterReport.rows.forEach((row, index) => {
+    const excelRow = parameterHeaderRow + index + 1;
+    const sectionChanged = index === 0 || parameterReport.rows[index - 1]?.section !== row.section;
+    const textStyle = sectionChanged ? 34 : 30;
+    const estimatedLines = Math.max(
+      Math.ceil(row.section.length / 26),
+      Math.ceil(row.parameter.length / 38),
+      Math.ceil(row.period.length / 16),
+      Math.ceil(String(row.value).length / 22),
+      Math.ceil((row.detail ?? "").length / 48),
+      1,
+    );
+    const rowHeight = Math.min(72, Math.max(22, estimatedLines * 15));
+    rows.push(`<row r="${excelRow}" ht="${rowHeight}" customHeight="1">`+
+      `<c r="A${excelRow}" s="${textStyle}" t="inlineStr"><is><t>${xml(row.section)}</t></is></c>`+
+      `<c r="B${excelRow}" s="30" t="inlineStr"><is><t>${xml(row.parameter)}</t></is></c>`+
+      `<c r="C${excelRow}" s="30" t="inlineStr"><is><t>${xml(row.period)}</t></is></c>`+
+      parameterValueCell(row, `D${excelRow}`)+
+      `<c r="E${excelRow}" s="30" t="inlineStr"><is><t>${xml(row.detail ?? "")}</t></is></c>`+
+      `</row>`);
+  });
+
+  const finalRow = parameterHeaderRow + parameterReport.rows.length;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<dimension ref="A1:${lastCol}${finalRow}"/>
+<sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<cols><col min="1" max="1" width="39" customWidth="1"/><col min="2" max="2" width="38" customWidth="1"/><col min="3" max="3" width="18" customWidth="1"/><col min="4" max="4" width="21" customWidth="1"/><col min="5" max="5" width="48" customWidth="1"/>${report.years.length > 4 ? `<col min="6" max="${report.years.length + 1}" width="17" customWidth="1"/>` : ""}</cols>
+<sheetData>${rows.join("")}</sheetData>
+<mergeCells count="4"><mergeCell ref="A1:${lastCol}1"/><mergeCell ref="A2:${lastCol}2"/><mergeCell ref="A3:${lastCol}3"/><mergeCell ref="A${parameterTitleRow}:E${parameterTitleRow}"/></mergeCells>
+<autoFilter ref="A${parameterHeaderRow}:E${finalRow}"/>
+<pageMargins left="0.25" right="0.25" top="0.35" bottom="0.35" header="0.2" footer="0.2"/>
+<pageSetup orientation="portrait" fitToWidth="1" fitToHeight="0" paperSize="9"/>
 </worksheet>`;
 }
 
@@ -180,7 +243,7 @@ const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <fills count="6"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE2F0D9"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9E2F3"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE7E6E6"/><bgColor indexed="64"/></patternFill></fill></fills>
 <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top style="thin"><color rgb="FFB4C6E7"/></top><bottom style="thin"><color rgb="FFB4C6E7"/></bottom><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="35">
+<cellXfs count="36">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
@@ -198,6 +261,7 @@ const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="0" fontId="2" fillId="5" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -225,9 +289,14 @@ interface WorkbookSheetSpec {
  */
 export function createFinancialReportXlsx(report: FinancialReport, parameterReport?: ParameterReport): Uint8Array {
   const now = new Date().toISOString();
-  const sheets: WorkbookSheetSpec[] = [
-    { name: "Flujo presupuestario", xml: buildFinancialSheet(report, Boolean(parameterReport)) },
-  ];
+  const sheets: WorkbookSheetSpec[] = parameterReport
+    ? [
+        { name: "Presupuesto completo", xml: buildCompleteBudgetSheet(report, parameterReport) },
+        { name: "Flujo presupuestario", xml: buildFinancialSheet(report, true) },
+      ]
+    : [
+        { name: "Flujo presupuestario", xml: buildFinancialSheet(report, false) },
+      ];
 
   if (parameterReport) {
     sheets.push(
@@ -283,7 +352,7 @@ export function createFinancialReportXlsx(report: FinancialReport, parameterRepo
     { name: "_rels/.rels", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>` },
     { name: "docProps/core.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xml(report.title)}</dc:title><dc:creator>UTEM · Escuela de Postgrado</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created></cp:coreProperties>` },
     { name: "docProps/app.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Sistema de Presupuestos de Postgrado UTEM</Application></Properties>` },
-    { name: "xl/workbook.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${workbookSheets}</sheets></workbook>` },
+    { name: "xl/workbook.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView activeTab="0" firstSheet="0"/></bookViews><sheets>${workbookSheets}</sheets></workbook>` },
     { name: "xl/_rels/workbook.xml.rels", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${worksheetRelationships}<Relationship Id="${stylesRelId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
     { name: "xl/styles.xml", data: styles },
   ];

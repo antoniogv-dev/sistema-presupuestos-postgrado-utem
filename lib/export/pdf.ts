@@ -1,14 +1,14 @@
 import type { FinancialReport, FinancialReportRow, ParameterReport, ParameterReportRow } from "./report-model";
 
-const PAGE_WIDTH = 842;
-const PAGE_HEIGHT = 595;
+const PAGE_WIDTH = 595;
+const PAGE_HEIGHT = 842;
 const COVER_PAGE_WIDTH = 595;
 const COVER_PAGE_HEIGHT = 842;
 const MARGIN = 24;
-const TITLE_HEIGHT = 28;
+const TITLE_HEIGHT = 34;
 const SUBTITLE_HEIGHT = 18;
 const HEADER_HEIGHT = 18;
-const ROW_HEIGHT = 13;
+const ROW_HEIGHT = 14;
 const PARAMETER_BASE_ROW_HEIGHT = 15;
 
 type PdfColor = readonly [number, number, number];
@@ -128,7 +128,7 @@ function wrapText(text: string, width: number, size: number): string[] {
 
 function createFinancialPageContent(report: FinancialReport, rows: FinancialReportRow[], pageNumber: number, totalPages: number): string {
   const tableWidth = PAGE_WIDTH - MARGIN * 2;
-  const labelWidth = Math.min(370, tableWidth * 0.55);
+  const labelWidth = Math.min(255, tableWidth * 0.48);
   const valueWidth = (tableWidth - labelWidth) / report.years.length;
   let y = PAGE_HEIGHT - MARGIN - TITLE_HEIGHT;
   let content = "";
@@ -161,10 +161,10 @@ function createFinancialPageContent(report: FinancialReport, rows: FinancialRepo
   return content;
 }
 
-const PARAMETER_WIDTHS = [120, 250, 78, 115, PAGE_WIDTH - MARGIN * 2 - 120 - 250 - 78 - 115];
+const PARAMETER_WIDTHS = [82, 175, 60, 90, PAGE_WIDTH - MARGIN * 2 - 82 - 175 - 60 - 90];
 
 function parameterRowLayout(row: ParameterReportRow) {
-  const fontSize = 6.5;
+  const fontSize = 6.2;
   const columns = [row.section, row.parameter, row.period, displayParameterValue(row), row.detail ?? ""];
   const lines = columns.map((text, index) => wrapText(text, PARAMETER_WIDTHS[index] - 8, fontSize));
   const lineCount = Math.max(...lines.map((item) => item.length));
@@ -233,7 +233,7 @@ function createParameterPageContent(report: ParameterReport, rows: ParameterRepo
 }
 
 function createCoverPageContent(cover: PdfCover): string {
-  const scale = Math.max(COVER_PAGE_WIDTH / cover.imageWidth, COVER_PAGE_HEIGHT / cover.imageHeight);
+  const scale = Math.min(COVER_PAGE_WIDTH / cover.imageWidth, COVER_PAGE_HEIGHT / cover.imageHeight);
   const drawWidth = cover.imageWidth * scale;
   const drawHeight = cover.imageHeight * scale;
   const imageX = (COVER_PAGE_WIDTH - drawWidth) / 2;
@@ -252,7 +252,8 @@ function createCoverPageContent(cover: PdfCover): string {
   const subtitleHeight = subtitleLines.length * 20;
   const blockHeight = titleHeight + 28 + subtitleHeight;
   let y = COVER_PAGE_HEIGHT * 0.56 + blockHeight / 2;
-  let content = `q ${drawWidth.toFixed(2)} 0 0 ${drawHeight.toFixed(2)} ${imageX.toFixed(2)} ${imageY.toFixed(2)} cm /Im1 Do Q\n`;
+  let content = rect(0, 0, COVER_PAGE_WIDTH, COVER_PAGE_HEIGHT, [0.015, 0.20, 0.50], [0.015, 0.20, 0.50]);
+  content += `q ${drawWidth.toFixed(2)} 0 0 ${drawHeight.toFixed(2)} ${imageX.toFixed(2)} ${imageY.toFixed(2)} cm /Im1 Do Q\n`;
 
   content += "1 1 1 rg\n";
   for (const line of titleLines) {
@@ -308,17 +309,42 @@ function buildPdf(objects: Array<string | Uint8Array>): Uint8Array {
 }
 
 export function createFinancialReportPdf(report: FinancialReport, parameterReport?: ParameterReport, cover?: PdfCover): Uint8Array {
+  // PDF completamente vertical. Para mantener legibilidad, cuando existen
+  // muchos años el flujo se divide en grupos de hasta 3 años, pero conserva
+  // todas las filas y todos los valores del presupuesto.
   const maxRows = Math.max(1, Math.floor((PAGE_HEIGHT - MARGIN * 2 - TITLE_HEIGHT - SUBTITLE_HEIGHT - HEADER_HEIGHT) / ROW_HEIGHT));
-  const financialPages: FinancialReportRow[][] = [];
-  for (let index = 0; index < report.rows.length; index += maxRows) financialPages.push(report.rows.slice(index, index + maxRows));
+  const rowPages: FinancialReportRow[][] = [];
+  for (let index = 0; index < report.rows.length; index += maxRows) rowPages.push(report.rows.slice(index, index + maxRows));
+
+  const yearChunkSize = 3;
+  const financialPageSpecs: Array<{ report: FinancialReport; rows: FinancialReportRow[] }> = [];
+  for (let yearStart = 0; yearStart < report.years.length; yearStart += yearChunkSize) {
+    const yearEnd = Math.min(report.years.length, yearStart + yearChunkSize);
+    const subReport: FinancialReport = {
+      ...report,
+      years: report.years.slice(yearStart, yearEnd),
+      subtitle: `${report.subtitle} · Años ${report.years.slice(yearStart, yearEnd).join(", ")}`,
+    };
+    for (const pageRows of rowPages) {
+      financialPageSpecs.push({
+        report: subReport,
+        rows: pageRows.map((row) => ({ ...row, values: row.values.slice(yearStart, yearEnd) })),
+      });
+    }
+  }
+
   const parameterPages = parameterReport ? paginateParameterRows(parameterReport.rows) : [];
   const hasCover = Boolean(cover?.jpegBytes.length);
-  const totalPages = financialPages.length + parameterPages.length + (hasCover ? 1 : 0);
+  const totalPages = financialPageSpecs.length + parameterPages.length + (hasCover ? 1 : 0);
 
   const regularPageContents: string[] = [];
   const pageOffset = hasCover ? 1 : 0;
-  financialPages.forEach((rows, index) => regularPageContents.push(createFinancialPageContent(report, rows, pageOffset + index + 1, totalPages)));
-  parameterPages.forEach((rows, index) => regularPageContents.push(createParameterPageContent(parameterReport!, rows, pageOffset + financialPages.length + index + 1, totalPages)));
+  financialPageSpecs.forEach((spec, index) => {
+    regularPageContents.push(createFinancialPageContent(spec.report, spec.rows, pageOffset + index + 1, totalPages));
+  });
+  parameterPages.forEach((rows, index) => {
+    regularPageContents.push(createParameterPageContent(parameterReport!, rows, pageOffset + financialPageSpecs.length + index + 1, totalPages));
+  });
 
   const regularStartId = hasCover ? 8 : 5;
   const regularPageIds = regularPageContents.map((_, index) => regularStartId + index * 2);
@@ -339,6 +365,7 @@ export function createFinancialReportPdf(report: FinancialReport, parameterRepor
   regularPageContents.forEach((pageContent, index) => {
     const pageId = regularStartId + index * 2;
     const contentId = pageId + 1;
+    // Todas las páginas internas usan A4 vertical, igual que la portada.
     objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentId} 0 R >>`);
     objects.push(streamObject(pageContent));
   });
