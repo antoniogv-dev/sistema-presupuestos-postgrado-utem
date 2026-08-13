@@ -97,7 +97,7 @@ export interface BudgetItem {
   id: string;
   name: string;
   description: string;
-  category: "Honorarios académicos" | "Honorarios no académicos" | "Otros honorarios no académicos" | "Dirección" | "Asistencia" | "Asistencia de dirección" | "Gastos operacionales" | "Bienes y servicios" | "Gastos operacionales / Bienes y servicios" | "Software" | "Software y licencias" | "Difusión" | "Congresos" | "Pasantías" | "Congresos y pasantías" | "Becas de manutención" | "Libros y publicaciones" | "Pasajes y fletes" | "Viáticos" | "Alimentos y bebidas" | "Otros" | "Otros costos y gastos";
+  category: "Honorarios académicos" | "Honorarios no académicos" | "Otros honorarios no académicos" | "Dirección" | "Asistencia" | "Asistencia de dirección" | "Gastos operacionales" | "Bienes y servicios" | "Gastos operacionales / Bienes y servicios" | "Software" | "Software y licencias" | "Difusión" | "Congresos" | "Pasantías" | "Congresos y pasantías" | "Becas de manutención" | "Becas y ayudas" | "Equipamiento" | "Libros y publicaciones" | "Pasajes y fletes" | "Viáticos" | "Alimentos y bebidas" | "Otros" | "Otros costos y gastos";
   year: number;
   semester?: SemesterNumber;
   amount: number;
@@ -273,6 +273,9 @@ export interface AnnualFlow {
   software: number;
   diffusion: number;
   maintenanceScholarships: number;
+  scholarshipsAndAid: number;
+  equipment: number;
+  otherExpenses: number;
   congressesInternships: number;
   booksPublications: number;
   travelFreight: number;

@@ -6,7 +6,7 @@ export interface ConsolidationGroup { id: string; label: string; kind: "PROGRAM"
 
 export const SHARED_CATEGORIES: BudgetItem["category"][] = [
   "Dirección", "Asistencia de dirección", "Otros honorarios no académicos",
-  "Gastos operacionales / Bienes y servicios", "Software y licencias",
+  "Gastos operacionales / Bienes y servicios", "Software y licencias", "Equipamiento",
 ];
 const normalizedName = (value: string) => value.trim().toLocaleLowerCase("es-CL").replace(/\s+/g, " ");
 const sum = (values: number[]) => values.reduce((acc, value) => acc + value, 0);

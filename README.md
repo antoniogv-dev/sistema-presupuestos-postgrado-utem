@@ -1,6 +1,21 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10.14 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.16 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
+
+## Mejoras funcionales v10.16
+
+- **Subtotales financieros:** el flujo separa Honorarios académicos, Honorarios no académicos y Otros gastos.
+- **Subtotales condicionales:** Equipamientos y Becas y ayudas sólo aparecen cuando existe un monto asociado.
+- **Clasificación de costos:** se incorporan las categorías `Equipamiento` y `Becas y ayudas` para costos manuales y plantillas.
+- **Exportaciones alineadas:** XLSX y PDF utilizan exactamente la misma estructura de subtotales que el flujo en pantalla.
+
+- **XLSX visible desde la primera hoja:** la pestaña inicial `Presupuesto completo` contiene el flujo y, a continuación, la tabla `PARÁMETROS COMPLETOS UTILIZADOS EN EL CÁLCULO`. Ya no depende de que el usuario cambie de pestaña para ver los parámetros.
+- **Trazabilidad XLSX redundante y verificable:** se conservan además las pestañas `Flujo presupuestario`, `Parámetros completos`, `Parámetros anuales`, `Parámetros semestrales`, `Descuentos` y `Costos e ingresos`.
+- **PDF completamente vertical:** portada, flujo y anexo de parámetros se generan en A4 vertical (595 x 842 pt).
+- **Flujo PDF legible:** si un presupuesto abarca más de tres años, el flujo se divide por bloques de hasta tres años sin perder filas ni valores.
+- **Portada completa sin recorte:** la imagen institucional se ajusta dentro de la página vertical conservando la composición original.
+- **Control de despliegue:** versión `v10.16 · 1.0.26-d1-web`; `source:audit` exige la primera hoja completa y el PDF vertical.
+- **Sin migración D1 nueva:** esta versión modifica exclusivamente presentación/exportación y control de release.
 
 ## Mejoras funcionales v10.14
 

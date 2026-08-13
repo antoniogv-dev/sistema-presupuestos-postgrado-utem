@@ -28,7 +28,7 @@ import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
 import { availableWorkflowActions, canDeleteBudget, canEditBudget, type WorkflowAction } from "@/lib/workflow/budget-workflow";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.14";
+const FUNCTIONAL_RELEASE = "v10.16";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -38,6 +38,8 @@ const COST_CATEGORIES: BudgetItem["category"][] = [
   "Difusión",
   "Congresos y pasantías",
   "Becas de manutención",
+  "Becas y ayudas",
+  "Equipamiento",
   "Libros y publicaciones",
   "Pasajes y fletes",
   "Viáticos",
@@ -56,6 +58,8 @@ const FLOW_COST_GROUPS = {
   perDiem: ["Viáticos"] as BudgetItem["category"][],
   foodBeverages: ["Alimentos y bebidas"] as BudgetItem["category"][],
   otherCosts: ["Otros", "Otros costos y gastos", "Honorarios académicos"] as BudgetItem["category"][],
+  scholarshipsAid: ["Becas de manutención", "Becas y ayudas"] as BudgetItem["category"][],
+  equipment: ["Equipamiento"] as BudgetItem["category"][],
 } as const;
 
 type EditableAnnualCostKey =
@@ -551,6 +555,7 @@ export function BudgetWorkspace() {
             <FlowRow label="Horas docentes directas" values={result.annualFlows.map((flow) => -flow.directTeachingCost)} />
             <FlowRow label="Horas docentes de reemplazo" values={result.annualFlows.map((flow) => -flow.replacementTeachingCost)} />
             <FlowRow label="Guía de tesis" values={result.annualFlows.map((flow) => -flow.thesisGuidanceCost)} />
+            <FlowRow label="HONORARIOS ACADÉMICOS (SUBTOTAL)" values={result.annualFlows.map((flow) => -flow.academicHonoraria)} total />
 
             <FlowRow label="Dirección" values={result.annualFlows.map((flow) => -flow.direction)} />
             <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={["Dirección"]} />
@@ -559,11 +564,6 @@ export function BudgetWorkspace() {
             <FlowRow label="Otros honorarios no académicos" values={result.annualFlows.map((flow) => -flow.otherNonAcademicHonoraria)} />
             <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.otherNonAcademic} />
             <FlowRow label="HONORARIOS NO ACADÉMICOS (SUBTOTAL)" values={result.annualFlows.map((flow) => -flow.nonAcademicHonoraria)} total />
-
-            {budget.scholarshipsEnabled || result.annualFlows.some((flow) => flow.maintenanceScholarships > 0) ? <>
-              <FlowRow label="Becas de manutención" values={result.annualFlows.map((flow) => -flow.maintenanceScholarships)} />
-              <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={["Becas de manutención"]} />
-            </> : null}
 
             <EditableCostFlowRow
               label="Gastos operacionales / Bienes y servicios"
@@ -645,6 +645,20 @@ export function BudgetWorkspace() {
               onChange={(year, value) => updateEditableFlowCost(year, "annualOtherCosts", FLOW_COST_GROUPS.otherCosts, value)}
             />
             <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.otherCosts} />
+            <FlowRow label="OTROS GASTOS (SUBTOTAL)" values={result.annualFlows.map((flow) => -flow.otherExpenses)} total />
+
+            {result.annualFlows.some((flow) => flow.equipment > 0) ? <>
+              <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.equipment} />
+              <FlowRow label="EQUIPAMIENTOS (SUBTOTAL)" values={result.annualFlows.map((flow) => -flow.equipment)} total />
+            </> : null}
+
+            {result.annualFlows.some((flow) => flow.scholarshipsAndAid > 0) ? <>
+              {result.annualFlows.some((flow) => flow.maintenanceScholarships > 0)
+                ? <FlowRow label="Becas de manutención" values={result.annualFlows.map((flow) => -flow.maintenanceScholarships)} />
+                : null}
+              <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.scholarshipsAid} />
+              <FlowRow label="BECAS Y AYUDAS (SUBTOTAL)" values={result.annualFlows.map((flow) => -flow.scholarshipsAndAid)} total />
+            </> : null}
 
             <FlowRow label="Base overhead" values={result.annualFlows.map((flow) => flow.overheadBase)} />
             <FlowRow label="Overhead central" values={result.annualFlows.map((flow) => -flow.centralOverhead)} />

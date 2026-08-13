@@ -14,7 +14,7 @@ const nonNegative = (value: unknown): number => Math.max(0, Number.isFinite(Numb
 const uid = (prefix: string, key: string): string => `${prefix}-${key}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 function canonicalCostCategory(category: CostTemplateConfig["category"]): CostTemplateConfig["category"] {
-  const aliases: Partial<Record<CostTemplateConfig["category"], CostTemplateConfig["category"]>> = {
+  const aliases: Partial<Record<string, CostTemplateConfig["category"]>> = {
     "Honorarios académicos": "Otros costos y gastos",
     "Honorarios no académicos": "Otros honorarios no académicos",
     "Asistencia": "Asistencia de dirección",
@@ -24,6 +24,9 @@ function canonicalCostCategory(category: CostTemplateConfig["category"]): CostTe
     "Congresos": "Congresos y pasantías",
     "Pasantías": "Congresos y pasantías",
     "Otros": "Otros costos y gastos",
+    "Equipamientos": "Equipamiento",
+    "Equipamiento y bienes de capital": "Equipamiento",
+    "Ayudas": "Becas y ayudas",
   };
   return aliases[category] ?? category;
 }

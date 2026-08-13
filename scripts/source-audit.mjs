@@ -253,7 +253,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.14"',
+  'FUNCTIONAL_RELEASE = "v10.16"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -273,8 +273,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.14") || !appShellV110.includes("1.0.24-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.14 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.16") || !appShellV110.includes("1.0.26-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.16 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -329,7 +329,7 @@ for (const marker of [
 }
 const xlsxV112 = await readFile(path.join(root, "lib/export/xlsx.ts"), "utf8");
 for (const marker of ["Parámetros completos", "Parámetros anuales", "Parámetros semestrales", "Descuentos", "Costos e ingresos", "buildParameterSheet"]) {
-  if (!xlsxV112.includes(marker)) fail(`xlsx.ts: falta trazabilidad multipestaña v10.14 ${marker}.`);
+  if (!xlsxV112.includes(marker)) fail(`xlsx.ts: falta trazabilidad multipestaña v10.15 ${marker}.`);
 }
 const pdfV112 = await readFile(path.join(root, "lib/export/pdf.ts"), "utf8");
 for (const marker of ["createParameterPageContent", "paginateParameterRows", "UNIDAD / DETALLE"]) {
@@ -340,41 +340,95 @@ if (!downloadV112.includes("buildParameterReport") || !downloadV112.includes("In
   fail("download.ts: las exportaciones individuales deben recibir los parámetros institucionales y construir su anexo v10.12.");
 }
 
-// v10.14: portada institucional, PDF compacto, XLSX completo y eliminación verificable desde el flujo.
+// v10.15: portada institucional, PDF compacto, XLSX completo y eliminación verificable desde el flujo.
 for (const marker of [
   "compactParameterReportForPdf",
   "Parámetros completos",
   "Duración oficial del programa",
   "Dirección aplicada al presupuesto",
 ]) {
-  if (!reportModelV111.includes(marker)) fail(`report-model.ts: falta mejora v10.14 ${marker}.`);
+  if (!reportModelV111.includes(marker)) fail(`report-model.ts: falta mejora v10.15 ${marker}.`);
 }
 for (const marker of ["PdfCover", "createCoverPageContent", "/Im1 Do", "DCTDecode"]) {
-  if (!pdfV112.includes(marker)) fail(`pdf.ts: falta portada institucional v10.14 ${marker}.`);
+  if (!pdfV112.includes(marker)) fail(`pdf.ts: falta portada institucional v10.15 ${marker}.`);
 }
 for (const marker of ["/Portada2026.jpg", "compactParameterReportForPdf", "Cohorte ${budget.startYear}-${budget.startSemester}S"]) {
-  if (!downloadV112.includes(marker)) fail(`download.ts: falta integración de portada/PDF v10.14 ${marker}.`);
+  if (!downloadV112.includes(marker)) fail(`download.ts: falta integración de portada/PDF v10.15 ${marker}.`);
 }
 for (const marker of ["flow-action-header", "onRemove={removeManualCost}", ">Quitar</button>"]) {
-  if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta eliminación desde flujo v10.14 ${marker}.`);
+  if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta eliminación desde flujo v10.15 ${marker}.`);
 }
 for (const marker of ["Agregar costo al flujo", "flow-remove-button", "window.confirm", "Costo: {item.name}"]) {
-  if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta evidencia funcional v10.14 ${marker}.`);
+  if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta evidencia funcional v10.15 ${marker}.`);
 }
 if (budgetWorkspaceV108.includes("Incluido: {item.name}")) {
-  fail("BudgetWorkspace.tsx: v10.14 debe mostrar el costo como fila propia del flujo, no con el rótulo heredado Incluido.");
+  fail("BudgetWorkspace.tsx: v10.15 debe mostrar el costo como fila propia del flujo, no con el rótulo heredado Incluido.");
 }
 for (const marker of ["Parámetros anuales", "Parámetros semestrales", "Costos e ingresos"]) {
-  if (!xlsxV112.includes(marker)) fail(`xlsx.ts: falta hoja específica v10.14 ${marker}.`);
+  if (!xlsxV112.includes(marker)) fail(`xlsx.ts: falta hoja específica v10.15 ${marker}.`);
 }
 if (!downloadV112.includes("Versión ${budget.programVersionLabel}\\nCohorte ${budget.startYear}-${budget.startSemester}S")) {
-  fail("download.ts: la portada v10.14 debe separar versión y cohorte en dos líneas.");
+  fail("download.ts: la portada v10.15 debe separar versión y cohorte en dos líneas.");
 }
+// v10.15: exportación inequívoca. Los parámetros completos deben estar también
+// en la primera hoja del XLSX y todas las páginas del PDF deben ser A4 verticales.
+for (const marker of [
+  'Presupuesto completo',
+  'PARÁMETROS COMPLETOS UTILIZADOS EN EL CÁLCULO',
+  'buildCompleteBudgetSheet',
+  'workbookView activeTab="0"',
+]) {
+  if (!xlsxV112.includes(marker)) fail(`xlsx.ts: falta trazabilidad visible en primera hoja v10.15 ${marker}.`);
+}
+for (const marker of [
+  'const PAGE_WIDTH = 595',
+  'const PAGE_HEIGHT = 842',
+  'const yearChunkSize = 3',
+  'PDF completamente vertical',
+  'Math.min(COVER_PAGE_WIDTH / cover.imageWidth',
+]) {
+  if (!pdfV112.includes(marker)) fail(`pdf.ts: falta PDF vertical completo v10.15 ${marker}.`);
+}
+
 const coverPathV113 = path.join(root, "public/Portada2026.jpg");
 try {
   await readFile(coverPathV113);
 } catch {
-  fail("public/Portada2026.jpg: falta la portada institucional usada por la exportación PDF v10.14.");
+  fail("public/Portada2026.jpg: falta la portada institucional usada por la exportación PDF v10.15.");
+}
+
+// v10.16: estructura de subtotales del flujo de caja.
+for (const marker of [
+  'HONORARIOS ACADÉMICOS (SUBTOTAL)',
+  'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
+  'OTROS GASTOS (SUBTOTAL)',
+  'EQUIPAMIENTOS (SUBTOTAL)',
+  'BECAS Y AYUDAS (SUBTOTAL)',
+  'FLOW_COST_GROUPS.equipment',
+  'FLOW_COST_GROUPS.scholarshipsAid',
+]) {
+  if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta subtotal v10.16 ${marker}.`);
+}
+for (const marker of [
+  'const otherExpenses =',
+  'const equipment = sumManualItems',
+  'const scholarshipsAndAid =',
+  'academicHonoraria + nonAcademicHonoraria + otherExpenses',
+]) {
+  if (!engineV108.includes(marker)) fail(`budget-engine.ts: falta cálculo de subtotales v10.16 ${marker}.`);
+}
+for (const marker of [
+  'HONORARIOS ACADÉMICOS (SUBTOTAL)',
+  'OTROS GASTOS (SUBTOTAL)',
+  'EQUIPAMIENTOS (SUBTOTAL)',
+  'BECAS Y AYUDAS (SUBTOTAL)',
+  'flow.equipment > 0',
+  'flow.scholarshipsAndAid > 0',
+]) {
+  if (!reportModelV111.includes(marker)) fail(`report-model.ts: falta estructura de subtotales v10.16 ${marker}.`);
+}
+if (!budgetWorkspaceV108.includes('"Equipamiento"') || !budgetWorkspaceV108.includes('"Becas y ayudas"')) {
+  fail("BudgetWorkspace.tsx: v10.16 debe permitir clasificar costos como Equipamiento o Becas y ayudas.");
 }
 
 const prismaFactory = await readFile(path.join(root, "lib/database/prisma.ts"), "utf8");

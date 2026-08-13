@@ -272,6 +272,9 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
       * nonNegative(semester.maintenanceScholarshipMonths)
       * parameterForYear(parameters.maintenanceScholarshipMonthly, semester.year),
     )) : 0) + sumManualItems(budget, year, ["Becas de manutención"]);
+    const otherScholarshipsAndAid = sumManualItems(budget, year, ["Becas y ayudas"]);
+    const scholarshipsAndAid = maintenanceScholarships + otherScholarshipsAndAid;
+    const equipment = sumManualItems(budget, year, ["Equipamiento"]);
     const congressesInternships = nonNegative(override.annualCongressesInternships)
       + sumManualItems(budget, year, ["Congresos", "Pasantías", "Congresos y pasantías"]);
     const booksPublications = nonNegative(override.annualBooksPublications)
@@ -284,6 +287,10 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
       + sumManualItems(budget, year, ["Alimentos y bebidas"]);
     const otherCosts = nonNegative(override.annualOtherCosts)
       + sumManualItems(budget, year, ["Otros", "Otros costos y gastos", "Honorarios académicos"]);
+    // Subtotal de otros gastos: costos administrativos/operacionales distintos de
+    // honorarios, equipamiento, becas/ayudas y overhead.
+    const otherExpenses = operational + software + diffusion + congressesInternships
+      + booksPublications + travelFreight + perDiem + foodBeverages + otherCosts;
 
     // Base solicitada: arancel bruto - descuentos de arancel - incobrables.
     const overheadBase = Math.max(0, grossTuition - discounts - badDebt);
@@ -291,8 +298,8 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
     const facultyOverheadRate = overheadApplies(budget.program.type) ? clampRate(override.facultyOverheadRate) : 0;
     const centralOverhead = overheadBase * centralOverheadRate;
     const facultyOverhead = overheadBase * facultyOverheadRate;
-    const totalExpenses = academicHonoraria + nonAcademicHonoraria + operational + software + diffusion
-      + maintenanceScholarships + congressesInternships + booksPublications + travelFreight + perDiem + foodBeverages + otherCosts + centralOverhead + facultyOverhead;
+    const totalExpenses = academicHonoraria + nonAcademicHonoraria + otherExpenses
+      + equipment + scholarshipsAndAid + centralOverhead + facultyOverhead;
     const netFlow = totalIncome - totalExpenses;
     const startingCarryover = yearIndex === 0 ? (budget.includeAuthorizedCarryover ? budget.authorizedInitialCarryover : 0) : previousAccumulated;
     const accumulatedFlow = startingCarryover + netFlow;
@@ -331,6 +338,9 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
       software,
       diffusion,
       maintenanceScholarships,
+      scholarshipsAndAid,
+      equipment,
+      otherExpenses,
       congressesInternships,
       booksPublications,
       travelFreight,

@@ -61,15 +61,13 @@ export function buildFinancialReport(budget: CohortBudget, result: BudgetResult)
       { label: "Horas docentes directas", values: negative("directTeachingCost"), tone: "expense", valueKind: "currency" },
       { label: "Horas docentes de reemplazo", values: negative("replacementTeachingCost"), tone: "expense", valueKind: "currency" },
       { label: "Guía de tesis", values: negative("thesisGuidanceCost"), tone: "expense", valueKind: "currency" },
+      { label: "HONORARIOS ACADÉMICOS (SUBTOTAL)", values: negative("academicHonoraria"), tone: "section", bold: true, valueKind: "currency" },
 
       { label: "Dirección", values: negative("direction"), tone: "expense", valueKind: "currency" },
       { label: "Asistencia de dirección", values: negative("assistance"), tone: "expense", valueKind: "currency" },
       { label: "Otros honorarios no académicos", values: negative("otherNonAcademicHonoraria"), tone: "expense", valueKind: "currency" },
       { label: "HONORARIOS NO ACADÉMICOS (SUBTOTAL)", values: negative("nonAcademicHonoraria"), tone: "section", bold: true, valueKind: "currency" },
 
-      ...(budget.scholarshipsEnabled || f.some((flow) => flow.maintenanceScholarships > 0)
-        ? [{ label: "Becas de manutención", values: negative("maintenanceScholarships"), tone: "expense" as const, valueKind: "currency" as const }]
-        : []),
       { label: "Gastos operacionales / Bienes y servicios", values: negative("operational"), tone: "expense", valueKind: "currency" },
       { label: "Software y licencias", values: negative("software"), tone: "expense", valueKind: "currency" },
       { label: "Difusión", values: negative("diffusion"), tone: "expense", valueKind: "currency" },
@@ -79,6 +77,19 @@ export function buildFinancialReport(budget: CohortBudget, result: BudgetResult)
       { label: "Viáticos", values: negative("perDiem"), tone: "expense", valueKind: "currency" },
       { label: "Alimentos y bebidas", values: negative("foodBeverages"), tone: "expense", valueKind: "currency" },
       { label: "Otros costos y gastos", values: negative("otherCosts"), tone: "expense", valueKind: "currency" },
+      { label: "OTROS GASTOS (SUBTOTAL)", values: negative("otherExpenses"), tone: "section", bold: true, valueKind: "currency" },
+
+      ...(f.some((flow) => flow.equipment > 0)
+        ? [{ label: "EQUIPAMIENTOS (SUBTOTAL)", values: negative("equipment"), tone: "section" as const, bold: true, valueKind: "currency" as const }]
+        : []),
+      ...(f.some((flow) => flow.scholarshipsAndAid > 0)
+        ? [
+            ...(f.some((flow) => flow.maintenanceScholarships > 0)
+              ? [{ label: "Becas de manutención", values: negative("maintenanceScholarships"), tone: "expense" as const, valueKind: "currency" as const }]
+              : []),
+            { label: "BECAS Y AYUDAS (SUBTOTAL)", values: negative("scholarshipsAndAid"), tone: "section" as const, bold: true, valueKind: "currency" as const },
+          ]
+        : []),
 
       { label: "Base overhead", values: positive("overheadBase"), tone: "plain", valueKind: "currency" },
       { label: "Overhead central", values: negative("centralOverhead"), tone: "expense", valueKind: "currency" },

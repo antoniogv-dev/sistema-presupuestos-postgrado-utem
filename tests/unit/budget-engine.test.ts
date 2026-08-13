@@ -133,6 +133,35 @@ describe("motor financiero", () => {
     expect(flows.every((flow) => flow.nonAcademicHonoraria === flow.direction + flow.assistance + flow.otherNonAcademicHonoraria)).toBe(true);
   });
 
+  it("calcula subtotales de honorarios académicos, no académicos y otros gastos", () => {
+    const budget = clone(demoBudget);
+    const flow = calculateBudget(budget, institutionalParameters).annualFlows[0];
+    expect(flow.academicHonoraria).toBe(flow.directTeachingCost + flow.replacementTeachingCost + flow.thesisGuidanceCost);
+    expect(flow.nonAcademicHonoraria).toBe(flow.direction + flow.assistance + flow.otherNonAcademicHonoraria);
+    expect(flow.otherExpenses).toBe(
+      flow.operational + flow.software + flow.diffusion + flow.congressesInternships
+      + flow.booksPublications + flow.travelFreight + flow.perDiem + flow.foodBeverages + flow.otherCosts,
+    );
+  });
+
+  it("separa equipamiento y becas/ayudas de otros gastos y los suma al total sólo cuando existen", () => {
+    const budget = clone(demoBudget);
+    budget.scholarshipsEnabled = false;
+    budget.manualItems = [
+      { id: "eq", name: "Pantalla interactiva", description: "Bien de capital", category: "Equipamiento", year: 2027, amount: 2000000, costType: "Único de esta versión", periodicity: "Único" },
+      { id: "aid", name: "Ayuda de movilidad", description: "Apoyo a estudiante", category: "Becas y ayudas", year: 2027, amount: 300000, costType: "Único de esta versión", periodicity: "Único" },
+    ];
+    const flow = calculateBudget(budget, institutionalParameters).annualFlows[0];
+    expect(flow.equipment).toBe(2000000);
+    expect(flow.scholarshipsAndAid).toBe(300000);
+    expect(flow.otherExpenses).not.toBeGreaterThanOrEqual(flow.otherExpenses + flow.equipment);
+    expect(flow.totalExpenses).toBeCloseTo(
+      flow.academicHonoraria + flow.nonAcademicHonoraria + flow.otherExpenses + flow.equipment
+      + flow.scholarshipsAndAid + flow.centralOverhead + flow.facultyOverhead,
+      2,
+    );
+  });
+
   it("calcula overhead anual sobre arancel bruto menos descuentos menos incobrables", () => {
     const budget = clone(demoBudget);
     budget.annualOverrides = [{

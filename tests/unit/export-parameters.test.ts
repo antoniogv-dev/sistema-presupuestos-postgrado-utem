@@ -37,14 +37,36 @@ describe("exportación trazable de parámetros", () => {
     const bytes = createFinancialReportXlsx(financial, parameters);
     const text = new TextDecoder().decode(bytes);
 
-    for (const sheetName of ["Parámetros completos", "Parámetros anuales", "Parámetros semestrales", "Descuentos", "Costos e ingresos"]) {
+    for (const sheetName of ["Presupuesto completo", "Flujo presupuestario", "Parámetros completos", "Parámetros anuales", "Parámetros semestrales", "Descuentos", "Costos e ingresos"]) {
       expect(text).toContain(sheetName);
     }
-    expect(text).toContain("xl/worksheets/sheet6.xml");
+    expect(text).toContain("xl/worksheets/sheet7.xml");
+    expect(text).toContain("PARÁMETROS COMPLETOS UTILIZADOS EN EL CÁLCULO");
     expect(text).toContain("Duración oficial del programa");
     expect(text).toContain("Dirección aplicada al presupuesto");
     expect(text).toContain("Estudiantes activos");
     expect(text).toContain("Costos y gastos registrados");
+  });
+
+  it("muestra subtotales obligatorios y subtotales condicionales sólo cuando existen", () => {
+    const emptyBudget = clone(demoBudget);
+    emptyBudget.scholarshipsEnabled = false;
+    emptyBudget.manualItems = emptyBudget.manualItems.filter((item) => !["Equipamiento", "Becas y ayudas", "Becas de manutención"].includes(item.category));
+    const emptyReport = buildFinancialReport(emptyBudget, calculateBudget(emptyBudget, institutionalParameters));
+    for (const label of ["HONORARIOS ACADÉMICOS (SUBTOTAL)", "HONORARIOS NO ACADÉMICOS (SUBTOTAL)", "OTROS GASTOS (SUBTOTAL)"]) {
+      expect(emptyReport.rows.some((row) => row.label === label)).toBe(true);
+    }
+    expect(emptyReport.rows.some((row) => row.label === "EQUIPAMIENTOS (SUBTOTAL)")).toBe(false);
+    expect(emptyReport.rows.some((row) => row.label === "BECAS Y AYUDAS (SUBTOTAL)")).toBe(false);
+
+    const withConditional = clone(emptyBudget);
+    withConditional.manualItems.push(
+      { id: "eq", name: "Equipo", description: "", category: "Equipamiento", year: 2027, amount: 100000, costType: "Único de esta versión", periodicity: "Único" },
+      { id: "aid", name: "Ayuda", description: "", category: "Becas y ayudas", year: 2027, amount: 50000, costType: "Único de esta versión", periodicity: "Único" },
+    );
+    const conditionalReport = buildFinancialReport(withConditional, calculateBudget(withConditional, institutionalParameters));
+    expect(conditionalReport.rows.some((row) => row.label === "EQUIPAMIENTOS (SUBTOTAL)")).toBe(true);
+    expect(conditionalReport.rows.some((row) => row.label === "BECAS Y AYUDAS (SUBTOTAL)")).toBe(true);
   });
 
   it("reduce el anexo PDF a parámetros principales y valores con información", () => {
@@ -78,5 +100,6 @@ describe("exportación trazable de parámetros", () => {
     expect(text).toContain("/DCTDecode");
     expect(text).toContain(budget.program.name);
     expect(text).toContain("Parámetros principales utilizados");
+    expect(text).toContain("/MediaBox [0 0 595 842]");
   });
 });

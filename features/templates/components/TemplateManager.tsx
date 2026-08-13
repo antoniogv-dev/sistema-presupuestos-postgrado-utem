@@ -20,7 +20,7 @@ import type { ApiIdentity } from "@/lib/mappers/budget-api";
 const COST_CATEGORIES = [
   "Otros honorarios no académicos", "Dirección", "Asistencia de dirección",
   "Gastos operacionales / Bienes y servicios", "Software y licencias", "Difusión",
-  "Congresos y pasantías", "Becas de manutención", "Libros y publicaciones",
+  "Congresos y pasantías", "Becas de manutención", "Becas y ayudas", "Equipamiento", "Libros y publicaciones",
   "Pasajes y fletes", "Viáticos", "Alimentos y bebidas", "Otros costos y gastos",
 ] as const;
 

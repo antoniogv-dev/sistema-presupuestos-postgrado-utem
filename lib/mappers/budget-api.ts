@@ -105,6 +105,9 @@ function canonicalCostCategory(value: unknown): CohortBudget["manualItems"][numb
     "Congresos": "Congresos y pasantías",
     "Pasantías": "Congresos y pasantías",
     "Otros": "Otros costos y gastos",
+    "Equipamientos": "Equipamiento",
+    "Equipamiento y bienes de capital": "Equipamiento",
+    "Ayudas": "Becas y ayudas",
   };
   return aliases[category] ?? category as CohortBudget["manualItems"][number]["category"];
 }

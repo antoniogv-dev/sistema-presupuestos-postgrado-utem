@@ -1,0 +1,12 @@
+v10.16 / 1.0.26-d1-web
+
+Subtotales obligatorios:
+- HONORARIOS ACADÉMICOS (SUBTOTAL)
+- HONORARIOS NO ACADÉMICOS (SUBTOTAL)
+- OTROS GASTOS (SUBTOTAL)
+
+Subtotales condicionales:
+- EQUIPAMIENTOS (SUBTOTAL)
+- BECAS Y AYUDAS (SUBTOTAL)
+
+No incluye wrangler.jsonc. No agrega migración D1.
