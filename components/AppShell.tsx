@@ -72,7 +72,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             return <Link key={href} href={href} className={active ? "nav-link active" : "nav-link"} onClick={() => setOpen(false)}><span aria-hidden="true" className="nav-dot" />{label}</Link>;
           })}
         </nav>
-        <div className="sidebar-footer"><span>Versión Cloudflare D1 · v10.16</span><small>Motor financiero trazable · 1.0.26-d1-web</small></div>
+        <div className="sidebar-footer"><span>Versión Cloudflare D1 · v10.17</span><small>Motor financiero trazable · 1.0.27-d1-web</small></div>
       </aside>
       {open ? <button className="backdrop" onClick={() => setOpen(false)} aria-label="Cerrar menú" /> : null}
       <div className="main-area">

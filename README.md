@@ -1,8 +1,10 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10.16 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.17 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
-## Mejoras funcionales v10.16
+## Mejoras funcionales v10.17
+
+- **Corrección XLSX Microsoft Excel:** se corrige la estructura OOXML que provocaba el mensaje de reparación de `sheet*.xml`; los parámetros quedan visibles tanto en `Presupuesto completo` como en `Parámetros completos`.
 
 - **Subtotales financieros:** el flujo separa Honorarios académicos, Honorarios no académicos y Otros gastos.
 - **Subtotales condicionales:** Equipamientos y Becas y ayudas sólo aparecen cuando existe un monto asociado.
@@ -14,7 +16,7 @@ Aplicación institucional para formular, revisar, consolidar y exportar presupue
 - **PDF completamente vertical:** portada, flujo y anexo de parámetros se generan en A4 vertical (595 x 842 pt).
 - **Flujo PDF legible:** si un presupuesto abarca más de tres años, el flujo se divide por bloques de hasta tres años sin perder filas ni valores.
 - **Portada completa sin recorte:** la imagen institucional se ajusta dentro de la página vertical conservando la composición original.
-- **Control de despliegue:** versión `v10.16 · 1.0.26-d1-web`; `source:audit` exige la primera hoja completa y el PDF vertical.
+- **Control de despliegue:** versión `v10.17 · 1.0.27-d1-web`; `source:audit` exige la primera hoja completa y el PDF vertical.
 - **Sin migración D1 nueva:** esta versión modifica exclusivamente presentación/exportación y control de release.
 
 ## Mejoras funcionales v10.14

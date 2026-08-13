@@ -71,7 +71,14 @@ function zip(files: Array<{ name: string; data: string | Uint8Array }>): Uint8Ar
 }
 
 function xml(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+  // Microsoft Excel rechaza una hoja completa si encuentra caracteres de control
+  // no válidos en XML 1.0. Se limpian antes de escapar el texto.
+  return String(value)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function columnName(index: number): string {
@@ -115,12 +122,11 @@ function buildFinancialSheet(report: FinancialReport, hasParameters = false): st
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <dimension ref="A1:${lastCol}${report.rows.length + 4}"/>
-<sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A5" sqref="A5"/></sheetView></sheetViews>
+<sheetFormatPr defaultRowHeight="18"/>
 <cols><col min="1" max="1" width="46" customWidth="1"/><col min="2" max="${report.years.length + 1}" width="17" customWidth="1"/></cols>
 <sheetData>${rows.join("")}</sheetData>
 <mergeCells count="${hasParameters ? 3 : 2}"><mergeCell ref="A1:${lastCol}1"/><mergeCell ref="A2:${lastCol}2"/>${hasParameters ? `<mergeCell ref="A3:${lastCol}3"/>` : ""}</mergeCells>
-<pageMargins left="0.25" right="0.25" top="0.35" bottom="0.35" header="0.2" footer="0.2"/>
-<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="1" paperSize="9"/>
 </worksheet>`;
 }
 
@@ -163,13 +169,11 @@ function buildParameterSheet(report: ParameterReport): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <dimension ref="A1:E${report.rows.length + 4}"/>
-<sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A5" sqref="A5"/></sheetView></sheetViews>
+<sheetFormatPr defaultRowHeight="18"/>
 <cols><col min="1" max="1" width="25" customWidth="1"/><col min="2" max="2" width="43" customWidth="1"/><col min="3" max="3" width="18" customWidth="1"/><col min="4" max="4" width="20" customWidth="1"/><col min="5" max="5" width="52" customWidth="1"/></cols>
 <sheetData>${rows.join("")}</sheetData>
 <mergeCells count="2"><mergeCell ref="A1:E1"/><mergeCell ref="A2:E2"/></mergeCells>
-<autoFilter ref="A4:E${report.rows.length + 4}"/>
-<pageMargins left="0.25" right="0.25" top="0.35" bottom="0.35" header="0.2" footer="0.2"/>
-<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0" paperSize="9"/>
 
 </worksheet>`;
 }
@@ -226,13 +230,11 @@ function buildCompleteBudgetSheet(report: FinancialReport, parameterReport: Para
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <dimension ref="A1:${lastCol}${finalRow}"/>
-<sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A5" sqref="A5"/></sheetView></sheetViews>
+<sheetFormatPr defaultRowHeight="18"/>
 <cols><col min="1" max="1" width="39" customWidth="1"/><col min="2" max="2" width="38" customWidth="1"/><col min="3" max="3" width="18" customWidth="1"/><col min="4" max="4" width="21" customWidth="1"/><col min="5" max="5" width="48" customWidth="1"/>${report.years.length > 4 ? `<col min="6" max="${report.years.length + 1}" width="17" customWidth="1"/>` : ""}</cols>
 <sheetData>${rows.join("")}</sheetData>
 <mergeCells count="4"><mergeCell ref="A1:${lastCol}1"/><mergeCell ref="A2:${lastCol}2"/><mergeCell ref="A3:${lastCol}3"/><mergeCell ref="A${parameterTitleRow}:E${parameterTitleRow}"/></mergeCells>
-<autoFilter ref="A${parameterHeaderRow}:E${finalRow}"/>
-<pageMargins left="0.25" right="0.25" top="0.35" bottom="0.35" header="0.2" footer="0.2"/>
-<pageSetup orientation="portrait" fitToWidth="1" fitToHeight="0" paperSize="9"/>
 </worksheet>`;
 }
 
@@ -286,6 +288,11 @@ interface WorkbookSheetSpec {
  * una hoja maestra con TODOS los parámetros más vistas separadas para
  * facilitar la revisión administrativa. Las vistas auxiliares no sustituyen
  * a "Parámetros completos"; sólo ordenan la misma información.
+ */
+/**
+ * v10.17: OOXML compatible con Microsoft Excel.
+ * Se evita autoFilter/pageSetup artesanal y se sanitizan caracteres XML 1.0.
+ * La primera hoja mantiene el flujo + todos los parámetros completos.
  */
 export function createFinancialReportXlsx(report: FinancialReport, parameterReport?: ParameterReport): Uint8Array {
   const now = new Date().toISOString();

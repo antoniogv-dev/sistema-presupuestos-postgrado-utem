@@ -1,0 +1,4 @@
+v10.17 / 1.0.27-d1-web
+Corrección de compatibilidad XLSX con Microsoft Excel.
+No incluye wrangler.jsonc en los paquetes entregados.
+No agrega migraciones D1.

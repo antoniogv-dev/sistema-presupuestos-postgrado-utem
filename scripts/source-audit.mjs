@@ -253,7 +253,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.16"',
+  'FUNCTIONAL_RELEASE = "v10.17"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -273,8 +273,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.16") || !appShellV110.includes("1.0.26-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.16 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.17") || !appShellV110.includes("1.0.27-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.17 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -429,6 +429,22 @@ for (const marker of [
 }
 if (!budgetWorkspaceV108.includes('"Equipamiento"') || !budgetWorkspaceV108.includes('"Becas y ayudas"')) {
   fail("BudgetWorkspace.tsx: v10.16 debe permitir clasificar costos como Equipamiento o Becas y ayudas.");
+}
+
+// v10.17: compatibilidad real del OOXML con Microsoft Excel.
+for (const marker of [
+  'OOXML compatible con Microsoft Excel',
+  'replace(/[\\u0000-\\u0008',
+  'sheetFormatPr defaultRowHeight="18"',
+  'PARÁMETROS COMPLETOS UTILIZADOS EN EL CÁLCULO',
+]) {
+  if (!xlsxV112.includes(marker)) fail(`xlsx.ts: falta corrección de compatibilidad v10.17 ${marker}.`);
+}
+if (xlsxV112.includes('<autoFilter ref=')) {
+  fail('xlsx.ts: v10.17 elimina autoFilter artesanal para evitar que Excel reemplace las hojas XML.');
+}
+if (xlsxV112.includes('<pageSetup orientation=')) {
+  fail('xlsx.ts: v10.17 elimina pageSetup artesanal; la orientación vertical corresponde al PDF, no al XML XLSX manual.');
 }
 
 const prismaFactory = await readFile(path.join(root, "lib/database/prisma.ts"), "utf8");
