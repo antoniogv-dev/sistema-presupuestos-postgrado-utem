@@ -81,7 +81,8 @@ describe("motor financiero", () => {
   it("permite sobrescribir por año hora directa y guía de tesis", () => {
     const budget = clone(demoBudget);
     budget.annualOverrides = [{
-      year: 2027, directTeachingHourValue: 30000, annualEnrollmentFee: 200000, annualTuition: 5000000, thesisGuidancePerGraduatingStudent: 500000,
+      ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2027),
+      directTeachingHourValue: 30000, annualEnrollmentFee: 200000, annualTuition: 5000000, thesisGuidancePerGraduatingStudent: 500000,
       annualDirection: 4000000, directionProrated: false, directionAllocationRate: 1, annualAssistance: 2000000,
       assistanceProrated: false, assistanceAllocationRate: 1, centralOverheadRate: 0.2, facultyOverheadRate: 0.1,
     }];
@@ -126,15 +127,17 @@ describe("motor financiero", () => {
 
   it("repite un costo anual en todos los años activos desde su año de inicio", () => {
     const budget = clone(demoBudget);
-    budget.manualItems = [{ id: "annual", name: "Soporte anual", description: "", category: "Honorarios no académicos", year: 2027, amount: 1000000, costType: "Único de esta versión", periodicity: "Anual" }];
+    budget.manualItems = [{ id: "annual", name: "Soporte anual", description: "", category: "Otros honorarios no académicos", year: 2027, amount: 1000000, costType: "Único de esta versión", periodicity: "Anual" }];
     const flows = calculateBudget(budget, institutionalParameters).annualFlows;
-    expect(flows.map((flow) => flow.nonAcademicHonoraria)).toEqual(flows.map(() => 1000000));
+    expect(flows.map((flow) => flow.otherNonAcademicHonoraria)).toEqual(flows.map(() => 1000000));
+    expect(flows.every((flow) => flow.nonAcademicHonoraria === flow.direction + flow.assistance + flow.otherNonAcademicHonoraria)).toBe(true);
   });
 
   it("calcula overhead anual sobre arancel bruto menos descuentos menos incobrables", () => {
     const budget = clone(demoBudget);
     budget.annualOverrides = [{
-      year: 2027, directTeachingHourValue: 1, annualEnrollmentFee: 1, annualTuition: 5000000, thesisGuidancePerGraduatingStudent: 0,
+      ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2027),
+      directTeachingHourValue: 1, annualEnrollmentFee: 1, annualTuition: 5000000, thesisGuidancePerGraduatingStudent: 0,
       annualDirection: 0, directionProrated: false, directionAllocationRate: 1, annualAssistance: 0, assistanceProrated: false,
       assistanceAllocationRate: 1, centralOverheadRate: 0.25, facultyOverheadRate: 0.05,
     }];
@@ -147,13 +150,51 @@ describe("motor financiero", () => {
   it("prorratea dirección y asistencia al 50 por ciento cuando se configura", () => {
     const budget = clone(demoBudget);
     budget.annualOverrides = [{
-      year: 2027, directTeachingHourValue: 1, annualEnrollmentFee: 1, annualTuition: 5000000, thesisGuidancePerGraduatingStudent: 0,
+      ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2027),
+      directTeachingHourValue: 1, annualEnrollmentFee: 1, annualTuition: 5000000, thesisGuidancePerGraduatingStudent: 0,
       annualDirection: 4152675, directionProrated: true, directionAllocationRate: 0.5, annualAssistance: 2000000,
       assistanceProrated: true, assistanceAllocationRate: 0.5, centralOverheadRate: 0, facultyOverheadRate: 0,
     }];
     const flow = calculateBudget(budget, institutionalParameters).annualFlows[0];
     expect(flow.direction).toBeCloseTo(4152675 * 0.5, 2);
     expect(flow.assistance).toBe(1000000);
+  });
+
+  it("trata honorarios no académicos como subtotal de dirección, asistencia y otros honorarios", () => {
+    const budget = clone(demoBudget);
+    budget.annualOverrides = [{
+      ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2027),
+      annualDirection: 4000000,
+      directionProrated: true,
+      directionAllocationRate: 0.5,
+      annualAssistance: 2000000,
+      assistanceProrated: true,
+      assistanceAllocationRate: 0.5,
+      annualOtherNonAcademicHonoraria: 1000000,
+      otherNonAcademicProrated: true,
+      otherNonAcademicAllocationRate: 0.5,
+    }];
+    const flow = calculateBudget(budget, institutionalParameters).annualFlows[0];
+    expect(flow.direction).toBe(2000000);
+    expect(flow.assistance).toBe(1000000);
+    expect(flow.otherNonAcademicHonoraria).toBe(500000);
+    expect(flow.nonAcademicHonoraria).toBe(3500000);
+  });
+
+  it("incorpora los costos registrados dentro del subtotal editable de su categoría", () => {
+    const budget = clone(demoBudget);
+    budget.annualOverrides = [{
+      ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2027),
+      annualOperational: 1000000,
+      annualFoodBeverages: 200000,
+    }];
+    budget.manualItems = [
+      { id: "ops", name: "Giro para rendir", description: "", category: "Gastos operacionales / Bienes y servicios", year: 2027, amount: 250000, costType: "Único de esta versión", periodicity: "Único" },
+      { id: "food", name: "Coffee break", description: "", category: "Alimentos y bebidas", year: 2027, amount: 300000, costType: "Único de esta versión", periodicity: "Único" },
+    ];
+    const flow = calculateBudget(budget, institutionalParameters).annualFlows[0];
+    expect(flow.operational).toBe(1250000);
+    expect(flow.foodBeverages).toBe(500000);
   });
 
   it("mantiene becas deshabilitadas en profesional hasta habilitación explícita", () => {

@@ -198,7 +198,7 @@ const budgetWorkspaceV108 = await readFile(path.join(root, "features/budgets/com
 for (const marker of [
   "Versión del programa / plan",
   "Revisión interna",
-  "Gastos institucionales comprometidos/prorrateables",
+  "Staff comprometido/prorrateable y overhead",
   "Matrícula anual (informativa, sin descuentos)",
   "INGRESOS TOTAL (sin matrícula)",
   "Valor hora docente directa",
@@ -248,18 +248,22 @@ if (!v110Migration.includes('WHERE COALESCE("annualTuition", 0) <= 0')) {
 for (const marker of [
   '"Alimentos y bebidas"',
   'Matrícula anual (informativa, sin descuentos)',
-  'Detalle de costos y gastos registrados',
-  'manualItemAmountForYear',
-  'FUNCTIONAL_RELEASE = "v10.10"',
+  'EditableCostFlowRow',
+  'ManualCostRows',
+  'Otros honorarios no académicos',
+  'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
+  'FUNCTIONAL_RELEASE = "v10.11"',
 ]) {
-  if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.10 ${marker}.`);
+  if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
 for (const forbidden of [
   'label="Descuentos matrícula"',
   'label="Matrícula neta"',
   'Matrícula anual (informativa, descuentos aplicados)',
+  'Honorarios académicos adicionales',
+  'Detalle de costos y gastos registrados',
 ]) {
-  if (budgetWorkspaceV108.includes(forbidden)) fail(`BudgetWorkspace.tsx: v10.10 no debe contener ${forbidden}.`);
+  if (budgetWorkspaceV108.includes(forbidden)) fail(`BudgetWorkspace.tsx: v10.11 no debe contener ${forbidden}.`);
 }
 if (!engineV108.includes("const enrollmentDiscounts = 0;")) {
   fail("budget-engine.ts: la matrícula no debe recibir descuentos; enrollmentDiscounts debe ser 0.");
@@ -268,8 +272,47 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.10") || !appShellV110.includes("1.0.20-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.10 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.11") || !appShellV110.includes("1.0.21-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.11 para detectar despliegues parciales o antiguos.");
+}
+const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
+for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
+  if (!v111Migration.includes(marker)) fail(`0007_cashflow_editable_staff_and_costs.sql: falta ${marker}.`);
+}
+if (!engineV108.includes("const nonAcademicHonoraria = direction + assistance + otherNonAcademicHonoraria")) {
+  fail("budget-engine.ts: honorarios no académicos debe ser subtotal de dirección, asistencia y otros honorarios.");
+}
+if (engineV108.includes("manualAcademicHonoraria")) {
+  fail("budget-engine.ts: no debe existir honorarios académicos adicionales en el flujo v10.11.");
+}
+
+for (const marker of [
+  'label="Gastos operacionales / Bienes y servicios"',
+  'label="Software y licencias"',
+  'label="Difusión"',
+  'label="Congresos y pasantías"',
+  'label="Libros y publicaciones"',
+  'label="Pasajes y fletes"',
+  'label="Viáticos"',
+  'label="Alimentos y bebidas"',
+  'label="Otros costos y gastos"',
+]) {
+  if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta categoría editable v10.11 ${marker}.`);
+}
+
+const reportModelV111 = await readFile(path.join(root, "lib/export/report-model.ts"), "utf8");
+for (const marker of [
+  "Asistencia de dirección",
+  "Otros honorarios no académicos",
+  "HONORARIOS NO ACADÉMICOS (SUBTOTAL)",
+  "Gastos operacionales / Bienes y servicios",
+  "Alimentos y bebidas",
+  "TOTAL COSTOS Y GASTOS",
+]) {
+  if (!reportModelV111.includes(marker)) fail(`report-model.ts: falta alineación del flujo v10.11 ${marker}.`);
+}
+for (const forbidden of ["Honorarios académicos adicionales", "Detalle de costos y gastos registrados"]) {
+  if (reportModelV111.includes(forbidden)) fail(`report-model.ts: no debe contener ${forbidden}.`);
 }
 
 const prismaFactory = await readFile(path.join(root, "lib/database/prisma.ts"), "utf8");

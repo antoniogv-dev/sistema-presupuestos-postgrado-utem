@@ -18,7 +18,10 @@ import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
 import type { ApiIdentity } from "@/lib/mappers/budget-api";
 
 const COST_CATEGORIES = [
-  "Honorarios académicos", "Honorarios no académicos", "Dirección", "Asistencia", "Gastos operacionales", "Software", "Difusión", "Congresos", "Pasantías", "Becas de manutención", "Bienes y servicios", "Libros y publicaciones", "Pasajes y fletes", "Viáticos", "Alimentos y bebidas", "Otros",
+  "Otros honorarios no académicos", "Dirección", "Asistencia de dirección",
+  "Gastos operacionales / Bienes y servicios", "Software y licencias", "Difusión",
+  "Congresos y pasantías", "Becas de manutención", "Libros y publicaciones",
+  "Pasajes y fletes", "Viáticos", "Alimentos y bebidas", "Otros costos y gastos",
 ] as const;
 
 const STORAGE_KEY = "utem-postgrado-budget-templates-v5";
@@ -103,7 +106,7 @@ function defaultConfig(kind: TemplateItemKind): BudgetTemplateConfig {
       } satisfies MaintenanceScholarshipTemplateConfig;
     case "COSTO":
       return {
-        category: "Otros",
+        category: "Otros costos y gastos",
         amount: 0,
         costType: "Único de esta versión",
         periodicity: "Único",
@@ -552,7 +555,7 @@ function TemplateConfig({
         <label>
           Categoría
           <select disabled={disabled}
-            value={String(config.category ?? "Otros")}
+            value={String(config.category ?? "Otros costos y gastos")}
             onChange={(event) => onChange("category", event.target.value)}
           >
             {COST_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}

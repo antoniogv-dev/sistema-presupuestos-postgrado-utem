@@ -1,0 +1,17 @@
+Sistema de Presupuestos de Postgrado UTEM
+Release funcional: v10.11
+Versión técnica: 1.0.21-d1-web
+Base de actualización: v10.10 / 1.0.20-d1-web
+Migración nueva: migrations/0007_cashflow_editable_staff_and_costs.sql
+
+Cambios principales:
+- elimina Honorarios académicos adicionales del flujo;
+- Honorarios no académicos pasa a subtotal de Dirección + Asistencia de dirección + Otros honorarios no académicos;
+- Otros honorarios no académicos es parametrizable y prorrateable por año;
+- nueve categorías operacionales son editables directamente en el flujo anual;
+- costos nominados aparecen integrados bajo su categoría dentro del flujo y no en una tabla de detalle separada;
+- persistencia D1 de bases anuales editables;
+- exportaciones alineadas con el flujo v10.11;
+- compatibilidad de categorías históricas mediante migración 0007.
+
+El paquete incremental NO contiene wrangler.jsonc.

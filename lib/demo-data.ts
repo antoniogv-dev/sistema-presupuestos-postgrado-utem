@@ -111,7 +111,7 @@ export const demoBudget: CohortBudget = {
     { id: "e1", type: "Convenio", description: "Aporte asociado a convenio", year: 2028, semester: 1, students: 2, amountPerStudent: 1200000, source: "Convenio institucional" },
   ],
   manualItems: [
-    { id: "c1", name: "Apoyo metodológico", description: "Servicio específico para la cohorte", category: "Honorarios no académicos", year: 2028, semester: 1, amount: 1200000, costType: "Único de esta versión", periodicity: "Único" },
+    { id: "c1", name: "Apoyo metodológico", description: "Servicio específico para la cohorte", category: "Otros honorarios no académicos", year: 2028, semester: 1, amount: 1200000, costType: "Único de esta versión", periodicity: "Único" },
     { id: "c2", name: "Textos y publicaciones", description: "Material bibliográfico", category: "Libros y publicaciones", year: 2027, amount: 1000000, costType: "Único de esta versión", periodicity: "Anual" },
   ],
 };

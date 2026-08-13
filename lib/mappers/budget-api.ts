@@ -90,6 +90,25 @@ export type ApiBudgetRecord = {
 export const numberValue = (value: unknown): number =>
   Number.isFinite(Number(value)) ? Number(value) : 0;
 
+const optionalNumberValue = (value: unknown): number =>
+  value === null || value === undefined ? Number.NaN : numberValue(value);
+
+function canonicalCostCategory(value: unknown): CohortBudget["manualItems"][number]["category"] {
+  const category = String(value ?? "Otros costos y gastos");
+  const aliases: Record<string, CohortBudget["manualItems"][number]["category"]> = {
+    "Honorarios académicos": "Otros costos y gastos",
+    "Honorarios no académicos": "Otros honorarios no académicos",
+    "Asistencia": "Asistencia de dirección",
+    "Gastos operacionales": "Gastos operacionales / Bienes y servicios",
+    "Bienes y servicios": "Gastos operacionales / Bienes y servicios",
+    "Software": "Software y licencias",
+    "Congresos": "Congresos y pasantías",
+    "Pasantías": "Congresos y pasantías",
+    "Otros": "Otros costos y gastos",
+  };
+  return aliases[category] ?? category as CohortBudget["manualItems"][number]["category"];
+}
+
 export function apiErrorMessage(body: unknown): string {
   if (typeof body !== "object" || body === null || !("error" in body)) {
     return "No fue posible completar la operación.";
@@ -207,6 +226,18 @@ function annualOverride(item: Record<string, unknown>): BudgetAnnualOverride {
     annualAssistance: numberValue(item.annualAssistance),
     assistanceProrated: Boolean(item.assistanceProrated),
     assistanceAllocationRate: numberValue(item.assistanceAllocationRate ?? 1),
+    annualOtherNonAcademicHonoraria: optionalNumberValue(item.annualOtherNonAcademicHonoraria),
+    otherNonAcademicProrated: Boolean(item.otherNonAcademicProrated),
+    otherNonAcademicAllocationRate: item.otherNonAcademicAllocationRate === null || item.otherNonAcademicAllocationRate === undefined ? Number.NaN : numberValue(item.otherNonAcademicAllocationRate),
+    annualOperational: optionalNumberValue(item.annualOperational),
+    annualSoftware: optionalNumberValue(item.annualSoftware),
+    annualDiffusion: optionalNumberValue(item.annualDiffusion),
+    annualCongressesInternships: optionalNumberValue(item.annualCongressesInternships),
+    annualBooksPublications: optionalNumberValue(item.annualBooksPublications),
+    annualTravelFreight: optionalNumberValue(item.annualTravelFreight),
+    annualPerDiem: optionalNumberValue(item.annualPerDiem),
+    annualFoodBeverages: optionalNumberValue(item.annualFoodBeverages),
+    annualOtherCosts: optionalNumberValue(item.annualOtherCosts),
     centralOverheadRate: numberValue(item.centralOverheadRate),
     facultyOverheadRate: numberValue(item.facultyOverheadRate),
   };
@@ -298,7 +329,7 @@ export function toBudget(record: ApiBudgetRecord): CohortBudget {
       id: String(item.id),
       name: String(item.name),
       description: String(item.description ?? ""),
-      category: String(item.category) as CohortBudget["manualItems"][number]["category"],
+      category: canonicalCostCategory(item.category),
       year: numberValue(item.year),
       semester: item.semester ? numberValue(item.semester) as 1 | 2 : undefined,
       amount: numberValue(item.amount),

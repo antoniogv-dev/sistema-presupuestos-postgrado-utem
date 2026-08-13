@@ -28,10 +28,46 @@ import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
 import { availableWorkflowActions, canDeleteBudget, canEditBudget, type WorkflowAction } from "@/lib/workflow/budget-workflow";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.10";
+const FUNCTIONAL_RELEASE = "v10.11";
 const COST_CATEGORIES: BudgetItem["category"][] = [
-  "Honorarios académicos", "Honorarios no académicos", "Dirección", "Asistencia", "Gastos operacionales", "Software", "Difusión", "Congresos", "Pasantías", "Becas de manutención", "Bienes y servicios", "Libros y publicaciones", "Pasajes y fletes", "Viáticos", "Alimentos y bebidas", "Otros",
+  "Otros honorarios no académicos",
+  "Dirección",
+  "Asistencia de dirección",
+  "Gastos operacionales / Bienes y servicios",
+  "Software y licencias",
+  "Difusión",
+  "Congresos y pasantías",
+  "Becas de manutención",
+  "Libros y publicaciones",
+  "Pasajes y fletes",
+  "Viáticos",
+  "Alimentos y bebidas",
+  "Otros costos y gastos",
 ];
+
+const FLOW_COST_GROUPS = {
+  otherNonAcademic: ["Honorarios no académicos", "Otros honorarios no académicos"] as BudgetItem["category"][],
+  operational: ["Gastos operacionales", "Bienes y servicios", "Gastos operacionales / Bienes y servicios"] as BudgetItem["category"][],
+  software: ["Software", "Software y licencias"] as BudgetItem["category"][],
+  diffusion: ["Difusión"] as BudgetItem["category"][],
+  congressesInternships: ["Congresos", "Pasantías", "Congresos y pasantías"] as BudgetItem["category"][],
+  booksPublications: ["Libros y publicaciones"] as BudgetItem["category"][],
+  travelFreight: ["Pasajes y fletes"] as BudgetItem["category"][],
+  perDiem: ["Viáticos"] as BudgetItem["category"][],
+  foodBeverages: ["Alimentos y bebidas"] as BudgetItem["category"][],
+  otherCosts: ["Otros", "Otros costos y gastos", "Honorarios académicos"] as BudgetItem["category"][],
+} as const;
+
+type EditableAnnualCostKey =
+  | "annualOperational"
+  | "annualSoftware"
+  | "annualDiffusion"
+  | "annualCongressesInternships"
+  | "annualBooksPublications"
+  | "annualTravelFreight"
+  | "annualPerDiem"
+  | "annualFoodBeverages"
+  | "annualOtherCosts";
 const INCOME_TYPES: ExternalIncome["type"][] = ["Beca ANID", "Otra beca externa", "Convenio", "Aporte institucional", "Proyecto", "Donación", "Ingreso extraordinario", "Otro"];
 const roleLabels: Record<AccessRole, string> = { ADMIN: "Administrador", CREADOR: "Creador", LECTOR: "Lector", GESTOR: "Gestor", VISTO_BUENO: "V°B°", APROBADOR: "Aprobación" };
 const actionLabels: Record<WorkflowAction, string> = { SUBMIT_VB: "Enviar a V°B°", VB_APPROVE: "Otorgar V°B°", VB_OBSERVE: "Observar", FINAL_APPROVE: "Aprobar", FINAL_OBSERVE: "Observar y devolver" };
@@ -311,12 +347,30 @@ export function BudgetWorkspace() {
       const annual = resolvedAnnualOverrideForYear(candidate, parameters, year);
       totals.direction += annual.annualDirection * (annual.directionProrated ? annual.directionAllocationRate : 1);
       totals.assistance += annual.annualAssistance * (annual.assistanceProrated ? annual.assistanceAllocationRate : 1);
+      totals.otherNonAcademic += annual.annualOtherNonAcademicHonoraria
+        * (annual.otherNonAcademicProrated ? annual.otherNonAcademicAllocationRate : 1);
       return totals;
-    }, { direction: 0, assistance: 0 });
+    }, { direction: 0, assistance: 0, otherNonAcademic: 0 });
   }
 
   function suggestedAllocationRate(year: number): number {
     return 1 / (1 + overlappingBudgetCount(year));
+  }
+
+  function manualCostAmount(year: number, categories: readonly BudgetItem["category"][]): number {
+    return budget.manualItems
+      .filter((item) => categories.includes(item.category))
+      .reduce((total, item) => total + manualItemAmountForYear(item, budget, year), 0);
+  }
+
+  function updateEditableFlowCost(
+    year: number,
+    key: EditableAnnualCostKey,
+    categories: readonly BudgetItem["category"][],
+    desiredTotal: number,
+  ) {
+    const manualAmount = manualCostAmount(year, categories);
+    updateAnnualOverride(year, { [key]: Math.max(0, desiredTotal - manualAmount) } as Partial<BudgetAnnualOverride>);
   }
 
   function exportBudget(format: "xlsx" | "pdf") {
@@ -381,12 +435,43 @@ export function BudgetWorkspace() {
       </div>
       <div className="setting-grid"><CheckSetting label="Incluir arrastre autorizado" note="Suma el arrastre al primer año del flujo." checked={budget.includeAuthorizedCarryover} disabled={!editable} onChange={(value) => patchBudget({ includeAuthorizedCarryover: value })} /><CheckSetting label="Normalizar costos compartidos" note="Evita duplicar costos en consolidación." checked={budget.normalizeSharedCosts} disabled={!editable} onChange={(value) => patchBudget({ normalizeSharedCosts: value })} /><CheckSetting label="Alertar posibles duplicidades" note="Busca coincidencias de gastos entre cohortes." checked={budget.alertPotentialDuplicates} disabled={!editable} onChange={(value) => patchBudget({ alertPotentialDuplicates: value })} /></div>
 
-      <div className="subpanel annual-parameter-panel"><h3>Valores anuales del presupuesto</h3><p>Estos valores se aplican sólo a esta versión del programa. El arancel se define para cada año activo. La matrícula se cobra una vez por cada dos semestres activos y sus descuentos se calculan con las mismas reglas del arancel. Los años sin cobro de matrícula se muestran sólo como referencia y no generan ingreso.</p>
+      <div className="subpanel annual-parameter-panel"><h3>Valores anuales del presupuesto</h3><p>Estos valores se aplican sólo a esta versión del programa. El arancel se define para cada año activo. La matrícula se cobra una vez por cada dos semestres activos, es informativa y no recibe descuentos. Los años sin cobro de matrícula se muestran sólo como referencia y no generan ingreso.</p>
         <div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Año</th><th>Arancel anual</th><th>Periodo de cobro matrícula</th><th>Matrícula anual</th><th>Valor hora docente directa</th><th>Guía de tesis por graduando</th></tr></thead><tbody>{budget.annualOverrides.map((annual) => { const chargePeriods = getActivePeriods(budget.startYear, budget.startSemester, budget.durationSemesters).filter((period, index) => index % 2 === 0 && period.year === annual.year); return <tr key={`annual-values-${annual.year}`}><th>{annual.year}</th><InputCell label={`Arancel ${annual.year}`} value={annual.annualTuition} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { annualTuition: value })} /><td>{chargePeriods.length ? chargePeriods.map((period) => `${period.year}-${period.semester}S`).join(", ") : <span className="muted">Sin cobro</span>}</td><InputCell label={`Matrícula ${annual.year}`} value={annual.annualEnrollmentFee} disabled={!editable || chargePeriods.length === 0} onChange={(value) => updateAnnualOverride(annual.year, { annualEnrollmentFee: value })} /><InputCell label={`Hora directa ${annual.year}`} value={annual.directTeachingHourValue} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { directTeachingHourValue: value })} /><InputCell label={`Guía de tesis ${annual.year}`} value={annual.thesisGuidancePerGraduatingStudent} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { thesisGuidancePerGraduatingStudent: value })} /></tr>; })}</tbody></table></div>
       </div>
 
-      <div className="subpanel annual-parameter-panel"><h3>Gastos institucionales comprometidos/prorrateables y overhead</h3><p>Dirección y asistencia pueden distribuirse entre versiones/cohortes aprobadas y superpuestas del mismo programa. El sistema detecta compromisos previos y propone una distribución equitativa; el porcentaje aplicado siempre queda editable. El overhead se parametriza por año y usa como base arancel bruto menos descuentos de arancel menos incobrables.</p>
-        <div className="table-wrap"><table className="data-table editable-list annual-cost-table"><thead><tr><th>Año</th><th>Dirección base</th><th>Comprometido otras versiones</th><th>Prorratear dirección</th><th>% aplicado</th><th>Dirección aplicada</th><th>Asistencia base</th><th>Comprometido otras versiones</th><th>Prorratear asistencia</th><th>% aplicado</th><th>Asistencia aplicada</th><th>OH central %</th><th>OH facultad %</th></tr></thead><tbody>{budget.annualOverrides.map((annual) => { const suggested = suggestedAllocationRate(annual.year); const overlapping = overlappingBudgetCount(annual.year); const committed = priorCommitments(annual.year); return <tr key={`annual-cost-${annual.year}`}><th>{annual.year}<small>{overlapping ? `${overlapping} otra(s) versión(es) aprobada(s); sugerido ${formatPercent(suggested)}` : "Sin otras versiones aprobadas"}</small></th><InputCell label={`Dirección ${annual.year}`} value={annual.annualDirection} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { annualDirection: value })} /><td className="numeric">{formatCLP(committed.direction)}</td><td><input aria-label={`Prorratear dirección ${annual.year}`} type="checkbox" disabled={!editable || budget.program.type !== "MAGISTER_PROFESIONAL"} checked={annual.directionProrated} onChange={(event) => updateAnnualOverride(annual.year, { directionProrated: event.target.checked, directionAllocationRate: event.target.checked ? suggested : 1 })} /></td><PercentCell label={`Porcentaje dirección ${annual.year}`} value={annual.directionAllocationRate} disabled={!editable || !annual.directionProrated} onChange={(value) => updateAnnualOverride(annual.year, { directionAllocationRate: value })} /><td className="numeric"><strong>{formatCLP(annual.annualDirection * (annual.directionProrated ? annual.directionAllocationRate : 1))}</strong></td><InputCell label={`Asistencia ${annual.year}`} value={annual.annualAssistance} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { annualAssistance: value })} /><td className="numeric">{formatCLP(committed.assistance)}</td><td><input aria-label={`Prorratear asistencia ${annual.year}`} type="checkbox" disabled={!editable || budget.program.type !== "MAGISTER_PROFESIONAL"} checked={annual.assistanceProrated} onChange={(event) => updateAnnualOverride(annual.year, { assistanceProrated: event.target.checked, assistanceAllocationRate: event.target.checked ? suggested : 1 })} /></td><PercentCell label={`Porcentaje asistencia ${annual.year}`} value={annual.assistanceAllocationRate} disabled={!editable || !annual.assistanceProrated} onChange={(value) => updateAnnualOverride(annual.year, { assistanceAllocationRate: value })} /><td className="numeric"><strong>{formatCLP(annual.annualAssistance * (annual.assistanceProrated ? annual.assistanceAllocationRate : 1))}</strong></td><PercentCell label={`Overhead central ${annual.year}`} value={annual.centralOverheadRate} disabled={!editable || !overhead} onChange={(value) => updateAnnualOverride(annual.year, { centralOverheadRate: value })} /><PercentCell label={`Overhead facultad ${annual.year}`} value={annual.facultyOverheadRate} disabled={!editable || !overhead} onChange={(value) => updateAnnualOverride(annual.year, { facultyOverheadRate: value })} /></tr>; })}</tbody></table></div>
+      <div className="subpanel annual-parameter-panel">
+        <h3>Staff comprometido/prorrateable y overhead</h3>
+        <p>Dirección, asistencia de dirección y otros honorarios no académicos pueden distribuirse entre versiones/cohortes aprobadas y superpuestas del mismo programa profesional. El sistema detecta compromisos previos y propone una distribución equitativa; el porcentaje aplicado siempre queda editable. “Honorarios no académicos” se presenta en el flujo como subtotal de estas tres líneas.</p>
+        <div className="table-wrap">
+          <table className="data-table editable-list annual-cost-table">
+            <thead><tr><th>Año</th><th>Dirección base</th><th>Comprometido</th><th>Prorratear</th><th>%</th><th>Dirección aplicada</th><th>Asistencia base</th><th>Comprometido</th><th>Prorratear</th><th>%</th><th>Asistencia aplicada</th><th>Otros honorarios no académicos</th><th>Comprometido</th><th>Prorratear</th><th>%</th><th>Otros aplicados</th><th>OH central %</th><th>OH facultad %</th></tr></thead>
+            <tbody>{budget.annualOverrides.map((annual) => {
+              const suggested = suggestedAllocationRate(annual.year);
+              const overlapping = overlappingBudgetCount(annual.year);
+              const committed = priorCommitments(annual.year);
+              return <tr key={`annual-cost-${annual.year}`}>
+                <th>{annual.year}<small>{overlapping ? `${overlapping} otra(s) versión(es) aprobada(s); sugerido ${formatPercent(suggested)}` : "Sin otras versiones aprobadas"}</small></th>
+                <InputCell label={`Dirección ${annual.year}`} value={annual.annualDirection} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { annualDirection: value })} />
+                <td className="numeric">{formatCLP(committed.direction)}</td>
+                <td><input aria-label={`Prorratear dirección ${annual.year}`} type="checkbox" disabled={!editable || budget.program.type !== "MAGISTER_PROFESIONAL"} checked={annual.directionProrated} onChange={(event) => updateAnnualOverride(annual.year, { directionProrated: event.target.checked, directionAllocationRate: event.target.checked ? suggested : 1 })} /></td>
+                <PercentCell label={`Porcentaje dirección ${annual.year}`} value={annual.directionAllocationRate} disabled={!editable || !annual.directionProrated} onChange={(value) => updateAnnualOverride(annual.year, { directionAllocationRate: value })} />
+                <td className="numeric"><strong>{formatCLP(annual.annualDirection * (annual.directionProrated ? annual.directionAllocationRate : 1))}</strong></td>
+                <InputCell label={`Asistencia de dirección ${annual.year}`} value={annual.annualAssistance} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { annualAssistance: value })} />
+                <td className="numeric">{formatCLP(committed.assistance)}</td>
+                <td><input aria-label={`Prorratear asistencia ${annual.year}`} type="checkbox" disabled={!editable || budget.program.type !== "MAGISTER_PROFESIONAL"} checked={annual.assistanceProrated} onChange={(event) => updateAnnualOverride(annual.year, { assistanceProrated: event.target.checked, assistanceAllocationRate: event.target.checked ? suggested : 1 })} /></td>
+                <PercentCell label={`Porcentaje asistencia ${annual.year}`} value={annual.assistanceAllocationRate} disabled={!editable || !annual.assistanceProrated} onChange={(value) => updateAnnualOverride(annual.year, { assistanceAllocationRate: value })} />
+                <td className="numeric"><strong>{formatCLP(annual.annualAssistance * (annual.assistanceProrated ? annual.assistanceAllocationRate : 1))}</strong></td>
+                <InputCell label={`Otros honorarios no académicos ${annual.year}`} value={annual.annualOtherNonAcademicHonoraria} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { annualOtherNonAcademicHonoraria: value })} />
+                <td className="numeric">{formatCLP(committed.otherNonAcademic)}</td>
+                <td><input aria-label={`Prorratear otros honorarios no académicos ${annual.year}`} type="checkbox" disabled={!editable || budget.program.type !== "MAGISTER_PROFESIONAL"} checked={annual.otherNonAcademicProrated} onChange={(event) => updateAnnualOverride(annual.year, { otherNonAcademicProrated: event.target.checked, otherNonAcademicAllocationRate: event.target.checked ? suggested : 1 })} /></td>
+                <PercentCell label={`Porcentaje otros honorarios no académicos ${annual.year}`} value={annual.otherNonAcademicAllocationRate} disabled={!editable || !annual.otherNonAcademicProrated} onChange={(value) => updateAnnualOverride(annual.year, { otherNonAcademicAllocationRate: value })} />
+                <td className="numeric"><strong>{formatCLP(annual.annualOtherNonAcademicHonoraria * (annual.otherNonAcademicProrated ? annual.otherNonAcademicAllocationRate : 1))}</strong></td>
+                <PercentCell label={`Overhead central ${annual.year}`} value={annual.centralOverheadRate} disabled={!editable || !overhead} onChange={(value) => updateAnnualOverride(annual.year, { centralOverheadRate: value })} />
+                <PercentCell label={`Overhead facultad ${annual.year}`} value={annual.facultyOverheadRate} disabled={!editable || !overhead} onChange={(value) => updateAnnualOverride(annual.year, { facultyOverheadRate: value })} />
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
       </div>
 
       <div className="template-grid">{relevantTemplates.length ? relevantTemplates.map((template) => <article className="template-card" key={template.id}><div><span>{template.name}</span><strong>V{template.version}</strong></div><p>{template.description}</p><button className="button secondary" type="button" disabled={!editable} onClick={() => applyTemplate(template)}>Usar plantilla</button></article>) : <p>No existe una plantilla funcional activa para este tipo de programa.</p>}</div>
@@ -406,18 +491,142 @@ export function BudgetWorkspace() {
 
     <section className="panel"><SectionHeading number="7" id="ingresos-extra" title="Ingresos extraordinarios" description="Becas externas, convenios, aportes y otros ingresos." action={<button className="button secondary" type="button" disabled={!editable} onClick={() => patchBudget({ externalIncome: [...budget.externalIncome, { id: uid("income"), type: "Ingreso extraordinario", description: "Nuevo ingreso", year: result.years[0] ?? budget.startYear, semester: 1, students: 1, amountPerStudent: 0, source: "" }] })}>Agregar ingreso</button>} /><div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Tipo y descripción</th><th>Periodo</th><th>Estudiantes</th><th>Monto unitario</th><th>Fuente</th><th>Acción</th></tr></thead><tbody>{budget.externalIncome.length ? budget.externalIncome.map((income, index) => <tr key={income.id}><td><select disabled={!editable} value={income.type} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, type: event.target.value as ExternalIncome["type"] } : item) })}>{INCOME_TYPES.map((type) => <option key={type}>{type}</option>)}</select><input disabled={!editable} value={income.description} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, description: event.target.value } : item) })} /></td><td><PeriodInputs disabled={!editable} years={result.years} year={income.year} semester={income.semester} onYear={(value) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, year: value } : item) })} onSemester={(value) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, semester: value } : item) })} /></td><td><input disabled={!editable} type="number" min="0" value={income.students} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, students: numberValue(event.target.value) } : item) })} /></td><td><input disabled={!editable} type="number" min="0" value={income.amountPerStudent} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, amountPerStudent: numberValue(event.target.value) } : item) })} /></td><td><input disabled={!editable} value={income.source} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, source: event.target.value } : item) })} /></td><td><button className="text-button danger-text" type="button" disabled={!editable} onClick={() => patchBudget({ externalIncome: budget.externalIncome.filter((_, candidate) => candidate !== index) })}>Quitar</button></td></tr>) : <tr><td colSpan={6}>No hay ingresos extraordinarios.</td></tr>}</tbody></table></div></section>
 
-    <section className="panel"><SectionHeading number="8" id="costos" title="Costos y gastos" description="Los costos Anuales se repiten desde el año de inicio hasta el término; los Semestrales se aplican a cada semestre activo desde su periodo de inicio." action={<button className="button secondary" type="button" disabled={!editable} onClick={() => patchBudget({ manualItems: [...budget.manualItems, { id: uid("cost"), name: "Nuevo costo", description: "", category: "Otros", year: result.years[0] ?? budget.startYear, amount: 0, costType: "Único de esta versión", periodicity: "Único" }] })}>Agregar gasto o costo</button>} /><div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Nombre y descripción</th><th>Categoría</th><th>Año</th><th>Monto</th><th>Alcance</th><th>Periodicidad</th><th>Acción</th></tr></thead><tbody>{budget.manualItems.length ? budget.manualItems.map((item, index) => <tr key={item.id}><td><input disabled={!editable} value={item.name} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, name: event.target.value } : candidate) })} /><input disabled={!editable} value={item.description} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, description: event.target.value } : candidate) })} /></td><td><select disabled={!editable} value={item.category} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, category: event.target.value as BudgetItem["category"] } : candidate) })}>{COST_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></td><td><select disabled={!editable} value={item.year} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, year: numberValue(event.target.value) } : candidate) })}>{result.years.map((year) => <option key={year}>{year}</option>)}</select></td><td><input disabled={!editable} type="number" min="0" value={item.amount} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, amount: numberValue(event.target.value) } : candidate) })} /></td><td><select disabled={!editable} value={item.costType} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, costType: event.target.value as BudgetItem["costType"] } : candidate) })}><option>Único de esta versión</option><option>Compartido con otras cohortes</option></select></td><td><select disabled={!editable} value={item.periodicity} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, periodicity: event.target.value as BudgetItem["periodicity"] } : candidate) })}><option>Único</option><option>Semestral</option><option>Anual</option></select></td><td><button className="text-button danger-text" type="button" disabled={!editable} onClick={() => patchBudget({ manualItems: budget.manualItems.filter((_, position) => position !== index) })}>Quitar</button></td></tr>) : <tr><td colSpan={7}>No hay costos manuales.</td></tr>}</tbody></table></div>{budget.alertPotentialDuplicates ? duplicateAlerts.length ? <div className="notice warning"><strong>Posibles duplicidades</strong><ul>{duplicateAlerts.map((alert) => <li key={alert.key}>{alert.message} {alert.allMarkedShared ? "Se normalizará si la opción está activa." : "Revise si debe marcarse como compartido."}</li>)}</ul></div> : <div className="notice success"><p>No se detectaron coincidencias evidentes.</p></div> : null}</section>
+    <section className="panel"><SectionHeading number="8" id="costos" title="Costos y gastos" description="Los costos Anuales se repiten desde el año de inicio hasta el término; los Semestrales se aplican a cada semestre activo desde su periodo de inicio." action={<button className="button secondary" type="button" disabled={!editable} onClick={() => patchBudget({ manualItems: [...budget.manualItems, { id: uid("cost"), name: "Nuevo costo", description: "", category: "Otros costos y gastos", year: result.years[0] ?? budget.startYear, amount: 0, costType: "Único de esta versión", periodicity: "Único" }] })}>Agregar gasto o costo</button>} /><div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Nombre y descripción</th><th>Categoría</th><th>Año</th><th>Monto</th><th>Alcance</th><th>Periodicidad</th><th>Acción</th></tr></thead><tbody>{budget.manualItems.length ? budget.manualItems.map((item, index) => <tr key={item.id}><td><input disabled={!editable} value={item.name} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, name: event.target.value } : candidate) })} /><input disabled={!editable} value={item.description} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, description: event.target.value } : candidate) })} /></td><td><select disabled={!editable} value={item.category} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, category: event.target.value as BudgetItem["category"] } : candidate) })}>{COST_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></td><td><select disabled={!editable} value={item.year} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, year: numberValue(event.target.value) } : candidate) })}>{result.years.map((year) => <option key={year}>{year}</option>)}</select></td><td><input disabled={!editable} type="number" min="0" value={item.amount} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, amount: numberValue(event.target.value) } : candidate) })} /></td><td><select disabled={!editable} value={item.costType} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, costType: event.target.value as BudgetItem["costType"] } : candidate) })}><option>Único de esta versión</option><option>Compartido con otras cohortes</option></select></td><td><select disabled={!editable} value={item.periodicity} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, periodicity: event.target.value as BudgetItem["periodicity"] } : candidate) })}><option>Único</option><option>Semestral</option><option>Anual</option></select></td><td><button className="text-button danger-text" type="button" disabled={!editable} onClick={() => patchBudget({ manualItems: budget.manualItems.filter((_, position) => position !== index) })}>Quitar</button></td></tr>) : <tr><td colSpan={7}>No hay costos manuales.</td></tr>}</tbody></table></div>{budget.alertPotentialDuplicates ? duplicateAlerts.length ? <div className="notice warning"><strong>Posibles duplicidades</strong><ul>{duplicateAlerts.map((alert) => <li key={alert.key}>{alert.message} {alert.allMarkedShared ? "Se normalizará si la opción está activa." : "Revise si debe marcarse como compartido."}</li>)}</ul></div> : <div className="notice success"><p>No se detectaron coincidencias evidentes.</p></div> : null}</section>
 
     <section className="panel summary-panel"><SectionHeading number="9" id="resumen" title="Resumen financiero" description="Matrículas equivalentes, ingresos, egresos y saldo final." /><div className="summary-grid"><div><span>Ingresos</span><strong>{formatCLP(result.annualFlows.reduce((sum, flow) => sum + flow.totalIncome, 0))}</strong></div><div><span>Egresos</span><strong>{formatCLP(result.annualFlows.reduce((sum, flow) => sum + flow.totalExpenses, 0))}</strong></div><div><span>Saldo final</span><strong>{formatCLP(result.finalAccumulatedFlow)}</strong></div><div><span>Viabilidad</span><strong>{result.viable === null ? "Informativo" : result.viable ? "Viable" : "No viable"}</strong></div></div><div className="equivalent-grid">{result.annualFlows.map((flow) => <div key={flow.year}><span>{flow.year}</span><strong>{flow.equivalentEnrollments.toLocaleString("es-CL", { maximumFractionDigits: 1 })} matrículas equivalentes</strong><small>≈ {flow.roundedEquivalentStudents} estudiantes</small></div>)}</div></section>
 
-    <section className="panel"><SectionHeading number="10" id="flujo" title="Flujo de caja anual" description={`Matrícula informativa sin descuentos, arancel en todos los años activos, todos los costos y gastos, overhead y arrastre · ${FUNCTIONAL_RELEASE}.`} /><div className="notice info"><strong>Matrícula</strong><p>Se muestra como valor anual informativo, sin descuentos. No se suma a INGRESOS TOTAL; los descuentos configurados se aplican exclusivamente al arancel.</p></div><div className="table-wrap financial-flow"><table className="data-table financial-table"><thead><tr><th>Concepto</th>{result.years.map((year) => <th className="numeric" key={year}>{year}</th>)}</tr></thead><tbody><FlowRow label="Matrícula anual (informativa, sin descuentos)" values={result.annualFlows.map((flow) => flow.grossEnrollmentFee)} tone="income" />{budget.enrollmentRecognitionRate > 0 ? <FlowRow label="Matrícula reconocida (informativa)" values={result.annualFlows.map((flow) => flow.recognizedEnrollmentFee)} tone="income" /> : null}<FlowRow label="Arancel bruto" values={result.annualFlows.map((flow) => flow.grossTuition)} tone="income" /><FlowRow label="Descuentos arancel" values={result.annualFlows.map((flow) => -flow.discounts)} tone="income" />{budget.scholarshipsEnabled ? <FlowRow label="Beca interna de arancel" values={result.annualFlows.map((flow) => -flow.internalTuitionScholarships)} tone="income" /> : null}<FlowRow label="Incobrables" values={result.annualFlows.map((flow) => -flow.badDebt)} tone="income" /><FlowRow label="Ingresos extraordinarios" values={result.annualFlows.map((flow) => flow.externalIncome)} tone="income" /><FlowRow label="INGRESOS TOTAL (sin matrícula)" values={result.annualFlows.map((flow) => flow.totalIncome)} total tone="income" /><FlowRow label="Horas docentes directas" values={result.annualFlows.map((flow) => -flow.directTeachingCost)} /><FlowRow label="Horas docentes de reemplazo" values={result.annualFlows.map((flow) => -flow.replacementTeachingCost)} /><FlowRow label="Guía de tesis" values={result.annualFlows.map((flow) => -flow.thesisGuidanceCost)} /><FlowRow label="Honorarios académicos adicionales" values={result.annualFlows.map((flow) => -flow.manualAcademicHonoraria)} /><FlowRow label="Honorarios no académicos" values={result.annualFlows.map((flow) => -flow.nonAcademicHonoraria)} />{budget.scholarshipsEnabled || result.annualFlows.some((flow) => flow.maintenanceScholarships > 0) ? <FlowRow label="Becas de manutención" values={result.annualFlows.map((flow) => -flow.maintenanceScholarships)} /> : null}<FlowRow label="Dirección" values={result.annualFlows.map((flow) => -flow.direction)} /><FlowRow label="Asistencia" values={result.annualFlows.map((flow) => -flow.assistance)} /><FlowRow label="Gastos operacionales / Bienes y servicios" values={result.annualFlows.map((flow) => -flow.operational)} /><FlowRow label="Software y licencias" values={result.annualFlows.map((flow) => -flow.software)} /><FlowRow label="Difusión" values={result.annualFlows.map((flow) => -flow.diffusion)} /><FlowRow label="Congresos y pasantías" values={result.annualFlows.map((flow) => -flow.congressesInternships)} /><FlowRow label="Libros y publicaciones" values={result.annualFlows.map((flow) => -flow.booksPublications)} /><FlowRow label="Pasajes y fletes" values={result.annualFlows.map((flow) => -flow.travelFreight)} /><FlowRow label="Viáticos" values={result.annualFlows.map((flow) => -flow.perDiem)} /><FlowRow label="Alimentos y bebidas" values={result.annualFlows.map((flow) => -flow.foodBeverages)} /><FlowRow label="Otros costos y gastos" values={result.annualFlows.map((flow) => -flow.otherCosts)} /><FlowRow label="Base overhead" values={result.annualFlows.map((flow) => flow.overheadBase)} /><FlowRow label="Overhead central" values={result.annualFlows.map((flow) => -flow.centralOverhead)} /><FlowRow label="Overhead facultad" values={result.annualFlows.map((flow) => -flow.facultyOverhead)} /><FlowRow label="TOTAL COSTOS Y GASTOS" values={result.annualFlows.map((flow) => -flow.totalExpenses)} total tone="result" /><FlowRow label="FLUJO NETO" values={result.annualFlows.map((flow) => flow.netFlow)} total tone="result" signed /><FlowRow label="Arrastre inicial anual" values={result.annualFlows.map((flow) => flow.startingCarryover)} tone="result" /><FlowRow label="SALDO FINAL ACUMULADO" values={result.annualFlows.map((flow) => flow.accumulatedFlow)} total tone="result" signed /></tbody></table></div>
-      {budget.manualItems.length ? <div className="manual-cost-flow-detail">
-        <h3>Detalle de costos y gastos registrados</h3>
-        <p className="muted">Cada costo guardado se incorpora al cálculo de TOTAL COSTOS Y GASTOS. Este detalle permite verificar en qué año impacta cada registro, sin duplicarlo en la sumatoria.</p>
-        <div className="table-wrap"><table className="data-table financial-table"><thead><tr><th>Costo / gasto</th><th>Categoría</th>{result.years.map((year) => <th className="numeric" key={`manual-head-${year}`}>{year}</th>)}</tr></thead><tbody>
-          {budget.manualItems.map((item) => <tr key={`manual-flow-${item.id}`}><th>{item.name}</th><td>{item.category}</td>{result.years.map((year) => <td className="numeric" key={`manual-flow-${item.id}-${year}`}>{formatCLP(-manualItemAmountForYear(item, budget, year))}</td>)}</tr>)}
-        </tbody></table></div>
-      </div> : null}
+    <section className="panel">
+      <SectionHeading
+        number="10"
+        id="flujo"
+        title="Flujo de caja anual"
+        description={`Flujo integrado y editable por año: staff, costos registrados, overhead y arrastre · ${FUNCTIONAL_RELEASE}.`}
+      />
+      <div className="notice info">
+        <strong>Edición del flujo</strong>
+        <p>Los montos de las categorías de costos y gastos se pueden ajustar directamente en esta tabla. Cada costo registrado en la sección “Costos y gastos” se incorpora inmediatamente bajo su categoría y forma parte del subtotal correspondiente, sin una tabla de detalle separada.</p>
+      </div>
+      <div className="table-wrap financial-flow">
+        <table className="data-table financial-table cashflow-editable-table">
+          <thead><tr><th>Concepto</th>{result.years.map((year) => <th className="numeric" key={year}>{year}</th>)}</tr></thead>
+          <tbody>
+            <FlowRow label="Matrícula anual (informativa, sin descuentos)" values={result.annualFlows.map((flow) => flow.grossEnrollmentFee)} tone="income" />
+            {budget.enrollmentRecognitionRate > 0 ? <FlowRow label="Matrícula reconocida (informativa)" values={result.annualFlows.map((flow) => flow.recognizedEnrollmentFee)} tone="income" /> : null}
+            <FlowRow label="Arancel bruto" values={result.annualFlows.map((flow) => flow.grossTuition)} tone="income" />
+            <FlowRow label="Descuentos arancel" values={result.annualFlows.map((flow) => -flow.discounts)} tone="income" />
+            {budget.scholarshipsEnabled ? <FlowRow label="Beca interna de arancel" values={result.annualFlows.map((flow) => -flow.internalTuitionScholarships)} tone="income" /> : null}
+            <FlowRow label="Incobrables" values={result.annualFlows.map((flow) => -flow.badDebt)} tone="income" />
+            <FlowRow label="Ingresos extraordinarios" values={result.annualFlows.map((flow) => flow.externalIncome)} tone="income" />
+            <FlowRow label="INGRESOS TOTAL (sin matrícula)" values={result.annualFlows.map((flow) => flow.totalIncome)} total tone="income" />
+
+            <FlowRow label="Horas docentes directas" values={result.annualFlows.map((flow) => -flow.directTeachingCost)} />
+            <FlowRow label="Horas docentes de reemplazo" values={result.annualFlows.map((flow) => -flow.replacementTeachingCost)} />
+            <FlowRow label="Guía de tesis" values={result.annualFlows.map((flow) => -flow.thesisGuidanceCost)} />
+
+            <FlowRow label="Dirección" values={result.annualFlows.map((flow) => -flow.direction)} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={["Dirección"]} />
+            <FlowRow label="Asistencia de dirección" values={result.annualFlows.map((flow) => -flow.assistance)} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={["Asistencia", "Asistencia de dirección"]} />
+            <FlowRow label="Otros honorarios no académicos" values={result.annualFlows.map((flow) => -flow.otherNonAcademicHonoraria)} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.otherNonAcademic} />
+            <FlowRow label="HONORARIOS NO ACADÉMICOS (SUBTOTAL)" values={result.annualFlows.map((flow) => -flow.nonAcademicHonoraria)} total />
+
+            {budget.scholarshipsEnabled || result.annualFlows.some((flow) => flow.maintenanceScholarships > 0) ? <>
+              <FlowRow label="Becas de manutención" values={result.annualFlows.map((flow) => -flow.maintenanceScholarships)} />
+              <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={["Becas de manutención"]} />
+            </> : null}
+
+            <EditableCostFlowRow
+              label="Gastos operacionales / Bienes y servicios"
+              years={result.years}
+              values={result.annualFlows.map((flow) => flow.operational)}
+              disabled={!editable}
+              onChange={(year, value) => updateEditableFlowCost(year, "annualOperational", FLOW_COST_GROUPS.operational, value)}
+            />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.operational} />
+
+            <EditableCostFlowRow
+              label="Software y licencias"
+              years={result.years}
+              values={result.annualFlows.map((flow) => flow.software)}
+              disabled={!editable}
+              onChange={(year, value) => updateEditableFlowCost(year, "annualSoftware", FLOW_COST_GROUPS.software, value)}
+            />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.software} />
+
+            <EditableCostFlowRow
+              label="Difusión"
+              years={result.years}
+              values={result.annualFlows.map((flow) => flow.diffusion)}
+              disabled={!editable}
+              onChange={(year, value) => updateEditableFlowCost(year, "annualDiffusion", FLOW_COST_GROUPS.diffusion, value)}
+            />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.diffusion} />
+
+            <EditableCostFlowRow
+              label="Congresos y pasantías"
+              years={result.years}
+              values={result.annualFlows.map((flow) => flow.congressesInternships)}
+              disabled={!editable}
+              onChange={(year, value) => updateEditableFlowCost(year, "annualCongressesInternships", FLOW_COST_GROUPS.congressesInternships, value)}
+            />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.congressesInternships} />
+
+            <EditableCostFlowRow
+              label="Libros y publicaciones"
+              years={result.years}
+              values={result.annualFlows.map((flow) => flow.booksPublications)}
+              disabled={!editable}
+              onChange={(year, value) => updateEditableFlowCost(year, "annualBooksPublications", FLOW_COST_GROUPS.booksPublications, value)}
+            />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.booksPublications} />
+
+            <EditableCostFlowRow
+              label="Pasajes y fletes"
+              years={result.years}
+              values={result.annualFlows.map((flow) => flow.travelFreight)}
+              disabled={!editable}
+              onChange={(year, value) => updateEditableFlowCost(year, "annualTravelFreight", FLOW_COST_GROUPS.travelFreight, value)}
+            />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.travelFreight} />
+
+            <EditableCostFlowRow
+              label="Viáticos"
+              years={result.years}
+              values={result.annualFlows.map((flow) => flow.perDiem)}
+              disabled={!editable}
+              onChange={(year, value) => updateEditableFlowCost(year, "annualPerDiem", FLOW_COST_GROUPS.perDiem, value)}
+            />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.perDiem} />
+
+            <EditableCostFlowRow
+              label="Alimentos y bebidas"
+              years={result.years}
+              values={result.annualFlows.map((flow) => flow.foodBeverages)}
+              disabled={!editable}
+              onChange={(year, value) => updateEditableFlowCost(year, "annualFoodBeverages", FLOW_COST_GROUPS.foodBeverages, value)}
+            />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.foodBeverages} />
+
+            <EditableCostFlowRow
+              label="Otros costos y gastos"
+              years={result.years}
+              values={result.annualFlows.map((flow) => flow.otherCosts)}
+              disabled={!editable}
+              onChange={(year, value) => updateEditableFlowCost(year, "annualOtherCosts", FLOW_COST_GROUPS.otherCosts, value)}
+            />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.otherCosts} />
+
+            <FlowRow label="Base overhead" values={result.annualFlows.map((flow) => flow.overheadBase)} />
+            <FlowRow label="Overhead central" values={result.annualFlows.map((flow) => -flow.centralOverhead)} />
+            <FlowRow label="Overhead facultad" values={result.annualFlows.map((flow) => -flow.facultyOverhead)} />
+            <FlowRow label="TOTAL COSTOS Y GASTOS" values={result.annualFlows.map((flow) => -flow.totalExpenses)} total tone="result" />
+            <FlowRow label="FLUJO NETO" values={result.annualFlows.map((flow) => flow.netFlow)} total tone="result" signed />
+            <FlowRow label="Arrastre inicial anual" values={result.annualFlows.map((flow) => flow.startingCarryover)} tone="result" />
+            <FlowRow label="SALDO FINAL ACUMULADO" values={result.annualFlows.map((flow) => flow.accumulatedFlow)} total tone="result" signed />
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section className="panel"><SectionHeading number="11" id="workflow" title="Revisión y aprobación" description="Gestión → V°B° → Aprobación, con historial auditable." /><div className="workflow-actions">{workflowActions.length ? workflowActions.map((transition) => <button key={transition.action} className="button primary" type="button" onClick={() => void executeWorkflow(transition.action)}>{actionLabels[transition.action]}</button>) : <span>No hay acciones disponibles para el rol y etapa actuales.</span>}</div></section>
@@ -442,4 +651,48 @@ function PeriodInputs({ year, semester, years, onYear, onSemester, disabled }: {
 function FlowRow({ label, values, total = false, signed = false, tone = "" }: { label: string; values: number[]; total?: boolean; signed?: boolean; tone?: "income" | "result" | "" }) {
   const resolved = tone || (total ? "" : "expense");
   return <tr className={`${total ? "row-total" : ""} ${resolved ? `row-${resolved}` : ""}`}><th>{label}</th>{values.map((value, index) => <td key={index} className={`numeric ${signed ? value >= 0 ? "positive-text" : "negative-text" : ""}`}>{formatCLP(value)}</td>)}</tr>;
+}
+
+function EditableCostFlowRow({
+  label,
+  years,
+  values,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  years: number[];
+  values: number[];
+  disabled: boolean;
+  onChange: (year: number, value: number) => void;
+}) {
+  return <tr className="row-expense flow-editable-row">
+    <th>{label}<small>Editable; incluye los costos registrados bajo esta categoría.</small></th>
+    {years.map((year, index) => <td key={`${label}-${year}`} className="numeric">
+      {disabled
+        ? formatCLP(-values[index])
+        : <div className="flow-money-input"><span>$ -</span><input aria-label={`${label} ${year}`} type="number" min="0" step="1" value={values[index]} onChange={(event) => onChange(year, numberValue(event.target.value))} /></div>}
+    </td>)}
+  </tr>;
+}
+
+function ManualCostRows({
+  items,
+  years,
+  budget,
+  categories,
+}: {
+  items: BudgetItem[];
+  years: number[];
+  budget: CohortBudget;
+  categories: readonly BudgetItem["category"][];
+}) {
+  const matching = items.filter((item) => categories.includes(item.category));
+  if (!matching.length) return null;
+  return <>
+    {matching.map((item) => <tr className="flow-detail-row" key={`flow-detail-${item.id}`}>
+      <th><span>Incluido: {item.name}</span><small>{item.periodicity} · {item.costType}</small></th>
+      {years.map((year) => <td className="numeric" key={`flow-detail-${item.id}-${year}`}>{formatCLP(-manualItemAmountForYear(item, budget, year))}</td>)}
+    </tr>)}
+  </>;
 }

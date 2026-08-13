@@ -13,6 +13,21 @@ const clone = <T,>(value: T): T => structuredClone(value);
 const nonNegative = (value: unknown): number => Math.max(0, Number.isFinite(Number(value)) ? Number(value) : 0);
 const uid = (prefix: string, key: string): string => `${prefix}-${key}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+function canonicalCostCategory(category: CostTemplateConfig["category"]): CostTemplateConfig["category"] {
+  const aliases: Partial<Record<CostTemplateConfig["category"], CostTemplateConfig["category"]>> = {
+    "Honorarios académicos": "Otros costos y gastos",
+    "Honorarios no académicos": "Otros honorarios no académicos",
+    "Asistencia": "Asistencia de dirección",
+    "Gastos operacionales": "Gastos operacionales / Bienes y servicios",
+    "Bienes y servicios": "Gastos operacionales / Bienes y servicios",
+    "Software": "Software y licencias",
+    "Congresos": "Congresos y pasantías",
+    "Pasantías": "Congresos y pasantías",
+    "Otros": "Otros costos y gastos",
+  };
+  return aliases[category] ?? category;
+}
+
 function bounds(budget: CohortBudget, periodMode: "TODOS" | "ULTIMO" = "TODOS") {
   const periods = getActivePeriods(budget.startYear, budget.startSemester, budget.durationSemesters);
   const first = periodMode === "ULTIMO" ? periods.at(-1)! : periods[0];
@@ -79,7 +94,7 @@ export function applyBudgetTemplate(source: CohortBudget, template: BudgetTempla
         id: uid("cost", item.key),
         name: item.name,
         description: config.description ?? "",
-        category: config.category,
+        category: canonicalCostCategory(config.category),
         year: config.year ?? period.first.year,
         semester: config.semester,
         amount: nonNegative(config.amount),

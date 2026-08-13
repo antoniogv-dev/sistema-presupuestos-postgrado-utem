@@ -97,7 +97,7 @@ export interface BudgetItem {
   id: string;
   name: string;
   description: string;
-  category: "Honorarios académicos" | "Honorarios no académicos" | "Dirección" | "Asistencia" | "Gastos operacionales" | "Software" | "Difusión" | "Congresos" | "Pasantías" | "Becas de manutención" | "Bienes y servicios" | "Libros y publicaciones" | "Pasajes y fletes" | "Viáticos" | "Alimentos y bebidas" | "Otros";
+  category: "Honorarios académicos" | "Honorarios no académicos" | "Otros honorarios no académicos" | "Dirección" | "Asistencia" | "Asistencia de dirección" | "Gastos operacionales" | "Bienes y servicios" | "Gastos operacionales / Bienes y servicios" | "Software" | "Software y licencias" | "Difusión" | "Congresos" | "Pasantías" | "Congresos y pasantías" | "Becas de manutención" | "Libros y publicaciones" | "Pasajes y fletes" | "Viáticos" | "Alimentos y bebidas" | "Otros" | "Otros costos y gastos";
   year: number;
   semester?: SemesterNumber;
   amount: number;
@@ -190,6 +190,18 @@ export interface BudgetAnnualOverride {
   annualAssistance: number;
   assistanceProrated: boolean;
   assistanceAllocationRate: number;
+  annualOtherNonAcademicHonoraria: number;
+  otherNonAcademicProrated: boolean;
+  otherNonAcademicAllocationRate: number;
+  annualOperational: number;
+  annualSoftware: number;
+  annualDiffusion: number;
+  annualCongressesInternships: number;
+  annualBooksPublications: number;
+  annualTravelFreight: number;
+  annualPerDiem: number;
+  annualFoodBeverages: number;
+  annualOtherCosts: number;
   centralOverheadRate: number;
   facultyOverheadRate: number;
 }
@@ -252,8 +264,8 @@ export interface AnnualFlow {
   directTeachingCost: number;
   replacementTeachingCost: number;
   thesisGuidanceCost: number;
-  manualAcademicHonoraria: number;
   academicHonoraria: number;
+  otherNonAcademicHonoraria: number;
   nonAcademicHonoraria: number;
   direction: number;
   assistance: number;

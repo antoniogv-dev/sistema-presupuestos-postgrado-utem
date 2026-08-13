@@ -424,6 +424,18 @@ model BudgetAnnualOverride {
   annualAssistance                 BigInt
   assistanceProrated               Boolean      @default(false)
   assistanceAllocationRate         Decimal      @default(1)
+  annualOtherNonAcademicHonoraria   BigInt?
+  otherNonAcademicProrated          Boolean      @default(false)
+  otherNonAcademicAllocationRate    Decimal      @default(1)
+  annualOperational                 BigInt?
+  annualSoftware                    BigInt?
+  annualDiffusion                   BigInt?
+  annualCongressesInternships       BigInt?
+  annualBooksPublications           BigInt?
+  annualTravelFreight               BigInt?
+  annualPerDiem                     BigInt?
+  annualFoodBeverages               BigInt?
+  annualOtherCosts                  BigInt?
   centralOverheadRate              Decimal      @default(0)
   facultyOverheadRate              Decimal      @default(0)
   budget                           CohortBudget @relation(fields: [budgetId], references: [id], onDelete: Cascade)

@@ -1,6 +1,6 @@
 {
   "name": "sistema-presupuestos-postgrado-utem",
-  "version": "1.0.20-d1-web",
+  "version": "1.0.21-d1-web",
   "private": true,
   "description": "Sistema de Presupuestos de Postgrado UTEM para Cloudflare Workers y D1, desplegable desde GitHub y Cloudflare web.",
   "engines": {

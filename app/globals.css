@@ -367,3 +367,40 @@ input:disabled { background: var(--surface-muted); color: #52606b; }
   color: #64748b;
   font-size: 0.85rem;
 }
+
+/* v10.11: edición directa del flujo y detalle integrado de costos */
+.cashflow-editable-table .flow-editable-row th small,
+.cashflow-editable-table .flow-detail-row th small {
+  display: block;
+  margin-top: .2rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+.cashflow-editable-table .flow-money-input {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .35rem;
+  min-width: 150px;
+}
+.cashflow-editable-table .flow-money-input span {
+  white-space: nowrap;
+  font-weight: 600;
+}
+.cashflow-editable-table .flow-money-input input {
+  min-height: 34px;
+  margin: 0;
+  padding: 5px 7px;
+  text-align: right;
+  min-width: 105px;
+  max-width: 145px;
+}
+.cashflow-editable-table .flow-detail-row th {
+  padding-left: 2rem;
+  font-weight: 500;
+}
+.cashflow-editable-table .flow-detail-row td,
+.cashflow-editable-table .flow-detail-row th {
+  background: #f6f8fb;
+  font-size: .92rem;
+}

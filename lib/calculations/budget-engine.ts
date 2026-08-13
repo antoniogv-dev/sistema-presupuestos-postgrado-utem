@@ -55,6 +55,18 @@ export function defaultAnnualOverrideForYear(
     annualAssistance: parameterForYear(scoped.annualAssistance, year),
     assistanceProrated: false,
     assistanceAllocationRate: 1,
+    annualOtherNonAcademicHonoraria: 0,
+    otherNonAcademicProrated: false,
+    otherNonAcademicAllocationRate: 1,
+    annualOperational: parameterForYear(scoped.referenceOperational, year),
+    annualSoftware: parameterForYear(scoped.softwareLicenses, year),
+    annualDiffusion: parameterForYear(scoped.diffusionAdmission, year),
+    annualCongressesInternships: parameterForYear(scoped.congressesInternships, year),
+    annualBooksPublications: 0,
+    annualTravelFreight: 0,
+    annualPerDiem: 0,
+    annualFoodBeverages: 0,
+    annualOtherCosts: 0,
     centralOverheadRate: overhead ? scoped.centralOverheadRate : 0,
     facultyOverheadRate: overhead ? (budget.facultyOverheadRate ?? scoped.facultyOverheadRate) : 0,
   };
@@ -78,6 +90,18 @@ export function resolvedAnnualOverrideForYear(
     annualTuition: storedTuition > 0 ? storedTuition : fallback.annualTuition,
     directionAllocationRate: clampRate(stored.directionAllocationRate),
     assistanceAllocationRate: clampRate(stored.assistanceAllocationRate),
+    annualOtherNonAcademicHonoraria: Number.isFinite(stored.annualOtherNonAcademicHonoraria) ? nonNegative(stored.annualOtherNonAcademicHonoraria) : fallback.annualOtherNonAcademicHonoraria,
+    otherNonAcademicProrated: Boolean(stored.otherNonAcademicProrated),
+    otherNonAcademicAllocationRate: Number.isFinite(stored.otherNonAcademicAllocationRate) ? clampRate(stored.otherNonAcademicAllocationRate) : 1,
+    annualOperational: Number.isFinite(stored.annualOperational) ? nonNegative(stored.annualOperational) : fallback.annualOperational,
+    annualSoftware: Number.isFinite(stored.annualSoftware) ? nonNegative(stored.annualSoftware) : fallback.annualSoftware,
+    annualDiffusion: Number.isFinite(stored.annualDiffusion) ? nonNegative(stored.annualDiffusion) : fallback.annualDiffusion,
+    annualCongressesInternships: Number.isFinite(stored.annualCongressesInternships) ? nonNegative(stored.annualCongressesInternships) : fallback.annualCongressesInternships,
+    annualBooksPublications: Number.isFinite(stored.annualBooksPublications) ? nonNegative(stored.annualBooksPublications) : fallback.annualBooksPublications,
+    annualTravelFreight: Number.isFinite(stored.annualTravelFreight) ? nonNegative(stored.annualTravelFreight) : fallback.annualTravelFreight,
+    annualPerDiem: Number.isFinite(stored.annualPerDiem) ? nonNegative(stored.annualPerDiem) : fallback.annualPerDiem,
+    annualFoodBeverages: Number.isFinite(stored.annualFoodBeverages) ? nonNegative(stored.annualFoodBeverages) : fallback.annualFoodBeverages,
+    annualOtherCosts: Number.isFinite(stored.annualOtherCosts) ? nonNegative(stored.annualOtherCosts) : fallback.annualOtherCosts,
     centralOverheadRate: clampRate(stored.centralOverheadRate),
     facultyOverheadRate: clampRate(stored.facultyOverheadRate),
   };
@@ -155,6 +179,7 @@ export function validateBudget(budget: CohortBudget): string[] {
     for (const [label, rate] of [
       ["prorrateo de dirección", item.directionAllocationRate],
       ["prorrateo de asistencia", item.assistanceAllocationRate],
+      ["prorrateo de otros honorarios no académicos", item.otherNonAcademicAllocationRate],
       ["overhead central", item.centralOverheadRate],
       ["overhead de facultad", item.facultyOverheadRate],
     ] as const) {
@@ -221,30 +246,44 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
       return explicit === undefined ? inferredGraduatingStudents(budget, semester) : nonNegative(explicit);
     }));
     const thesisGuidanceCost = graduatingStudents * nonNegative(override.thesisGuidancePerGraduatingStudent);
-    const manualAcademicHonoraria = sumManualItems(budget, year, ["Honorarios académicos"]);
-    const academicHonoraria = directTeachingCost + replacementTeachingCost + thesisGuidanceCost + manualAcademicHonoraria;
+    // No existe una línea separada de "honorarios académicos adicionales":
+    // los costos académicos son docencia directa, reemplazo y guía de tesis.
+    const academicHonoraria = directTeachingCost + replacementTeachingCost + thesisGuidanceCost;
     const thesisStudents = Math.max(0, ...semesters.map((semester) => thesisStudentsForSemester(budget, semester)));
-    const nonAcademicHonoraria = sumManualItems(budget, year, ["Honorarios no académicos"]);
 
     const directionBase = nonNegative(override.annualDirection) * (override.directionProrated ? clampRate(override.directionAllocationRate) : 1);
     const assistanceBase = nonNegative(override.annualAssistance) * (override.assistanceProrated ? clampRate(override.assistanceAllocationRate) : 1);
+    const otherNonAcademicBase = nonNegative(override.annualOtherNonAcademicHonoraria)
+      * (override.otherNonAcademicProrated ? clampRate(override.otherNonAcademicAllocationRate) : 1);
     const direction = directionBase + sumManualItems(budget, year, ["Dirección"]);
-    const assistance = assistanceBase + sumManualItems(budget, year, ["Asistencia"]);
-    const operational = parameterForYear(scoped.referenceOperational, year) + sumManualItems(budget, year, ["Gastos operacionales", "Bienes y servicios"]);
-    const software = parameterForYear(scoped.softwareLicenses, year) + sumManualItems(budget, year, ["Software"]);
-    const diffusion = parameterForYear(scoped.diffusionAdmission, year) + sumManualItems(budget, year, ["Difusión"]);
+    const assistance = assistanceBase + sumManualItems(budget, year, ["Asistencia", "Asistencia de dirección"]);
+    const otherNonAcademicHonoraria = otherNonAcademicBase
+      + sumManualItems(budget, year, ["Honorarios no académicos", "Otros honorarios no académicos"]);
+    // "Honorarios no académicos" es subtotal del staff, no un ítem independiente.
+    const nonAcademicHonoraria = direction + assistance + otherNonAcademicHonoraria;
+
+    const operational = nonNegative(override.annualOperational)
+      + sumManualItems(budget, year, ["Gastos operacionales", "Bienes y servicios", "Gastos operacionales / Bienes y servicios"]);
+    const software = nonNegative(override.annualSoftware)
+      + sumManualItems(budget, year, ["Software", "Software y licencias"]);
+    const diffusion = nonNegative(override.annualDiffusion) + sumManualItems(budget, year, ["Difusión"]);
     const maintenanceScholarships = (budget.scholarshipsEnabled ? sum(semesters.map((semester) =>
       nonNegative(semester.maintenanceScholarshipStudents)
       * nonNegative(semester.maintenanceScholarshipMonths)
       * parameterForYear(parameters.maintenanceScholarshipMonthly, semester.year),
     )) : 0) + sumManualItems(budget, year, ["Becas de manutención"]);
-    const congressesInternships = parameterForYear(scoped.congressesInternships, year)
-      + sumManualItems(budget, year, ["Congresos", "Pasantías"]);
-    const booksPublications = sumManualItems(budget, year, ["Libros y publicaciones"]);
-    const travelFreight = sumManualItems(budget, year, ["Pasajes y fletes"]);
-    const perDiem = sumManualItems(budget, year, ["Viáticos"]);
-    const foodBeverages = sumManualItems(budget, year, ["Alimentos y bebidas"]);
-    const otherCosts = sumManualItems(budget, year, ["Otros"]);
+    const congressesInternships = nonNegative(override.annualCongressesInternships)
+      + sumManualItems(budget, year, ["Congresos", "Pasantías", "Congresos y pasantías"]);
+    const booksPublications = nonNegative(override.annualBooksPublications)
+      + sumManualItems(budget, year, ["Libros y publicaciones"]);
+    const travelFreight = nonNegative(override.annualTravelFreight)
+      + sumManualItems(budget, year, ["Pasajes y fletes"]);
+    const perDiem = nonNegative(override.annualPerDiem)
+      + sumManualItems(budget, year, ["Viáticos"]);
+    const foodBeverages = nonNegative(override.annualFoodBeverages)
+      + sumManualItems(budget, year, ["Alimentos y bebidas"]);
+    const otherCosts = nonNegative(override.annualOtherCosts)
+      + sumManualItems(budget, year, ["Otros", "Otros costos y gastos", "Honorarios académicos"]);
 
     // Base solicitada: arancel bruto - descuentos de arancel - incobrables.
     const overheadBase = Math.max(0, grossTuition - discounts - badDebt);
@@ -252,7 +291,7 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
     const facultyOverheadRate = overheadApplies(budget.program.type) ? clampRate(override.facultyOverheadRate) : 0;
     const centralOverhead = overheadBase * centralOverheadRate;
     const facultyOverhead = overheadBase * facultyOverheadRate;
-    const totalExpenses = academicHonoraria + nonAcademicHonoraria + direction + assistance + operational + software + diffusion
+    const totalExpenses = academicHonoraria + nonAcademicHonoraria + operational + software + diffusion
       + maintenanceScholarships + congressesInternships + booksPublications + travelFreight + perDiem + foodBeverages + otherCosts + centralOverhead + facultyOverhead;
     const netFlow = totalIncome - totalExpenses;
     const startingCarryover = yearIndex === 0 ? (budget.includeAuthorizedCarryover ? budget.authorizedInitialCarryover : 0) : previousAccumulated;
@@ -283,8 +322,8 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
       directTeachingCost,
       replacementTeachingCost,
       thesisGuidanceCost,
-      manualAcademicHonoraria,
       academicHonoraria,
+      otherNonAcademicHonoraria,
       nonAcademicHonoraria,
       direction,
       assistance,

@@ -4,7 +4,10 @@ import type { BudgetItem, CohortBudget, DuplicateCostAlert, InstitutionalParamet
 export interface ConsolidatedYear { year: number; grossIncome: number; grossExpenses: number; normalizedExpenses: number; duplicateAvoided: number; netFlow: number; }
 export interface ConsolidationGroup { id: string; label: string; kind: "PROGRAM" | "ACADEMIC" | "PROFESSIONAL" | "INSTITUTIONAL"; programTypes: ProgramType[]; budgetCount: number; rows: ConsolidatedYear[]; }
 
-export const SHARED_CATEGORIES: BudgetItem["category"][] = ["Dirección", "Asistencia", "Gastos operacionales", "Software"];
+export const SHARED_CATEGORIES: BudgetItem["category"][] = [
+  "Dirección", "Asistencia de dirección", "Otros honorarios no académicos",
+  "Gastos operacionales / Bienes y servicios", "Software y licencias",
+];
 const normalizedName = (value: string) => value.trim().toLocaleLowerCase("es-CL").replace(/\s+/g, " ");
 const sum = (values: number[]) => values.reduce((acc, value) => acc + value, 0);
 
@@ -51,7 +54,7 @@ export function consolidateBudgets(budgets: CohortBudget[], parameters: Institut
     const automaticGroups = new Map<string, number[]>();
     for (const { budget, flow } of entries) {
       if (!budget.normalizeSharedCosts) continue;
-      const amount = flow.direction + flow.assistance + flow.operational + flow.software;
+      const amount = flow.nonAcademicHonoraria + flow.operational + flow.software;
       const current = automaticGroups.get(budget.program.id) ?? [];
       current.push(amount);
       automaticGroups.set(budget.program.id, current);

@@ -72,6 +72,18 @@ const annualOverrideSchema = z.object({
   annualAssistance: z.number().int().nonnegative(),
   assistanceProrated: z.boolean().default(false),
   assistanceAllocationRate: z.number().min(0).max(1).default(1),
+  annualOtherNonAcademicHonoraria: z.number().int().nonnegative(),
+  otherNonAcademicProrated: z.boolean().default(false),
+  otherNonAcademicAllocationRate: z.number().min(0).max(1).default(1),
+  annualOperational: z.number().int().nonnegative(),
+  annualSoftware: z.number().int().nonnegative(),
+  annualDiffusion: z.number().int().nonnegative(),
+  annualCongressesInternships: z.number().int().nonnegative(),
+  annualBooksPublications: z.number().int().nonnegative(),
+  annualTravelFreight: z.number().int().nonnegative(),
+  annualPerDiem: z.number().int().nonnegative(),
+  annualFoodBeverages: z.number().int().nonnegative(),
+  annualOtherCosts: z.number().int().nonnegative(),
   centralOverheadRate: z.number().min(0).max(1).default(0),
   facultyOverheadRate: z.number().min(0).max(1).default(0),
 });
@@ -331,14 +343,20 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
             "id", "budgetId", "year", "directTeachingHourValue", "annualEnrollmentFee", "annualTuition",
             "thesisGuidancePerGraduatingStudent", "annualDirection", "directionProrated",
             "directionAllocationRate", "annualAssistance", "assistanceProrated",
-            "assistanceAllocationRate", "centralOverheadRate", "facultyOverheadRate"
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "assistanceAllocationRate", "annualOtherNonAcademicHonoraria", "otherNonAcademicProrated",
+            "otherNonAcademicAllocationRate", "annualOperational", "annualSoftware", "annualDiffusion",
+            "annualCongressesInternships", "annualBooksPublications", "annualTravelFreight", "annualPerDiem",
+            "annualFoodBeverages", "annualOtherCosts", "centralOverheadRate", "facultyOverheadRate"
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           d1Id("annual-override"), budgetId, annual.year, annual.directTeachingHourValue,
           annual.annualEnrollmentFee, annual.annualTuition, annual.thesisGuidancePerGraduatingStudent, annual.annualDirection,
           annual.directionProrated ? 1 : 0, annual.directionAllocationRate, annual.annualAssistance,
           annual.assistanceProrated ? 1 : 0, annual.assistanceAllocationRate,
-          annual.centralOverheadRate, annual.facultyOverheadRate,
+          annual.annualOtherNonAcademicHonoraria, annual.otherNonAcademicProrated ? 1 : 0,
+          annual.otherNonAcademicAllocationRate, annual.annualOperational, annual.annualSoftware, annual.annualDiffusion,
+          annual.annualCongressesInternships, annual.annualBooksPublications, annual.annualTravelFreight, annual.annualPerDiem,
+          annual.annualFoodBeverages, annual.annualOtherCosts, annual.centralOverheadRate, annual.facultyOverheadRate,
         ));
       }
     }
