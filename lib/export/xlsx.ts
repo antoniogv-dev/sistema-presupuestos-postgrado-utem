@@ -1,4 +1,4 @@
-import type { FinancialReport, FinancialReportRow } from "./report-model";
+import type { FinancialReport, FinancialReportRow, ParameterReport, ParameterReportRow } from "./report-model";
 
 const encoder = new TextEncoder();
 const crcTable = (() => {
@@ -98,11 +98,11 @@ function numericStyle(row: FinancialReportRow): number {
   return base;
 }
 
-function buildSheet(report: FinancialReport): string {
+function buildFinancialSheet(report: FinancialReport): string {
   const lastCol = columnName(report.years.length + 1);
   const rows: string[] = [];
   rows.push(`<row r="1" ht="24" customHeight="1"><c r="A1" s="1" t="inlineStr"><is><t>${xml(report.title)}</t></is></c></row>`);
-  rows.push(`<row r="2" ht="18" customHeight="1"><c r="A2" s="2" t="inlineStr"><is><t>${xml(report.subtitle)}</t></is></c></row>`);
+  rows.push(`<row r="2" ht="18" customHeight="1"><c r="A2" s="29" t="inlineStr"><is><t>${xml(report.subtitle)}</t></is></c></row>`);
   rows.push(`<row r="4" ht="20" customHeight="1"><c r="A4" s="2" t="inlineStr"><is><t>DETALLE</t></is></c>${report.years.map((year, index) => `<c r="${columnName(index + 2)}4" s="2" t="n"><v>${year}</v></c>`).join("")}</row>`);
   report.rows.forEach((row, rowIndex) => {
     const excelRow = rowIndex + 5;
@@ -123,14 +123,63 @@ function buildSheet(report: FinancialReport): string {
 </worksheet>`;
 }
 
+function parameterValueCell(row: ParameterReportRow, cellRef: string): string {
+  if (typeof row.value === "number") {
+    const style = row.valueKind === "currency" ? 31 : row.valueKind === "percent" ? 33 : 32;
+    return `<c r="${cellRef}" s="${style}" t="n"><v>${Number.isFinite(row.value) ? row.value : 0}</v></c>`;
+  }
+  return `<c r="${cellRef}" s="30" t="inlineStr"><is><t>${xml(row.value)}</t></is></c>`;
+}
+
+function buildParameterSheet(report: ParameterReport): string {
+  const rows: string[] = [];
+  rows.push(`<row r="1" ht="24" customHeight="1"><c r="A1" s="1" t="inlineStr"><is><t>${xml(report.title)}</t></is></c></row>`);
+  rows.push(`<row r="2" ht="28" customHeight="1"><c r="A2" s="29" t="inlineStr"><is><t>${xml(report.subtitle)}</t></is></c></row>`);
+  rows.push(`<row r="4" ht="22" customHeight="1"><c r="A4" s="2" t="inlineStr"><is><t>SECCIÓN</t></is></c><c r="B4" s="2" t="inlineStr"><is><t>PARÁMETRO</t></is></c><c r="C4" s="2" t="inlineStr"><is><t>PERIODO</t></is></c><c r="D4" s="2" t="inlineStr"><is><t>VALOR</t></is></c><c r="E4" s="2" t="inlineStr"><is><t>UNIDAD / DETALLE</t></is></c></row>`);
+
+  report.rows.forEach((row, index) => {
+    const excelRow = index + 5;
+    const sectionChanged = index === 0 || report.rows[index - 1]?.section !== row.section;
+    const textStyle = sectionChanged ? 34 : 30;
+    const estimatedLines = Math.max(
+      Math.ceil(row.section.length / 28),
+      Math.ceil(row.parameter.length / 44),
+      Math.ceil(row.period.length / 18),
+      Math.ceil(String(row.value).length / 24),
+      Math.ceil((row.detail ?? "").length / 54),
+      1,
+    );
+    const rowHeight = Math.min(60, Math.max(22, estimatedLines * 15));
+    rows.push(`<row r="${excelRow}" ht="${rowHeight}" customHeight="1">`+
+      `<c r="A${excelRow}" s="${textStyle}" t="inlineStr"><is><t>${xml(row.section)}</t></is></c>`+
+      `<c r="B${excelRow}" s="30" t="inlineStr"><is><t>${xml(row.parameter)}</t></is></c>`+
+      `<c r="C${excelRow}" s="30" t="inlineStr"><is><t>${xml(row.period)}</t></is></c>`+
+      parameterValueCell(row, `D${excelRow}`)+
+      `<c r="E${excelRow}" s="30" t="inlineStr"><is><t>${xml(row.detail ?? "")}</t></is></c>`+
+      `</row>`);
+  });
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<dimension ref="A1:E${report.rows.length + 4}"/>
+<sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<cols><col min="1" max="1" width="25" customWidth="1"/><col min="2" max="2" width="43" customWidth="1"/><col min="3" max="3" width="18" customWidth="1"/><col min="4" max="4" width="20" customWidth="1"/><col min="5" max="5" width="52" customWidth="1"/></cols>
+<sheetData>${rows.join("")}</sheetData>
+<mergeCells count="2"><mergeCell ref="A1:E1"/><mergeCell ref="A2:E2"/></mergeCells>
+<autoFilter ref="A4:E${report.rows.length + 4}"/>
+<pageMargins left="0.25" right="0.25" top="0.35" bottom="0.35" header="0.2" footer="0.2"/>
+<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0" paperSize="9"/>
+</worksheet>`;
+}
+
 const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<numFmts count="3"><numFmt numFmtId="164" formatCode="$ #,##0;($ #,##0);-"/><numFmt numFmtId="165" formatCode="0.0"/><numFmt numFmtId="166" formatCode="0.0%"/></numFmts>
+<numFmts count="3"><numFmt numFmtId="164" formatCode="$ #,##0;($ #,##0);-"/><numFmt numFmtId="165" formatCode="0.##"/><numFmt numFmtId="166" formatCode="0.0%"/></numFmts>
 <fonts count="3"><font><sz val="10"/><name val="Arial"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="10"/><name val="Arial"/></font><font><b/><sz val="10"/><name val="Arial"/></font></fonts>
 <fills count="6"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE2F0D9"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9E2F3"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE7E6E6"/><bgColor indexed="64"/></patternFill></fill></fills>
 <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top style="thin"><color rgb="FFB4C6E7"/></top><bottom style="thin"><color rgb="FFB4C6E7"/></bottom><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="29">
+<cellXfs count="35">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
@@ -142,20 +191,34 @@ const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xf numFmtId="164" fontId="2" fillId="5" borderId="1" xfId="0" applyNumberFormat="1"/>
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="165" fontId="0" fillId="3" borderId="0" xfId="0"/><xf numFmtId="165" fontId="2" fillId="3" borderId="1" xfId="0"/><xf numFmtId="165" fontId="0" fillId="4" borderId="0" xfId="0"/><xf numFmtId="165" fontId="2" fillId="0" borderId="1" xfId="0"/><xf numFmtId="165" fontId="0" fillId="5" borderId="0" xfId="0"/><xf numFmtId="165" fontId="2" fillId="5" borderId="1" xfId="0"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="166" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="166" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="166" fontId="0" fillId="3" borderId="0" xfId="0"/><xf numFmtId="166" fontId="2" fillId="3" borderId="1" xfId="0"/><xf numFmtId="166" fontId="0" fillId="4" borderId="0" xfId="0"/><xf numFmtId="166" fontId="2" fillId="0" borderId="1" xfId="0"/><xf numFmtId="166" fontId="0" fillId="5" borderId="0" xfId="0"/><xf numFmtId="166" fontId="2" fillId="5" borderId="1" xfId="0"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center"/></xf>
+<xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center"/></xf>
+<xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="center"/></xf>
+<xf numFmtId="0" fontId="2" fillId="5" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
-export function createFinancialReportXlsx(report: FinancialReport): Uint8Array {
+export function createFinancialReportXlsx(report: FinancialReport, parameterReport?: ParameterReport): Uint8Array {
   const now = new Date().toISOString();
-  return zip([
-    { name: "[Content_Types].xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>` },
+  const hasParameters = Boolean(parameterReport);
+  const contentTypeSheet2 = hasParameters ? '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' : "";
+  const workbookSheet2 = hasParameters ? '<sheet name="Parámetros utilizados" sheetId="2" r:id="rId2"/>' : "";
+  const worksheetRel2 = hasParameters ? '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>' : "";
+  const stylesRelId = hasParameters ? "rId3" : "rId2";
+
+  const files: Array<{ name: string; data: string | Uint8Array }> = [
+    { name: "[Content_Types].xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>${contentTypeSheet2}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>` },
     { name: "_rels/.rels", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>` },
     { name: "docProps/core.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xml(report.title)}</dc:title><dc:creator>UTEM · Escuela de Postgrado</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created></cp:coreProperties>` },
     { name: "docProps/app.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Sistema de Presupuestos de Postgrado UTEM</Application></Properties>` },
-    { name: "xl/workbook.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Flujo presupuestario" sheetId="1" r:id="rId1"/></sheets></workbook>` },
-    { name: "xl/_rels/workbook.xml.rels", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+    { name: "xl/workbook.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Flujo presupuestario" sheetId="1" r:id="rId1"/>${workbookSheet2}</sheets></workbook>` },
+    { name: "xl/_rels/workbook.xml.rels", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>${worksheetRel2}<Relationship Id="${stylesRelId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
     { name: "xl/styles.xml", data: styles },
-    { name: "xl/worksheets/sheet1.xml", data: buildSheet(report) },
-  ]);
+    { name: "xl/worksheets/sheet1.xml", data: buildFinancialSheet(report) },
+  ];
+  if (parameterReport) files.push({ name: "xl/worksheets/sheet2.xml", data: buildParameterSheet(parameterReport) });
+  return zip(files);
 }

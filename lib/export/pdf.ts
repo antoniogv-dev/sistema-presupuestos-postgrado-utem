@@ -1,4 +1,4 @@
-import type { FinancialReport, FinancialReportRow } from "./report-model";
+import type { FinancialReport, FinancialReportRow, ParameterReport, ParameterReportRow } from "./report-model";
 
 const PAGE_WIDTH = 842;
 const PAGE_HEIGHT = 595;
@@ -7,6 +7,7 @@ const TITLE_HEIGHT = 28;
 const SUBTITLE_HEIGHT = 18;
 const HEADER_HEIGHT = 18;
 const ROW_HEIGHT = 13;
+const PARAMETER_BASE_ROW_HEIGHT = 15;
 
 type PdfColor = readonly [number, number, number];
 
@@ -15,6 +16,7 @@ const COLORS: Record<string, PdfColor> = {
   income: [0.89, 0.94, 0.85],
   expense: [0.85, 0.89, 0.95],
   result: [0.91, 0.90, 0.90],
+  section: [0.93, 0.94, 0.96],
   white: [1, 1, 1],
   black: [0, 0, 0],
   border: [0.72, 0.78, 0.86],
@@ -54,6 +56,13 @@ function displayValue(row: FinancialReportRow, value: number): string {
   return money(value);
 }
 
+function displayParameterValue(row: ParameterReportRow): string {
+  if (typeof row.value === "string") return row.value;
+  if (row.valueKind === "percent") return percent(row.value);
+  if (row.valueKind === "currency") return money(row.value);
+  return number(row.value);
+}
+
 function fillForTone(tone: FinancialReportRow["tone"]): PdfColor {
   if (tone === "income") return COLORS.income;
   if (tone === "expense") return COLORS.expense;
@@ -77,7 +86,26 @@ function rect(x: number, y: number, width: number, height: number, fill: PdfColo
   return `${fill[0]} ${fill[1]} ${fill[2]} rg ${stroke[0]} ${stroke[1]} ${stroke[2]} RG ${x} ${y} ${width} ${height} re B\n`;
 }
 
-function createPageContent(report: FinancialReport, rows: FinancialReportRow[], pageNumber: number, totalPages: number): string {
+function wrapText(text: string, width: number, size: number): string[] {
+  const clean = text.trim();
+  if (!clean) return [""];
+  const words = clean.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (textWidthApprox(candidate, size) <= width || !current) {
+      current = candidate;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function createFinancialPageContent(report: FinancialReport, rows: FinancialReportRow[], pageNumber: number, totalPages: number): string {
   const tableWidth = PAGE_WIDTH - MARGIN * 2;
   const labelWidth = Math.min(370, tableWidth * 0.55);
   const valueWidth = (tableWidth - labelWidth) / report.years.length;
@@ -112,6 +140,77 @@ function createPageContent(report: FinancialReport, rows: FinancialReportRow[], 
   return content;
 }
 
+const PARAMETER_WIDTHS = [120, 250, 78, 115, PAGE_WIDTH - MARGIN * 2 - 120 - 250 - 78 - 115];
+
+function parameterRowLayout(row: ParameterReportRow) {
+  const fontSize = 6.5;
+  const columns = [row.section, row.parameter, row.period, displayParameterValue(row), row.detail ?? ""];
+  const lines = columns.map((text, index) => wrapText(text, PARAMETER_WIDTHS[index] - 8, fontSize));
+  const lineCount = Math.max(...lines.map((item) => item.length));
+  const height = Math.max(PARAMETER_BASE_ROW_HEIGHT, lineCount * 8 + 5);
+  return { columns: lines, height, fontSize };
+}
+
+function paginateParameterRows(rows: ParameterReportRow[]): ParameterReportRow[][] {
+  const available = PAGE_HEIGHT - MARGIN * 2 - TITLE_HEIGHT - SUBTITLE_HEIGHT - HEADER_HEIGHT;
+  const pages: ParameterReportRow[][] = [];
+  let current: ParameterReportRow[] = [];
+  let used = 0;
+  for (const row of rows) {
+    const height = parameterRowLayout(row).height;
+    if (current.length && used + height > available) {
+      pages.push(current);
+      current = [];
+      used = 0;
+    }
+    current.push(row);
+    used += height;
+  }
+  if (current.length || pages.length === 0) pages.push(current);
+  return pages;
+}
+
+function createParameterPageContent(report: ParameterReport, rows: ParameterReportRow[], pageNumber: number, totalPages: number): string {
+  const tableWidth = PAGE_WIDTH - MARGIN * 2;
+  let y = PAGE_HEIGHT - MARGIN - TITLE_HEIGHT;
+  let content = "";
+
+  content += rect(MARGIN, y, tableWidth, TITLE_HEIGHT, COLORS.navy, COLORS.navy);
+  content += `1 1 1 rg\n${drawText(report.title, MARGIN + 6, y + 9, 10, true)}`;
+  y -= SUBTITLE_HEIGHT;
+  content += rect(MARGIN, y, tableWidth, SUBTITLE_HEIGHT, COLORS.white);
+  content += `0 0 0 rg\n${drawText(`${report.subtitle} · Página ${pageNumber}/${totalPages}`, MARGIN + 6, y + 5, 7, false)}`;
+  y -= HEADER_HEIGHT;
+
+  const headers = ["SECCIÓN", "PARÁMETRO", "PERIODO", "VALOR", "UNIDAD / DETALLE"];
+  let x = MARGIN;
+  headers.forEach((header, index) => {
+    const width = PARAMETER_WIDTHS[index];
+    content += rect(x, y, width, HEADER_HEIGHT, COLORS.navy, COLORS.navy);
+    content += `1 1 1 rg\n${drawText(header, x + 4, y + 5, 7, true)}`;
+    x += width;
+  });
+
+  let previousSection = "";
+  for (const row of rows) {
+    const layout = parameterRowLayout(row);
+    y -= layout.height;
+    const sectionChanged = row.section !== previousSection;
+    const fill = sectionChanged ? COLORS.section : COLORS.white;
+    x = MARGIN;
+    layout.columns.forEach((lines, index) => {
+      const width = PARAMETER_WIDTHS[index];
+      content += rect(x, y, width, layout.height, fill);
+      lines.forEach((line, lineIndex) => {
+        content += `0 0 0 rg\n${drawText(line, x + 4, y + layout.height - 9 - lineIndex * 8, layout.fontSize, sectionChanged && index === 0)}`;
+      });
+      x += width;
+    });
+    previousSection = row.section;
+  }
+  return content;
+}
+
 function buildPdf(objects: Array<string | Uint8Array>): Uint8Array {
   const header = latin1("%PDF-1.4\n%âãÏÓ\n");
   const chunks: Uint8Array[] = [header];
@@ -137,22 +236,28 @@ function buildPdf(objects: Array<string | Uint8Array>): Uint8Array {
   return output;
 }
 
-export function createFinancialReportPdf(report: FinancialReport): Uint8Array {
+export function createFinancialReportPdf(report: FinancialReport, parameterReport?: ParameterReport): Uint8Array {
   const maxRows = Math.max(1, Math.floor((PAGE_HEIGHT - MARGIN * 2 - TITLE_HEIGHT - SUBTITLE_HEIGHT - HEADER_HEIGHT) / ROW_HEIGHT));
-  const pages: FinancialReportRow[][] = [];
-  for (let index = 0; index < report.rows.length; index += maxRows) pages.push(report.rows.slice(index, index + maxRows));
+  const financialPages: FinancialReportRow[][] = [];
+  for (let index = 0; index < report.rows.length; index += maxRows) financialPages.push(report.rows.slice(index, index + maxRows));
+  const parameterPages = parameterReport ? paginateParameterRows(parameterReport.rows) : [];
+  const totalPages = financialPages.length + parameterPages.length;
+
+  const pageContents: string[] = [];
+  financialPages.forEach((rows, index) => pageContents.push(createFinancialPageContent(report, rows, index + 1, totalPages)));
+  parameterPages.forEach((rows, index) => pageContents.push(createParameterPageContent(parameterReport!, rows, financialPages.length + index + 1, totalPages)));
 
   const objects: Array<string | Uint8Array> = [];
   objects.push("<< /Type /Catalog /Pages 2 0 R >>");
-  const pageObjectIds = pages.map((_, index) => 5 + index * 2);
-  objects.push(`<< /Type /Pages /Count ${pages.length} /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] >>`);
+  const pageObjectIds = pageContents.map((_, index) => 5 + index * 2);
+  objects.push(`<< /Type /Pages /Count ${pageContents.length} /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] >>`);
   objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
   objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
 
-  pages.forEach((rows, index) => {
+  pageContents.forEach((pageContent, index) => {
     const pageId = 5 + index * 2;
     const contentId = pageId + 1;
-    const content = latin1(createPageContent(report, rows, index + 1, pages.length));
+    const content = latin1(pageContent);
     objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentId} 0 R >>`);
     objects.push(latin1(`<< /Length ${content.length} >>\nstream\n${new TextDecoder("latin1").decode(content)}\nendstream`));
   });

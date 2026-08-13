@@ -28,7 +28,7 @@ import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
 import { availableWorkflowActions, canDeleteBudget, canEditBudget, type WorkflowAction } from "@/lib/workflow/budget-workflow";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.11";
+const FUNCTIONAL_RELEASE = "v10.12";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -378,8 +378,8 @@ export function BudgetWorkspace() {
   function exportBudget(format: "xlsx" | "pdf") {
     if (!budget || !result) return;
     try {
-      if (format === "xlsx") downloadBudgetXlsx(budget, result);
-      else downloadBudgetPdf(budget, result);
+      if (format === "xlsx") downloadBudgetXlsx(budget, result, parameters);
+      else downloadBudgetPdf(budget, result, parameters);
       setMessage(`Exportación ${format.toUpperCase()} generada.`);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "No fue posible generar la exportación.");

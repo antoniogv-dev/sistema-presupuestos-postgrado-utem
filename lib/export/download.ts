@@ -1,9 +1,9 @@
 "use client";
 
-import type { BudgetResult, CohortBudget } from "../calculations/types";
+import type { BudgetResult, CohortBudget, InstitutionalParameters } from "../calculations/types";
 import type { ConsolidationGroup } from "../calculations/consolidation";
 import { createFinancialReportPdf } from "./pdf";
-import { buildFinancialReport, type FinancialReport } from "./report-model";
+import { buildFinancialReport, buildParameterReport, type FinancialReport } from "./report-model";
 import { createFinancialReportXlsx } from "./xlsx";
 
 function slug(value: string): string {
@@ -35,14 +35,16 @@ export function downloadTextFile(content: string, type: string, filename: string
   triggerDownload(new Blob([content], { type }), filename);
 }
 
-export function downloadBudgetXlsx(budget: CohortBudget, result: BudgetResult) {
+export function downloadBudgetXlsx(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters) {
   const report = buildFinancialReport(budget, result);
-  download(createFinancialReportXlsx(report), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.xlsx`);
+  const parameterReport = buildParameterReport(budget, result, parameters);
+  download(createFinancialReportXlsx(report, parameterReport), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.xlsx`);
 }
 
-export function downloadBudgetPdf(budget: CohortBudget, result: BudgetResult) {
+export function downloadBudgetPdf(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters) {
   const report = buildFinancialReport(budget, result);
-  download(createFinancialReportPdf(report), "application/pdf", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.pdf`);
+  const parameterReport = buildParameterReport(budget, result, parameters);
+  download(createFinancialReportPdf(report, parameterReport), "application/pdf", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.pdf`);
 }
 
 function csvCell(value: unknown): string {

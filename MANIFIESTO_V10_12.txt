@@ -1,0 +1,11 @@
+Sistema de Presupuestos de Postgrado UTEM
+Release funcional: v10.12
+Versión técnica: 1.0.22-d1-web
+
+Cambios:
+- segunda hoja XLSX "Parámetros utilizados";
+- anexo PDF con parámetros utilizados;
+- parámetros anuales y semestrales efectivos;
+- estudiantes, descuentos, becas, ingresos extraordinarios y costos manuales;
+- fuente de arancel, plantilla, arrastre y controles de presupuesto;
+- sin cambios de esquema D1 ni fórmulas financieras.

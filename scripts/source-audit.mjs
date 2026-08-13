@@ -252,7 +252,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.11"',
+  'FUNCTIONAL_RELEASE = "v10.12"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -272,8 +272,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.11") || !appShellV110.includes("1.0.21-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.11 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.12") || !appShellV110.includes("1.0.22-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.12 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -313,6 +313,30 @@ for (const marker of [
 }
 for (const forbidden of ["Honorarios académicos adicionales", "Detalle de costos y gastos registrados"]) {
   if (reportModelV111.includes(forbidden)) fail(`report-model.ts: no debe contener ${forbidden}.`);
+}
+
+// v10.12: trazabilidad de todos los parámetros usados en las exportaciones.
+for (const marker of [
+  "buildParameterReport",
+  "Parámetros anuales",
+  "Parámetros semestrales",
+  "Descuentos de arancel",
+  "Costos y gastos registrados",
+  "Valor hora docencia directa",
+]) {
+  if (!reportModelV111.includes(marker)) fail(`report-model.ts: falta exportación de parámetros v10.12 ${marker}.`);
+}
+const xlsxV112 = await readFile(path.join(root, "lib/export/xlsx.ts"), "utf8");
+for (const marker of ["Parámetros utilizados", "sheet2.xml", "buildParameterSheet"]) {
+  if (!xlsxV112.includes(marker)) fail(`xlsx.ts: falta segunda hoja de parámetros v10.12 ${marker}.`);
+}
+const pdfV112 = await readFile(path.join(root, "lib/export/pdf.ts"), "utf8");
+for (const marker of ["createParameterPageContent", "paginateParameterRows", "UNIDAD / DETALLE"]) {
+  if (!pdfV112.includes(marker)) fail(`pdf.ts: falta anexo PDF de parámetros v10.12 ${marker}.`);
+}
+const downloadV112 = await readFile(path.join(root, "lib/export/download.ts"), "utf8");
+if (!downloadV112.includes("buildParameterReport") || !downloadV112.includes("InstitutionalParameters")) {
+  fail("download.ts: las exportaciones individuales deben recibir los parámetros institucionales y construir su anexo v10.12.");
 }
 
 const prismaFactory = await readFile(path.join(root, "lib/database/prisma.ts"), "utf8");
