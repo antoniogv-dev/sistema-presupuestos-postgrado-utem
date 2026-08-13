@@ -404,3 +404,38 @@ input:disabled { background: var(--surface-muted); color: #52606b; }
   background: #f6f8fb;
   font-size: .92rem;
 }
+
+/* v10.13: acción de eliminación directamente en el flujo */
+.cashflow-editable-table .flow-action-header,
+.cashflow-editable-table .flow-action-cell {
+  width: 84px;
+  min-width: 84px;
+  text-align: center;
+  white-space: nowrap;
+}
+.cashflow-editable-table .flow-detail-row .flow-action-cell {
+  background: #f6f8fb;
+  padding-left: .45rem;
+  padding-right: .45rem;
+}
+.cashflow-editable-table .flow-action-cell .text-button {
+  margin: 0;
+}
+
+/* v10.14: eliminación visible y verificable de costos desde el flujo */
+.cashflow-editable-table .flow-remove-button {
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid #b42318;
+  background: #fff;
+  color: #b42318;
+  font-size: .82rem;
+  font-weight: 700;
+}
+.cashflow-editable-table .flow-remove-button:hover:not(:disabled) {
+  background: #fff1f0;
+}
+.cashflow-editable-table .flow-detail-row th > span {
+  font-weight: 700;
+  color: #17324d;
+}

@@ -2,6 +2,8 @@ import type { FinancialReport, FinancialReportRow, ParameterReport, ParameterRep
 
 const PAGE_WIDTH = 842;
 const PAGE_HEIGHT = 595;
+const COVER_PAGE_WIDTH = 595;
+const COVER_PAGE_HEIGHT = 842;
 const MARGIN = 24;
 const TITLE_HEIGHT = 28;
 const SUBTITLE_HEIGHT = 18;
@@ -10,6 +12,14 @@ const ROW_HEIGHT = 13;
 const PARAMETER_BASE_ROW_HEIGHT = 15;
 
 type PdfColor = readonly [number, number, number];
+
+export interface PdfCover {
+  jpegBytes: Uint8Array;
+  imageWidth: number;
+  imageHeight: number;
+  title: string;
+  subtitle: string;
+}
 
 const COLORS: Record<string, PdfColor> = {
   navy: [0.12, 0.31, 0.47],
@@ -30,6 +40,17 @@ function latin1(value: string): Uint8Array {
     out[i] = code <= 255 ? code : 63;
   }
   return out;
+}
+
+function concatBytes(parts: Uint8Array[]): Uint8Array {
+  const length = parts.reduce((total, part) => total + part.length, 0);
+  const output = new Uint8Array(length);
+  let offset = 0;
+  for (const part of parts) {
+    output.set(part, offset);
+    offset += part.length;
+  }
+  return output;
 }
 
 function escapePdf(value: string): string {
@@ -211,6 +232,56 @@ function createParameterPageContent(report: ParameterReport, rows: ParameterRepo
   return content;
 }
 
+function createCoverPageContent(cover: PdfCover): string {
+  const scale = Math.max(COVER_PAGE_WIDTH / cover.imageWidth, COVER_PAGE_HEIGHT / cover.imageHeight);
+  const drawWidth = cover.imageWidth * scale;
+  const drawHeight = cover.imageHeight * scale;
+  const imageX = (COVER_PAGE_WIDTH - drawWidth) / 2;
+  const imageY = (COVER_PAGE_HEIGHT - drawHeight) / 2;
+  const right = COVER_PAGE_WIDTH - 50;
+  const maxTitleWidth = 410;
+  const titleSize = cover.title.length > 70 ? 25 : cover.title.length > 48 ? 29 : cover.title.length > 30 ? 32 : 35;
+  const titleLines = wrapText(cover.title, maxTitleWidth, titleSize);
+  const subtitleLines = cover.subtitle
+    .split("\n")
+    .flatMap((line) => wrapText(line, maxTitleWidth, 14));
+
+  // El bloque se centra deliberadamente en la zona media de la portada y
+  // mantiene alineación a la derecha, tal como se usa en la identidad visual.
+  const titleHeight = titleLines.length * (titleSize + 6);
+  const subtitleHeight = subtitleLines.length * 20;
+  const blockHeight = titleHeight + 28 + subtitleHeight;
+  let y = COVER_PAGE_HEIGHT * 0.56 + blockHeight / 2;
+  let content = `q ${drawWidth.toFixed(2)} 0 0 ${drawHeight.toFixed(2)} ${imageX.toFixed(2)} ${imageY.toFixed(2)} cm /Im1 Do Q\n`;
+
+  content += "1 1 1 rg\n";
+  for (const line of titleLines) {
+    content += drawRightText(line, right, y, titleSize, true);
+    y -= titleSize + 6;
+  }
+  y -= 8;
+  content += `1 1 1 RG 1.5 w ${(right - 190).toFixed(2)} ${y.toFixed(2)} m ${right.toFixed(2)} ${y.toFixed(2)} l S\n`;
+  y -= 27;
+  for (const line of subtitleLines) {
+    content += drawRightText(line, right, y, 14, false);
+    y -= 20;
+  }
+  return content;
+}
+
+function jpegObject(cover: PdfCover): Uint8Array {
+  return concatBytes([
+    latin1(`<< /Type /XObject /Subtype /Image /Width ${cover.imageWidth} /Height ${cover.imageHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${cover.jpegBytes.length} >>\nstream\n`),
+    cover.jpegBytes,
+    latin1("\nendstream"),
+  ]);
+}
+
+function streamObject(content: string): Uint8Array {
+  const bytes = latin1(content);
+  return concatBytes([latin1(`<< /Length ${bytes.length} >>\nstream\n`), bytes, latin1("\nendstream")]);
+}
+
 function buildPdf(objects: Array<string | Uint8Array>): Uint8Array {
   const header = latin1("%PDF-1.4\n%âãÏÓ\n");
   const chunks: Uint8Array[] = [header];
@@ -236,30 +307,40 @@ function buildPdf(objects: Array<string | Uint8Array>): Uint8Array {
   return output;
 }
 
-export function createFinancialReportPdf(report: FinancialReport, parameterReport?: ParameterReport): Uint8Array {
+export function createFinancialReportPdf(report: FinancialReport, parameterReport?: ParameterReport, cover?: PdfCover): Uint8Array {
   const maxRows = Math.max(1, Math.floor((PAGE_HEIGHT - MARGIN * 2 - TITLE_HEIGHT - SUBTITLE_HEIGHT - HEADER_HEIGHT) / ROW_HEIGHT));
   const financialPages: FinancialReportRow[][] = [];
   for (let index = 0; index < report.rows.length; index += maxRows) financialPages.push(report.rows.slice(index, index + maxRows));
   const parameterPages = parameterReport ? paginateParameterRows(parameterReport.rows) : [];
-  const totalPages = financialPages.length + parameterPages.length;
+  const hasCover = Boolean(cover?.jpegBytes.length);
+  const totalPages = financialPages.length + parameterPages.length + (hasCover ? 1 : 0);
 
-  const pageContents: string[] = [];
-  financialPages.forEach((rows, index) => pageContents.push(createFinancialPageContent(report, rows, index + 1, totalPages)));
-  parameterPages.forEach((rows, index) => pageContents.push(createParameterPageContent(parameterReport!, rows, financialPages.length + index + 1, totalPages)));
+  const regularPageContents: string[] = [];
+  const pageOffset = hasCover ? 1 : 0;
+  financialPages.forEach((rows, index) => regularPageContents.push(createFinancialPageContent(report, rows, pageOffset + index + 1, totalPages)));
+  parameterPages.forEach((rows, index) => regularPageContents.push(createParameterPageContent(parameterReport!, rows, pageOffset + financialPages.length + index + 1, totalPages)));
+
+  const regularStartId = hasCover ? 8 : 5;
+  const regularPageIds = regularPageContents.map((_, index) => regularStartId + index * 2);
+  const allPageIds = hasCover ? [6, ...regularPageIds] : regularPageIds;
 
   const objects: Array<string | Uint8Array> = [];
   objects.push("<< /Type /Catalog /Pages 2 0 R >>");
-  const pageObjectIds = pageContents.map((_, index) => 5 + index * 2);
-  objects.push(`<< /Type /Pages /Count ${pageContents.length} /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] >>`);
+  objects.push(`<< /Type /Pages /Count ${allPageIds.length} /Kids [${allPageIds.map((id) => `${id} 0 R`).join(" ")}] >>`);
   objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
   objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
 
-  pageContents.forEach((pageContent, index) => {
-    const pageId = 5 + index * 2;
+  if (hasCover && cover) {
+    objects.push(jpegObject(cover)); // 5
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${COVER_PAGE_WIDTH} ${COVER_PAGE_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << /Im1 5 0 R >> >> /Contents 7 0 R >>`); // 6
+    objects.push(streamObject(createCoverPageContent(cover))); // 7
+  }
+
+  regularPageContents.forEach((pageContent, index) => {
+    const pageId = regularStartId + index * 2;
     const contentId = pageId + 1;
-    const content = latin1(pageContent);
     objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentId} 0 R >>`);
-    objects.push(latin1(`<< /Length ${content.length} >>\nstream\n${new TextDecoder("latin1").decode(content)}\nendstream`));
+    objects.push(streamObject(pageContent));
   });
   return buildPdf(objects);
 }

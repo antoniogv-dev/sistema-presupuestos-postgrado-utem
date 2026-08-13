@@ -41,9 +41,9 @@ export default function ImportExportPage() {
   const result = useMemo(() => selected ? calculateBudget(selected, parameters) : null, [selected, parameters]);
   const institutional = useMemo(() => buildConsolidationGroups(budgets, parameters).find((group) => group.id === "institutional"), [budgets, parameters]);
 
-  function runExport(action: () => void, success: string) {
+  async function runExport(action: () => void | Promise<void>, success: string) {
     try {
-      action();
+      await action();
       setMessage(success);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "No fue posible completar la exportación.");
@@ -64,11 +64,11 @@ export default function ImportExportPage() {
         <div className="panel-title"><div><h2>Exportaciones</h2><p>Seleccione un presupuesto para exportar su flujo individual o auditoría.</p></div></div>
         <label>Presupuesto<select value={selectedId} disabled={loading || !budgets.length} onChange={(event) => setSelectedId(event.target.value)}><option value="">Seleccione</option>{budgets.map((budget) => <option key={budget.id} value={budget.id}>{budget.program.code} · {budget.cohortName} · Versión {budget.programVersionLabel} · R{budget.version}</option>)}</select></label>
         <div className="export-list enabled-exports">
-          <button type="button" disabled={!selected || !result} onClick={() => selected && result && runExport(() => downloadBudgetXlsx(selected, result, parameters), "Flujo individual exportado a Excel.")}><span><strong>Flujo individual</strong><small>Excel (.xlsx) con flujo y hoja de parámetros utilizados</small></span><span>Exportar XLSX</span></button>
-          <button type="button" disabled={!selected || !result} onClick={() => selected && result && runExport(() => downloadBudgetPdf(selected, result, parameters), "Reporte de viabilidad exportado a PDF.")}><span><strong>Reporte de viabilidad</strong><small>PDF con flujo y anexo de parámetros utilizados</small></span><span>Exportar PDF</span></button>
-          <button type="button" disabled={!institutional?.rows.length} onClick={() => institutional && runExport(() => downloadConsolidationXlsx(institutional), "Consolidado institucional exportado a Excel.")}><span><strong>Consolidado institucional</strong><small>Excel (.xlsx) con ingresos, egresos, normalización y flujo neto</small></span><span>Exportar XLSX</span></button>
-          <button type="button" disabled={!institutional?.rows.length} onClick={() => institutional && runExport(() => downloadConsolidationCsv(institutional), "Consolidado institucional exportado a CSV.")}><span><strong>Consolidado institucional · datos</strong><small>CSV por año para análisis complementario</small></span><span>Exportar CSV</span></button>
-          <button type="button" disabled={!selected} onClick={() => selected && runExport(() => downloadAuditCsv(selected), "Detalle de auditoría exportado a CSV.")}><span><strong>Detalle de auditoría</strong><small>CSV de revisiones y cambios de flujo</small></span><span>Exportar CSV</span></button>
+          <button type="button" disabled={!selected || !result} onClick={() => selected && result && void runExport(() => downloadBudgetXlsx(selected, result, parameters), "Flujo individual exportado a Excel.")}><span><strong>Flujo individual</strong><small>Excel (.xlsx) con flujo + Parámetros completos + vistas anuales, semestrales, descuentos y costos/ingresos</small></span><span>Exportar XLSX</span></button>
+          <button type="button" disabled={!selected || !result} onClick={() => selected && result && void runExport(() => downloadBudgetPdf(selected, result, parameters), "Reporte de viabilidad exportado a PDF.")}><span><strong>Reporte de viabilidad</strong><small>PDF con portada institucional UTEM, flujo y sólo parámetros principales o con información</small></span><span>Exportar PDF</span></button>
+          <button type="button" disabled={!institutional?.rows.length} onClick={() => institutional && void runExport(() => downloadConsolidationXlsx(institutional), "Consolidado institucional exportado a Excel.")}><span><strong>Consolidado institucional</strong><small>Excel (.xlsx) con ingresos, egresos, normalización y flujo neto</small></span><span>Exportar XLSX</span></button>
+          <button type="button" disabled={!institutional?.rows.length} onClick={() => institutional && void runExport(() => downloadConsolidationCsv(institutional), "Consolidado institucional exportado a CSV.")}><span><strong>Consolidado institucional · datos</strong><small>CSV por año para análisis complementario</small></span><span>Exportar CSV</span></button>
+          <button type="button" disabled={!selected} onClick={() => selected && void runExport(() => downloadAuditCsv(selected), "Detalle de auditoría exportado a CSV.")}><span><strong>Detalle de auditoría</strong><small>CSV de revisiones y cambios de flujo</small></span><span>Exportar CSV</span></button>
         </div>
       </section>
     </div>

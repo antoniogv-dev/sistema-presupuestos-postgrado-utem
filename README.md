@@ -1,17 +1,22 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10.12 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.14 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
+## Mejoras funcionales v10.14
+
+- **Costos realmente removibles desde el flujo:** cada costo/gasto manual aparece como una fila propia `Costo: ...`, con categoría, periodicidad, alcance y botón visible `Quitar`. La eliminación solicita confirmación y queda pendiente de persistir con `Guardar cambios`.
+- **Alta de costos también desde el flujo:** el encabezado de `Flujo de caja anual` incorpora `Agregar costo al flujo`, además del editor detallado de la sección de costos.
+- **PDF con portada institucional verificada:** usa la portada proporcionada por la Escuela de Postgrado y superpone el nombre del programa en gran formato, centrado en la zona media y alineado a la derecha. Debajo muestra `Versión` y `Cohorte` en líneas separadas.
+- **PDF depurado:** el anexo incluye identificación esencial, parámetros anuales principales, carga semestral relevante y cualquier descuento, ingreso o costo que efectivamente tenga información. Se omiten filas vacías o controles secundarios sin uso.
+- **Excel con trazabilidad inequívoca:** el libro individual contiene seis hojas: `Flujo presupuestario`, `Parámetros completos`, `Parámetros anuales`, `Parámetros semestrales`, `Descuentos` y `Costos e ingresos`. `Parámetros completos` mantiene todos los inputs del cálculo, incluidos ceros y registros detallados.
+- **Control de despliegue reforzado:** la aplicación muestra `v10.14 · 1.0.24-d1-web` y `source:audit` falla si faltan las hojas de Excel, la portada o la acción de quitar costos.
+- **Sin nueva migración D1:** v10.14 no cambia el esquema ni las fórmulas financieras.
+
 ## Mejoras funcionales v10.12
 
-- **XLSX con trazabilidad completa:** cada presupuesto individual incorpora una segunda hoja llamada `Parámetros utilizados`.
+- **XLSX con trazabilidad completa:** cada presupuesto individual incorpora una segunda hoja de parámetros.
 - **PDF con anexo de parámetros:** después del flujo presupuestario se agregan páginas con los parámetros efectivos utilizados en el cálculo.
-- **Parámetros anuales:** arancel, matrícula, valor hora docente directa, valor hora de reemplazo, guía de tesis, dirección, asistencia, otros honorarios no académicos, costos editables, incobrabilidad y overhead por año.
-- **Parámetros semestrales:** estudiantes activos y en graduación, horas docentes, electivos, cursos especializados y becas cuando estén habilitadas.
-- **Descuentos, ingresos y costos:** se registra en la exportación cada descuento de arancel, ingreso extraordinario y costo/gasto manual con su periodo y condición de aplicación.
-- **Identificación y controles:** programa, cohorte, versión del plan, revisión interna, responsable, fuente de arancel, plantilla, arrastre, reconocimiento de matrícula y controles de costos compartidos.
-- **Sin alterar cálculos:** esta versión agrega trazabilidad documental; no cambia las fórmulas financieras vigentes de v10.11.
-- **Control de despliegue:** la aplicación muestra `v10.12 · 1.0.22-d1-web`.
+- **Sin alterar cálculos:** esta versión agregó trazabilidad documental y se mantiene como base de v10.13.
 
 ## Mejoras funcionales v10.11
 

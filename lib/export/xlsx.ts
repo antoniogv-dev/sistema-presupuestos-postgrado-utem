@@ -98,11 +98,12 @@ function numericStyle(row: FinancialReportRow): number {
   return base;
 }
 
-function buildFinancialSheet(report: FinancialReport): string {
+function buildFinancialSheet(report: FinancialReport, hasParameters = false): string {
   const lastCol = columnName(report.years.length + 1);
   const rows: string[] = [];
   rows.push(`<row r="1" ht="24" customHeight="1"><c r="A1" s="1" t="inlineStr"><is><t>${xml(report.title)}</t></is></c></row>`);
   rows.push(`<row r="2" ht="18" customHeight="1"><c r="A2" s="29" t="inlineStr"><is><t>${xml(report.subtitle)}</t></is></c></row>`);
+  if (hasParameters) rows.push(`<row r="3" ht="18" customHeight="1"><c r="A3" s="29" t="inlineStr"><is><t>${xml('Trazabilidad completa disponible en la hoja “Parámetros completos”.')}</t></is></c></row>`);
   rows.push(`<row r="4" ht="20" customHeight="1"><c r="A4" s="2" t="inlineStr"><is><t>DETALLE</t></is></c>${report.years.map((year, index) => `<c r="${columnName(index + 2)}4" s="2" t="n"><v>${year}</v></c>`).join("")}</row>`);
   report.rows.forEach((row, rowIndex) => {
     const excelRow = rowIndex + 5;
@@ -117,7 +118,7 @@ function buildFinancialSheet(report: FinancialReport): string {
 <sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
 <cols><col min="1" max="1" width="46" customWidth="1"/><col min="2" max="${report.years.length + 1}" width="17" customWidth="1"/></cols>
 <sheetData>${rows.join("")}</sheetData>
-<mergeCells count="2"><mergeCell ref="A1:${lastCol}1"/><mergeCell ref="A2:${lastCol}2"/></mergeCells>
+<mergeCells count="${hasParameters ? 3 : 2}"><mergeCell ref="A1:${lastCol}1"/><mergeCell ref="A2:${lastCol}2"/>${hasParameters ? `<mergeCell ref="A3:${lastCol}3"/>` : ""}</mergeCells>
 <pageMargins left="0.25" right="0.25" top="0.35" bottom="0.35" header="0.2" footer="0.2"/>
 <pageSetup orientation="landscape" fitToWidth="1" fitToHeight="1" paperSize="9"/>
 </worksheet>`;
@@ -201,24 +202,92 @@ const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
+function parameterSubset(report: ParameterReport, title: string, sections: string[]): ParameterReport {
+  return {
+    ...report,
+    title,
+    rows: report.rows.filter((row) => sections.includes(row.section)),
+  };
+}
+
+interface WorkbookSheetSpec {
+  name: string;
+  xml: string;
+}
+
+/**
+ * Exportación individual completa.
+ *
+ * El libro incluye siempre el flujo y, cuando se entrega parameterReport,
+ * una hoja maestra con TODOS los parámetros más vistas separadas para
+ * facilitar la revisión administrativa. Las vistas auxiliares no sustituyen
+ * a "Parámetros completos"; sólo ordenan la misma información.
+ */
 export function createFinancialReportXlsx(report: FinancialReport, parameterReport?: ParameterReport): Uint8Array {
   const now = new Date().toISOString();
-  const hasParameters = Boolean(parameterReport);
-  const contentTypeSheet2 = hasParameters ? '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' : "";
-  const workbookSheet2 = hasParameters ? '<sheet name="Parámetros utilizados" sheetId="2" r:id="rId2"/>' : "";
-  const worksheetRel2 = hasParameters ? '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>' : "";
-  const stylesRelId = hasParameters ? "rId3" : "rId2";
+  const sheets: WorkbookSheetSpec[] = [
+    { name: "Flujo presupuestario", xml: buildFinancialSheet(report, Boolean(parameterReport)) },
+  ];
+
+  if (parameterReport) {
+    sheets.push(
+      { name: "Parámetros completos", xml: buildParameterSheet(parameterReport) },
+      {
+        name: "Parámetros anuales",
+        xml: buildParameterSheet(parameterSubset(
+          parameterReport,
+          `Parámetros anuales · ${report.title}`,
+          ["Parámetros institucionales generales", "Controles del presupuesto", "Parámetros anuales"],
+        )),
+      },
+      {
+        name: "Parámetros semestrales",
+        xml: buildParameterSheet(parameterSubset(
+          parameterReport,
+          `Parámetros semestrales · ${report.title}`,
+          ["Parámetros semestrales"],
+        )),
+      },
+      {
+        name: "Descuentos",
+        xml: buildParameterSheet(parameterSubset(
+          parameterReport,
+          `Descuentos de arancel · ${report.title}`,
+          ["Descuentos de arancel"],
+        )),
+      },
+      {
+        name: "Costos e ingresos",
+        xml: buildParameterSheet(parameterSubset(
+          parameterReport,
+          `Costos e ingresos · ${report.title}`,
+          ["Ingresos extraordinarios", "Costos y gastos registrados"],
+        )),
+      },
+    );
+  }
+
+  const worksheetOverrides = sheets.map((_, index) =>
+    `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`,
+  ).join("");
+  const workbookSheets = sheets.map((sheet, index) =>
+    `<sheet name="${xml(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`,
+  ).join("");
+  const worksheetRelationships = sheets.map((_, index) =>
+    `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`,
+  ).join("");
+  const stylesRelId = `rId${sheets.length + 1}`;
 
   const files: Array<{ name: string; data: string | Uint8Array }> = [
-    { name: "[Content_Types].xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>${contentTypeSheet2}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>` },
+    { name: "[Content_Types].xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${worksheetOverrides}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>` },
     { name: "_rels/.rels", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>` },
     { name: "docProps/core.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xml(report.title)}</dc:title><dc:creator>UTEM · Escuela de Postgrado</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created></cp:coreProperties>` },
     { name: "docProps/app.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Sistema de Presupuestos de Postgrado UTEM</Application></Properties>` },
-    { name: "xl/workbook.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Flujo presupuestario" sheetId="1" r:id="rId1"/>${workbookSheet2}</sheets></workbook>` },
-    { name: "xl/_rels/workbook.xml.rels", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>${worksheetRel2}<Relationship Id="${stylesRelId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+    { name: "xl/workbook.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${workbookSheets}</sheets></workbook>` },
+    { name: "xl/_rels/workbook.xml.rels", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${worksheetRelationships}<Relationship Id="${stylesRelId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
     { name: "xl/styles.xml", data: styles },
-    { name: "xl/worksheets/sheet1.xml", data: buildFinancialSheet(report) },
   ];
-  if (parameterReport) files.push({ name: "xl/worksheets/sheet2.xml", data: buildParameterSheet(parameterReport) });
+
+  sheets.forEach((sheet, index) => files.push({ name: `xl/worksheets/sheet${index + 1}.xml`, data: sheet.xml }));
   return zip(files);
 }

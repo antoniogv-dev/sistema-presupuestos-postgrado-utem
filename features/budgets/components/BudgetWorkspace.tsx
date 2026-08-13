@@ -28,7 +28,7 @@ import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
 import { availableWorkflowActions, canDeleteBudget, canEditBudget, type WorkflowAction } from "@/lib/workflow/budget-workflow";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.12";
+const FUNCTIONAL_RELEASE = "v10.14";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -375,11 +375,37 @@ export function BudgetWorkspace() {
     updateAnnualOverride(year, { [key]: Math.max(0, desiredTotal - manualAmount) } as Partial<BudgetAnnualOverride>);
   }
 
-  function exportBudget(format: "xlsx" | "pdf") {
+  function addManualCost() {
+    if (!budget) return;
+    patchBudget({
+      manualItems: [...budget.manualItems, {
+        id: uid("cost"),
+        name: "Nuevo costo",
+        description: "",
+        category: "Otros costos y gastos",
+        year: result?.years[0] ?? budget.startYear,
+        amount: 0,
+        costType: "Único de esta versión",
+        periodicity: "Único",
+      }],
+    });
+    setMessage("Nuevo costo agregado. Puede editarlo en la sección Costos y gastos o directamente verificarlo en el flujo de caja.");
+  }
+
+  function removeManualCost(itemId: string) {
+    if (!budget) return;
+    const item = budget.manualItems.find((candidate) => candidate.id === itemId);
+    if (!item) return;
+    if (!window.confirm(`¿Quitar del presupuesto el costo “${item.name}”?`)) return;
+    patchBudget({ manualItems: budget.manualItems.filter((candidate) => candidate.id !== itemId) });
+    setMessage(`Costo “${item.name}” quitado del flujo. Presione “Guardar cambios” para persistir la eliminación.`);
+  }
+
+  async function exportBudget(format: "xlsx" | "pdf") {
     if (!budget || !result) return;
     try {
       if (format === "xlsx") downloadBudgetXlsx(budget, result, parameters);
-      else downloadBudgetPdf(budget, result, parameters);
+      else await downloadBudgetPdf(budget, result, parameters);
       setMessage(`Exportación ${format.toUpperCase()} generada.`);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "No fue posible generar la exportación.");
@@ -404,7 +430,7 @@ export function BudgetWorkspace() {
     {message ? <div className="notice info"><p>{message}</p></div> : null}
     <section className="panel budget-selector">
       <div><label>Presupuesto<select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>{budgets.map((item) => <option key={item.id} value={item.id}>{item.program.code} · {item.cohortName} · Versión {item.programVersionLabel} · R{item.version}</option>)}</select></label><label>Rol activo<select value={role} onChange={(event) => setActiveRole(event.target.value as AccessRole)}>{roles.map((candidate) => <option key={candidate} value={candidate}>{roleLabels[candidate]}</option>)}</select></label></div>
-      <div className="workspace-actions"><button className="button secondary" type="button" onClick={() => exportBudget("xlsx")}>Exportar XLSX</button><button className="button secondary" type="button" onClick={() => exportBudget("pdf")}>Exportar PDF</button><button className="button primary" type="button" disabled={!editable || saving} onClick={() => void saveBudget()}>{saving ? "Guardando…" : "Guardar cambios"}</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void createBudget()}>Nuevo presupuesto</button><button className="text-button danger-text" type="button" disabled={!deletable} onClick={() => void deleteBudget()}>Eliminar</button></div>
+      <div className="workspace-actions"><button className="button secondary" type="button" onClick={() => void exportBudget("xlsx")}>Exportar XLSX</button><button className="button secondary" type="button" onClick={() => void exportBudget("pdf")}>Exportar PDF</button><button className="button primary" type="button" disabled={!editable || saving} onClick={() => void saveBudget()}>{saving ? "Guardando…" : "Guardar cambios"}</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void createBudget()}>Nuevo presupuesto</button><button className="text-button danger-text" type="button" disabled={!deletable} onClick={() => void deleteBudget()}>Eliminar</button></div>
     </section>
 
     <section className="panel">
@@ -493,7 +519,7 @@ export function BudgetWorkspace() {
 
     <section className="panel"><SectionHeading number="7" id="ingresos-extra" title="Ingresos extraordinarios" description="Becas externas, convenios, aportes y otros ingresos." action={<button className="button secondary" type="button" disabled={!editable} onClick={() => patchBudget({ externalIncome: [...budget.externalIncome, { id: uid("income"), type: "Ingreso extraordinario", description: "Nuevo ingreso", year: result.years[0] ?? budget.startYear, semester: 1, students: 1, amountPerStudent: 0, source: "" }] })}>Agregar ingreso</button>} /><div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Tipo y descripción</th><th>Periodo</th><th>Estudiantes</th><th>Monto unitario</th><th>Fuente</th><th>Acción</th></tr></thead><tbody>{budget.externalIncome.length ? budget.externalIncome.map((income, index) => <tr key={income.id}><td><select disabled={!editable} value={income.type} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, type: event.target.value as ExternalIncome["type"] } : item) })}>{INCOME_TYPES.map((type) => <option key={type}>{type}</option>)}</select><input disabled={!editable} value={income.description} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, description: event.target.value } : item) })} /></td><td><PeriodInputs disabled={!editable} years={result.years} year={income.year} semester={income.semester} onYear={(value) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, year: value } : item) })} onSemester={(value) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, semester: value } : item) })} /></td><td><input disabled={!editable} type="number" min="0" value={income.students} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, students: numberValue(event.target.value) } : item) })} /></td><td><input disabled={!editable} type="number" min="0" value={income.amountPerStudent} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, amountPerStudent: numberValue(event.target.value) } : item) })} /></td><td><input disabled={!editable} value={income.source} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, source: event.target.value } : item) })} /></td><td><button className="text-button danger-text" type="button" disabled={!editable} onClick={() => patchBudget({ externalIncome: budget.externalIncome.filter((_, candidate) => candidate !== index) })}>Quitar</button></td></tr>) : <tr><td colSpan={6}>No hay ingresos extraordinarios.</td></tr>}</tbody></table></div></section>
 
-    <section className="panel"><SectionHeading number="8" id="costos" title="Costos y gastos" description="Los costos Anuales se repiten desde el año de inicio hasta el término; los Semestrales se aplican a cada semestre activo desde su periodo de inicio." action={<button className="button secondary" type="button" disabled={!editable} onClick={() => patchBudget({ manualItems: [...budget.manualItems, { id: uid("cost"), name: "Nuevo costo", description: "", category: "Otros costos y gastos", year: result.years[0] ?? budget.startYear, amount: 0, costType: "Único de esta versión", periodicity: "Único" }] })}>Agregar gasto o costo</button>} /><div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Nombre y descripción</th><th>Categoría</th><th>Año</th><th>Monto</th><th>Alcance</th><th>Periodicidad</th><th>Acción</th></tr></thead><tbody>{budget.manualItems.length ? budget.manualItems.map((item, index) => <tr key={item.id}><td><input disabled={!editable} value={item.name} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, name: event.target.value } : candidate) })} /><input disabled={!editable} value={item.description} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, description: event.target.value } : candidate) })} /></td><td><select disabled={!editable} value={item.category} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, category: event.target.value as BudgetItem["category"] } : candidate) })}>{COST_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></td><td><select disabled={!editable} value={item.year} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, year: numberValue(event.target.value) } : candidate) })}>{result.years.map((year) => <option key={year}>{year}</option>)}</select></td><td><input disabled={!editable} type="number" min="0" value={item.amount} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, amount: numberValue(event.target.value) } : candidate) })} /></td><td><select disabled={!editable} value={item.costType} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, costType: event.target.value as BudgetItem["costType"] } : candidate) })}><option>Único de esta versión</option><option>Compartido con otras cohortes</option></select></td><td><select disabled={!editable} value={item.periodicity} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, periodicity: event.target.value as BudgetItem["periodicity"] } : candidate) })}><option>Único</option><option>Semestral</option><option>Anual</option></select></td><td><button className="text-button danger-text" type="button" disabled={!editable} onClick={() => patchBudget({ manualItems: budget.manualItems.filter((_, position) => position !== index) })}>Quitar</button></td></tr>) : <tr><td colSpan={7}>No hay costos manuales.</td></tr>}</tbody></table></div>{budget.alertPotentialDuplicates ? duplicateAlerts.length ? <div className="notice warning"><strong>Posibles duplicidades</strong><ul>{duplicateAlerts.map((alert) => <li key={alert.key}>{alert.message} {alert.allMarkedShared ? "Se normalizará si la opción está activa." : "Revise si debe marcarse como compartido."}</li>)}</ul></div> : <div className="notice success"><p>No se detectaron coincidencias evidentes.</p></div> : null}</section>
+    <section className="panel"><SectionHeading number="8" id="costos" title="Costos y gastos" description="Los costos Anuales se repiten desde el año de inicio hasta el término; los Semestrales se aplican a cada semestre activo desde su periodo de inicio." action={<button className="button secondary" type="button" disabled={!editable} onClick={addManualCost}>Agregar gasto o costo</button>} /><div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Nombre y descripción</th><th>Categoría</th><th>Año</th><th>Monto</th><th>Alcance</th><th>Periodicidad</th><th>Acción</th></tr></thead><tbody>{budget.manualItems.length ? budget.manualItems.map((item, index) => <tr key={item.id}><td><input disabled={!editable} value={item.name} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, name: event.target.value } : candidate) })} /><input disabled={!editable} value={item.description} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, description: event.target.value } : candidate) })} /></td><td><select disabled={!editable} value={item.category} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, category: event.target.value as BudgetItem["category"] } : candidate) })}>{COST_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></td><td><select disabled={!editable} value={item.year} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, year: numberValue(event.target.value) } : candidate) })}>{result.years.map((year) => <option key={year}>{year}</option>)}</select></td><td><input disabled={!editable} type="number" min="0" value={item.amount} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, amount: numberValue(event.target.value) } : candidate) })} /></td><td><select disabled={!editable} value={item.costType} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, costType: event.target.value as BudgetItem["costType"] } : candidate) })}><option>Único de esta versión</option><option>Compartido con otras cohortes</option></select></td><td><select disabled={!editable} value={item.periodicity} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, periodicity: event.target.value as BudgetItem["periodicity"] } : candidate) })}><option>Único</option><option>Semestral</option><option>Anual</option></select></td><td><button className="text-button danger-text" type="button" disabled={!editable} onClick={() => patchBudget({ manualItems: budget.manualItems.filter((_, position) => position !== index) })}>Quitar</button></td></tr>) : <tr><td colSpan={7}>No hay costos manuales.</td></tr>}</tbody></table></div>{budget.alertPotentialDuplicates ? duplicateAlerts.length ? <div className="notice warning"><strong>Posibles duplicidades</strong><ul>{duplicateAlerts.map((alert) => <li key={alert.key}>{alert.message} {alert.allMarkedShared ? "Se normalizará si la opción está activa." : "Revise si debe marcarse como compartido."}</li>)}</ul></div> : <div className="notice success"><p>No se detectaron coincidencias evidentes.</p></div> : null}</section>
 
     <section className="panel summary-panel"><SectionHeading number="9" id="resumen" title="Resumen financiero" description="Matrículas equivalentes, ingresos, egresos y saldo final." /><div className="summary-grid"><div><span>Ingresos</span><strong>{formatCLP(result.annualFlows.reduce((sum, flow) => sum + flow.totalIncome, 0))}</strong></div><div><span>Egresos</span><strong>{formatCLP(result.annualFlows.reduce((sum, flow) => sum + flow.totalExpenses, 0))}</strong></div><div><span>Saldo final</span><strong>{formatCLP(result.finalAccumulatedFlow)}</strong></div><div><span>Viabilidad</span><strong>{result.viable === null ? "Informativo" : result.viable ? "Viable" : "No viable"}</strong></div></div><div className="equivalent-grid">{result.annualFlows.map((flow) => <div key={flow.year}><span>{flow.year}</span><strong>{flow.equivalentEnrollments.toLocaleString("es-CL", { maximumFractionDigits: 1 })} matrículas equivalentes</strong><small>≈ {flow.roundedEquivalentStudents} estudiantes</small></div>)}</div></section>
 
@@ -503,6 +529,7 @@ export function BudgetWorkspace() {
         id="flujo"
         title="Flujo de caja anual"
         description={`Flujo integrado y editable por año: staff, costos registrados, overhead y arrastre · ${FUNCTIONAL_RELEASE}.`}
+        action={<button className="button secondary" type="button" disabled={!editable} onClick={addManualCost}>Agregar costo al flujo</button>}
       />
       <div className="notice info">
         <strong>Edición del flujo</strong>
@@ -510,7 +537,7 @@ export function BudgetWorkspace() {
       </div>
       <div className="table-wrap financial-flow">
         <table className="data-table financial-table cashflow-editable-table">
-          <thead><tr><th>Concepto</th>{result.years.map((year) => <th className="numeric" key={year}>{year}</th>)}</tr></thead>
+          <thead><tr><th>Concepto</th>{result.years.map((year) => <th className="numeric" key={year}>{year}</th>)}<th className="flow-action-header">Acción</th></tr></thead>
           <tbody>
             <FlowRow label="Matrícula anual (informativa, sin descuentos)" values={result.annualFlows.map((flow) => flow.grossEnrollmentFee)} tone="income" />
             {budget.enrollmentRecognitionRate > 0 ? <FlowRow label="Matrícula reconocida (informativa)" values={result.annualFlows.map((flow) => flow.recognizedEnrollmentFee)} tone="income" /> : null}
@@ -526,16 +553,16 @@ export function BudgetWorkspace() {
             <FlowRow label="Guía de tesis" values={result.annualFlows.map((flow) => -flow.thesisGuidanceCost)} />
 
             <FlowRow label="Dirección" values={result.annualFlows.map((flow) => -flow.direction)} />
-            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={["Dirección"]} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={["Dirección"]} />
             <FlowRow label="Asistencia de dirección" values={result.annualFlows.map((flow) => -flow.assistance)} />
-            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={["Asistencia", "Asistencia de dirección"]} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={["Asistencia", "Asistencia de dirección"]} />
             <FlowRow label="Otros honorarios no académicos" values={result.annualFlows.map((flow) => -flow.otherNonAcademicHonoraria)} />
-            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.otherNonAcademic} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.otherNonAcademic} />
             <FlowRow label="HONORARIOS NO ACADÉMICOS (SUBTOTAL)" values={result.annualFlows.map((flow) => -flow.nonAcademicHonoraria)} total />
 
             {budget.scholarshipsEnabled || result.annualFlows.some((flow) => flow.maintenanceScholarships > 0) ? <>
               <FlowRow label="Becas de manutención" values={result.annualFlows.map((flow) => -flow.maintenanceScholarships)} />
-              <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={["Becas de manutención"]} />
+              <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={["Becas de manutención"]} />
             </> : null}
 
             <EditableCostFlowRow
@@ -545,7 +572,7 @@ export function BudgetWorkspace() {
               disabled={!editable}
               onChange={(year, value) => updateEditableFlowCost(year, "annualOperational", FLOW_COST_GROUPS.operational, value)}
             />
-            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.operational} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.operational} />
 
             <EditableCostFlowRow
               label="Software y licencias"
@@ -554,7 +581,7 @@ export function BudgetWorkspace() {
               disabled={!editable}
               onChange={(year, value) => updateEditableFlowCost(year, "annualSoftware", FLOW_COST_GROUPS.software, value)}
             />
-            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.software} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.software} />
 
             <EditableCostFlowRow
               label="Difusión"
@@ -563,7 +590,7 @@ export function BudgetWorkspace() {
               disabled={!editable}
               onChange={(year, value) => updateEditableFlowCost(year, "annualDiffusion", FLOW_COST_GROUPS.diffusion, value)}
             />
-            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.diffusion} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.diffusion} />
 
             <EditableCostFlowRow
               label="Congresos y pasantías"
@@ -572,7 +599,7 @@ export function BudgetWorkspace() {
               disabled={!editable}
               onChange={(year, value) => updateEditableFlowCost(year, "annualCongressesInternships", FLOW_COST_GROUPS.congressesInternships, value)}
             />
-            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.congressesInternships} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.congressesInternships} />
 
             <EditableCostFlowRow
               label="Libros y publicaciones"
@@ -581,7 +608,7 @@ export function BudgetWorkspace() {
               disabled={!editable}
               onChange={(year, value) => updateEditableFlowCost(year, "annualBooksPublications", FLOW_COST_GROUPS.booksPublications, value)}
             />
-            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.booksPublications} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.booksPublications} />
 
             <EditableCostFlowRow
               label="Pasajes y fletes"
@@ -590,7 +617,7 @@ export function BudgetWorkspace() {
               disabled={!editable}
               onChange={(year, value) => updateEditableFlowCost(year, "annualTravelFreight", FLOW_COST_GROUPS.travelFreight, value)}
             />
-            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.travelFreight} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.travelFreight} />
 
             <EditableCostFlowRow
               label="Viáticos"
@@ -599,7 +626,7 @@ export function BudgetWorkspace() {
               disabled={!editable}
               onChange={(year, value) => updateEditableFlowCost(year, "annualPerDiem", FLOW_COST_GROUPS.perDiem, value)}
             />
-            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.perDiem} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.perDiem} />
 
             <EditableCostFlowRow
               label="Alimentos y bebidas"
@@ -608,7 +635,7 @@ export function BudgetWorkspace() {
               disabled={!editable}
               onChange={(year, value) => updateEditableFlowCost(year, "annualFoodBeverages", FLOW_COST_GROUPS.foodBeverages, value)}
             />
-            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.foodBeverages} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.foodBeverages} />
 
             <EditableCostFlowRow
               label="Otros costos y gastos"
@@ -617,7 +644,7 @@ export function BudgetWorkspace() {
               disabled={!editable}
               onChange={(year, value) => updateEditableFlowCost(year, "annualOtherCosts", FLOW_COST_GROUPS.otherCosts, value)}
             />
-            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} categories={FLOW_COST_GROUPS.otherCosts} />
+            <ManualCostRows items={budget.manualItems} years={result.years} budget={budget} disabled={!editable} onRemove={removeManualCost} categories={FLOW_COST_GROUPS.otherCosts} />
 
             <FlowRow label="Base overhead" values={result.annualFlows.map((flow) => flow.overheadBase)} />
             <FlowRow label="Overhead central" values={result.annualFlows.map((flow) => -flow.centralOverhead)} />
@@ -652,7 +679,7 @@ function PeriodInputs({ year, semester, years, onYear, onSemester, disabled }: {
 }
 function FlowRow({ label, values, total = false, signed = false, tone = "" }: { label: string; values: number[]; total?: boolean; signed?: boolean; tone?: "income" | "result" | "" }) {
   const resolved = tone || (total ? "" : "expense");
-  return <tr className={`${total ? "row-total" : ""} ${resolved ? `row-${resolved}` : ""}`}><th>{label}</th>{values.map((value, index) => <td key={index} className={`numeric ${signed ? value >= 0 ? "positive-text" : "negative-text" : ""}`}>{formatCLP(value)}</td>)}</tr>;
+  return <tr className={`${total ? "row-total" : ""} ${resolved ? `row-${resolved}` : ""}`}><th>{label}</th>{values.map((value, index) => <td key={index} className={`numeric ${signed ? value >= 0 ? "positive-text" : "negative-text" : ""}`}>{formatCLP(value)}</td>)}<td className="flow-action-cell" aria-hidden="true" /></tr>;
 }
 
 function EditableCostFlowRow({
@@ -675,6 +702,7 @@ function EditableCostFlowRow({
         ? formatCLP(-values[index])
         : <div className="flow-money-input"><span>$ -</span><input aria-label={`${label} ${year}`} type="number" min="0" step="1" value={values[index]} onChange={(event) => onChange(year, numberValue(event.target.value))} /></div>}
     </td>)}
+    <td className="flow-action-cell" aria-hidden="true" />
   </tr>;
 }
 
@@ -683,18 +711,23 @@ function ManualCostRows({
   years,
   budget,
   categories,
+  disabled,
+  onRemove,
 }: {
   items: BudgetItem[];
   years: number[];
   budget: CohortBudget;
   categories: readonly BudgetItem["category"][];
+  disabled: boolean;
+  onRemove: (itemId: string) => void;
 }) {
   const matching = items.filter((item) => categories.includes(item.category));
   if (!matching.length) return null;
   return <>
     {matching.map((item) => <tr className="flow-detail-row" key={`flow-detail-${item.id}`}>
-      <th><span>Incluido: {item.name}</span><small>{item.periodicity} · {item.costType}</small></th>
+      <th><span>Costo: {item.name}</span><small>{item.category} · {item.periodicity} · {item.costType}</small></th>
       {years.map((year) => <td className="numeric" key={`flow-detail-${item.id}-${year}`}>{formatCLP(-manualItemAmountForYear(item, budget, year))}</td>)}
+      <td className="flow-action-cell"><button className="button flow-remove-button" type="button" disabled={disabled} onClick={() => onRemove(item.id)}>Quitar</button></td>
     </tr>)}
   </>;
 }

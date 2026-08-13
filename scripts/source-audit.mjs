@@ -170,7 +170,8 @@ if (!versionsPage.includes("Comparar versiones") || !versionsPage.includes("Revi
 
 const exportDownload = await readFile(path.join(root, "lib/export/download.ts"), "utf8");
 for (const exportFunction of ["downloadBudgetXlsx", "downloadBudgetPdf", "downloadConsolidationXlsx"]) {
-  if (!exportDownload.includes(`export function ${exportFunction}`)) {
+  const pattern = new RegExp(`export\\s+(?:async\\s+)?function\\s+${exportFunction}\\b`);
+  if (!pattern.test(exportDownload)) {
     fail(`lib/export/download.ts: falta la exportación funcional ${exportFunction}.`);
   }
 }
@@ -252,7 +253,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.12"',
+  'FUNCTIONAL_RELEASE = "v10.14"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -272,8 +273,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.12") || !appShellV110.includes("1.0.22-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.12 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.14") || !appShellV110.includes("1.0.24-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.14 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -327,8 +328,8 @@ for (const marker of [
   if (!reportModelV111.includes(marker)) fail(`report-model.ts: falta exportación de parámetros v10.12 ${marker}.`);
 }
 const xlsxV112 = await readFile(path.join(root, "lib/export/xlsx.ts"), "utf8");
-for (const marker of ["Parámetros utilizados", "sheet2.xml", "buildParameterSheet"]) {
-  if (!xlsxV112.includes(marker)) fail(`xlsx.ts: falta segunda hoja de parámetros v10.12 ${marker}.`);
+for (const marker of ["Parámetros completos", "Parámetros anuales", "Parámetros semestrales", "Descuentos", "Costos e ingresos", "buildParameterSheet"]) {
+  if (!xlsxV112.includes(marker)) fail(`xlsx.ts: falta trazabilidad multipestaña v10.14 ${marker}.`);
 }
 const pdfV112 = await readFile(path.join(root, "lib/export/pdf.ts"), "utf8");
 for (const marker of ["createParameterPageContent", "paginateParameterRows", "UNIDAD / DETALLE"]) {
@@ -337,6 +338,43 @@ for (const marker of ["createParameterPageContent", "paginateParameterRows", "UN
 const downloadV112 = await readFile(path.join(root, "lib/export/download.ts"), "utf8");
 if (!downloadV112.includes("buildParameterReport") || !downloadV112.includes("InstitutionalParameters")) {
   fail("download.ts: las exportaciones individuales deben recibir los parámetros institucionales y construir su anexo v10.12.");
+}
+
+// v10.14: portada institucional, PDF compacto, XLSX completo y eliminación verificable desde el flujo.
+for (const marker of [
+  "compactParameterReportForPdf",
+  "Parámetros completos",
+  "Duración oficial del programa",
+  "Dirección aplicada al presupuesto",
+]) {
+  if (!reportModelV111.includes(marker)) fail(`report-model.ts: falta mejora v10.14 ${marker}.`);
+}
+for (const marker of ["PdfCover", "createCoverPageContent", "/Im1 Do", "DCTDecode"]) {
+  if (!pdfV112.includes(marker)) fail(`pdf.ts: falta portada institucional v10.14 ${marker}.`);
+}
+for (const marker of ["/Portada2026.jpg", "compactParameterReportForPdf", "Cohorte ${budget.startYear}-${budget.startSemester}S"]) {
+  if (!downloadV112.includes(marker)) fail(`download.ts: falta integración de portada/PDF v10.14 ${marker}.`);
+}
+for (const marker of ["flow-action-header", "onRemove={removeManualCost}", ">Quitar</button>"]) {
+  if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta eliminación desde flujo v10.14 ${marker}.`);
+}
+for (const marker of ["Agregar costo al flujo", "flow-remove-button", "window.confirm", "Costo: {item.name}"]) {
+  if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta evidencia funcional v10.14 ${marker}.`);
+}
+if (budgetWorkspaceV108.includes("Incluido: {item.name}")) {
+  fail("BudgetWorkspace.tsx: v10.14 debe mostrar el costo como fila propia del flujo, no con el rótulo heredado Incluido.");
+}
+for (const marker of ["Parámetros anuales", "Parámetros semestrales", "Costos e ingresos"]) {
+  if (!xlsxV112.includes(marker)) fail(`xlsx.ts: falta hoja específica v10.14 ${marker}.`);
+}
+if (!downloadV112.includes("Versión ${budget.programVersionLabel}\\nCohorte ${budget.startYear}-${budget.startSemester}S")) {
+  fail("download.ts: la portada v10.14 debe separar versión y cohorte en dos líneas.");
+}
+const coverPathV113 = path.join(root, "public/Portada2026.jpg");
+try {
+  await readFile(coverPathV113);
+} catch {
+  fail("public/Portada2026.jpg: falta la portada institucional usada por la exportación PDF v10.14.");
 }
 
 const prismaFactory = await readFile(path.join(root, "lib/database/prisma.ts"), "utf8");

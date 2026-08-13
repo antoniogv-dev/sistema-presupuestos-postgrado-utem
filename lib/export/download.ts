@@ -3,7 +3,7 @@
 import type { BudgetResult, CohortBudget, InstitutionalParameters } from "../calculations/types";
 import type { ConsolidationGroup } from "../calculations/consolidation";
 import { createFinancialReportPdf } from "./pdf";
-import { buildFinancialReport, buildParameterReport, type FinancialReport } from "./report-model";
+import { buildFinancialReport, buildParameterReport, compactParameterReportForPdf, type FinancialReport } from "./report-model";
 import { createFinancialReportXlsx } from "./xlsx";
 
 function slug(value: string): string {
@@ -41,10 +41,28 @@ export function downloadBudgetXlsx(budget: CohortBudget, result: BudgetResult, p
   download(createFinancialReportXlsx(report, parameterReport), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.xlsx`);
 }
 
-export function downloadBudgetPdf(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters) {
+async function loadBudgetPdfCover() {
+  const response = await fetch("/Portada2026.jpg", { cache: "force-cache" });
+  if (!response.ok) throw new Error("No fue posible cargar la portada institucional del PDF.");
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  return {
+    jpegBytes: bytes,
+    imageWidth: 912,
+    imageHeight: 1168,
+  };
+}
+
+export async function downloadBudgetPdf(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters) {
   const report = buildFinancialReport(budget, result);
-  const parameterReport = buildParameterReport(budget, result, parameters);
-  download(createFinancialReportPdf(report, parameterReport), "application/pdf", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.pdf`);
+  const completeParameterReport = buildParameterReport(budget, result, parameters);
+  const parameterReport = compactParameterReportForPdf(completeParameterReport);
+  const image = await loadBudgetPdfCover();
+  const cover = {
+    ...image,
+    title: budget.program.name,
+    subtitle: `Versión ${budget.programVersionLabel}\nCohorte ${budget.startYear}-${budget.startSemester}S`,
+  };
+  download(createFinancialReportPdf(report, parameterReport, cover), "application/pdf", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.pdf`);
 }
 
 function csvCell(value: unknown): string {
