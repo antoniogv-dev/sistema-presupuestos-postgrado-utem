@@ -136,7 +136,13 @@ export function TemplateManager() {
 
   function replace(next: BudgetTemplate) { setTemplates((current) => current.map((item) => item.id === next.id ? next : item)); }
   function updateItem(index: number, patch: Partial<BudgetTemplateItem>) { if (!template) return; replace({ ...template, items: template.items.map((item, i) => i === index ? { ...item, ...patch } : item) }); }
-  function updateConfig(index: number, patch: Record<string, unknown>) { if (!template) return; const current = template.items[index]; updateItem(index, { config: { ...(current.config as Record<string, unknown>), ...patch } as BudgetTemplateConfig }); }
+  function updateConfig(index: number, patch: Record<string, unknown>) {
+    if (!template) return;
+    const current = template.items[index];
+    if (!current) return;
+    const config: BudgetTemplateConfig = Object.assign({}, current.config, patch);
+    updateItem(index, { config });
+  }
 
   function changeTemplateModality(modality: DeliveryModality) {
     if (!template) return;
@@ -210,7 +216,7 @@ export function TemplateManager() {
 }
 
 function ItemConfig({ item, years, programType, parameters, disabled, onChange }: { item: BudgetTemplateItem; years: number[]; programType: ProgramType; parameters: InstitutionalParameters | null; disabled: boolean; onChange: (patch: Record<string, unknown>) => void }) {
-  const config = item.config as Record<string, unknown>;
+  const config: Record<string, unknown> = Object.fromEntries(Object.entries(item.config));
   if (item.kind === "PARAMETRO_ANUAL") {
     const parameter = String(config.parameter ?? "ARANCEL") as AnnualTemplateParameter;
     const values = (config.values && typeof config.values === "object" ? config.values : {}) as Record<number, number>;
