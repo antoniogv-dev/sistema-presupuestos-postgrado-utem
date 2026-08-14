@@ -16,13 +16,11 @@ interface RawBudgetTemplate {
   description: string | null;
   version: number;
   active: boolean;
+  programId?: string | null;
+  settings?: unknown;
   items: RawTemplateItem[];
 }
 
-/**
- * Mantiene una forma de respuesta única para GET, POST y PUT.
- * La base usa itemKey; la interfaz pública usa key.
- */
 export function templateApiShape(record: RawBudgetTemplate) {
   return {
     id: record.id,
@@ -32,9 +30,8 @@ export function templateApiShape(record: RawBudgetTemplate) {
     description: record.description ?? "",
     version: record.version,
     active: record.active,
-    items: record.items.map(({ itemKey, ...item }) => ({
-      ...item,
-      key: itemKey,
-    })),
+    programId: record.programId ?? undefined,
+    settings: record.settings && typeof record.settings === "object" ? record.settings : {},
+    items: record.items.map(({ itemKey, ...item }) => ({ ...item, key: itemKey })),
   };
 }

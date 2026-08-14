@@ -7,7 +7,7 @@ import { templateApiShape } from "@/lib/templates/api-shape";
 
 const itemSchema = z.object({
   key: z.string().min(1),
-  kind: z.enum(["DESCUENTO", "BECA_ARANCEL", "BECA_MANUTENCION", "COSTO", "INGRESO_EXTRAORDINARIO"]),
+  kind: z.enum(["DESCUENTO", "BECA_ARANCEL", "BECA_MANUTENCION", "COSTO", "INGRESO_EXTRAORDINARIO", "PARAMETRO_ANUAL"]),
   name: z.string().min(1),
   active: z.boolean(),
   position: z.number().int().min(0),
@@ -17,6 +17,8 @@ const schema = z.object({
   name: z.string().min(3),
   description: z.string().optional(),
   active: z.boolean(),
+  programId: z.string().nullable().optional(),
+  settings: z.record(z.string(), z.unknown()).default({}),
   items: z.array(itemSchema),
 });
 
@@ -35,10 +37,10 @@ export async function PUT(request: Request, context: { params: Promise<{ templat
       database.prepare(`DELETE FROM "BudgetTemplateItem" WHERE "templateId" = ?`).bind(templateId),
       database.prepare(`
         UPDATE "BudgetTemplate"
-        SET "name" = ?, "description" = ?, "active" = ?, "version" = "version" + 1,
+        SET "name" = ?, "description" = ?, "active" = ?, "programId" = ?, "settings" = ?, "version" = "version" + 1,
             "updatedAt" = CURRENT_TIMESTAMP
         WHERE "id" = ?
-      `).bind(input.name, input.description ?? null, input.active ? 1 : 0, templateId),
+      `).bind(input.name, input.description ?? null, input.active ? 1 : 0, input.programId ?? null, d1Json(input.settings ?? {}), templateId),
     ];
     for (const item of input.items) {
       statements.push(

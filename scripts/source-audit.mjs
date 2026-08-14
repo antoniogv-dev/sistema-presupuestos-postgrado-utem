@@ -139,8 +139,11 @@ if (!tuitionRoute.includes("PLANTILLA_MAGISTER_ACADEMICO") || !tuitionRoute.incl
 }
 
 const budgetWorkspace = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const heading of ["Estudiantes y graduación", "Horas docentes directas", "Horas docentes de reemplazo", "Becas"]) {
+for (const heading of ["Estudiantes y graduación", "Horas docentes de reemplazo", "Becas"]) {
   if (!budgetWorkspace.includes(heading)) fail(`BudgetWorkspace: falta la sección separada “${heading}”.`);
+}
+if (!budgetWorkspace.includes("Horas docentes presenciales") && !budgetWorkspace.includes("Horas docentes sincrónicas")) {
+  fail("BudgetWorkspace: falta la sección de carga docente según modalidad.");
 }
 
 // Barreras adicionales v10 para las fallas reportadas en producción.
@@ -253,7 +256,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.17"',
+  'FUNCTIONAL_RELEASE = "v10.18"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -273,8 +276,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.17") || !appShellV110.includes("1.0.27-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.17 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.18") || !appShellV110.includes("1.0.28-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.18 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -323,7 +326,7 @@ for (const marker of [
   "Parámetros semestrales",
   "Descuentos de arancel",
   "Costos y gastos registrados",
-  "Valor hora docencia directa",
+  "Valor hora docencia presencial",
 ]) {
   if (!reportModelV111.includes(marker)) fail(`report-model.ts: falta exportación de parámetros v10.12 ${marker}.`);
 }
@@ -507,6 +510,33 @@ async function auditNoEdgeRuntime(directory) {
 }
 await auditNoEdgeRuntime(path.join(root, "app"));
 
+// v10.18: plantillas, modalidades, economías de escala, avisos y relato financiero.
+const templateManagerV1018 = await readFile(path.join(root, "features/templates/components/TemplateManager.tsx"), "utf8");
+for (const marker of ["Aplicar ajuste a todos los años", "Clonar plantilla", "SEMIPRESENCIAL", "E_LEARNING", "Economías de escala"]) {
+  if (!templateManagerV1018.includes(marker)) fail(`TemplateManager v10.18: falta ${marker}.`);
+}
+const workspaceV1018 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
+for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de escala", "/api/workflow/recipients", "v10.18"]) {
+  if (!workspaceV1018.includes(marker)) fail(`BudgetWorkspace v10.18: falta ${marker}.`);
+}
+const narrativeV1018 = await readFile(path.join(root, "lib/export/financial-narrative.ts"), "utf8");
+for (const marker of ["Análisis financiero y principales consideraciones", "arancel bruto", "Conclusión financiera", "equilibrio financiero de bajo margen"]) {
+  if (!narrativeV1018.includes(marker)) fail(`Relato financiero v10.18: falta ${marker}.`);
+}
+const migrationV1018 = await readFile(path.join(root, "migrations/0008_templates_modalities_scale_notifications.sql"), "utf8");
+for (const marker of ["SharedCourseEconomy", "BudgetNotification", "deliveryModality", "synchronousTeachingHours", "PARAMETRO_ANUAL", "BudgetTemplateItem_v10_18"]) {
+  if (!migrationV1018.includes(marker)) fail(`Migración 0008: falta ${marker}.`);
+}
+const notificationRouteV1018 = await readFile(path.join(root, "app/api/notifications/email/route.ts"), "utf8");
+for (const marker of ["RESEND_API_KEY", "NOTIFICATION_FROM_EMAIL", "mailtoUrl", "BudgetNotification"]) {
+  if (!notificationRouteV1018.includes(marker)) fail(`Avisos por correo v10.18: falta ${marker}.`);
+}
+const workflowRecipientsV1018 = await readFile(path.join(root, "app/api/workflow/recipients/route.ts"), "utf8");
+if (!workflowRecipientsV1018.includes("VISTO_BUENO") || !workflowRecipientsV1018.includes("APROBADOR")) {
+  fail("Destinatarios workflow v10.18: faltan roles de V°B° o aprobación.");
+}
+
+
 for (const message of warnings) console.warn(`ADVERTENCIA: ${message}`);
 if (failures.length) {
   for (const message of failures) console.error(`ERROR: ${message}`);
@@ -514,4 +544,5 @@ if (failures.length) {
 }
 
 console.log(`Auditoría de código correcta${warnings.length ? `, con ${warnings.length} advertencia(s)` : ""}.`);
+
 

@@ -7,7 +7,7 @@ import { templateApiShape } from "@/lib/templates/api-shape";
 
 const itemSchema = z.object({
   key: z.string().min(1),
-  kind: z.enum(["DESCUENTO", "BECA_ARANCEL", "BECA_MANUTENCION", "COSTO", "INGRESO_EXTRAORDINARIO"]),
+  kind: z.enum(["DESCUENTO", "BECA_ARANCEL", "BECA_MANUTENCION", "COSTO", "INGRESO_EXTRAORDINARIO", "PARAMETRO_ANUAL"]),
   name: z.string().min(1),
   active: z.boolean().default(true),
   position: z.number().int().min(0),
@@ -20,14 +20,16 @@ const schema = z.object({
   description: z.string().optional(),
   active: z.boolean().default(true),
   programId: z.string().nullable().optional(),
+  settings: z.record(z.string(), z.unknown()).default({}),
   items: z.array(itemSchema),
 });
 
 export async function GET(request: Request) {
   try {
     await requireApiIdentity(request);
+    const includeInactive = new URL(request.url).searchParams.get("includeInactive") === "1";
     const templates = await getPrismaClient().budgetTemplate.findMany({
-      where: { active: true },
+      where: includeInactive ? {} : { active: true },
       include: { items: { orderBy: { position: "asc" } } },
       orderBy: [{ programType: "asc" }, { name: "asc" }],
     });
@@ -50,8 +52,8 @@ export async function POST(request: Request) {
       database.prepare(`
         INSERT INTO "BudgetTemplate" (
           "id", "code", "name", "programType", "description", "version", "active",
-          "createdAt", "updatedAt", "programId"
-        ) VALUES (?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
+          "createdAt", "updatedAt", "programId", "settings"
+        ) VALUES (?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)
       `).bind(
         templateId,
         input.code,
@@ -60,6 +62,7 @@ export async function POST(request: Request) {
         input.description ?? null,
         input.active ? 1 : 0,
         input.programId ?? null,
+        d1Json(input.settings ?? {}),
       ),
     ];
 

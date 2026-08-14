@@ -46,6 +46,9 @@ export function defaultAnnualOverrideForYear(
   return {
     year,
     directTeachingHourValue: parameterForYear(parameters.teachingHour, year),
+    synchronousTeachingHourValue: parameterForYear(parameters.teachingHour, year),
+    asynchronousTeachingHourValue: parameterForYear(parameters.teachingHour, year),
+    maintenanceScholarshipMonthlyValue: parameterForYear(parameters.maintenanceScholarshipMonthly, year),
     annualEnrollmentFee: parameterForYear(parameters.annualEnrollmentFee, year),
     annualTuition: tuitionForProgramYear(budget, parameters, year),
     thesisGuidancePerGraduatingStudent: parameterForYear(scoped.thesisGuidancePerGraduatingStudent, year),
@@ -88,6 +91,9 @@ export function resolvedAnnualOverrideForYear(
     // Un arancel 0 en un año activo se interpreta como dato faltante, no como arancel válido.
     // Esto permite recuperar cohortes antiguas que sólo tenían informado el primer año.
     annualTuition: storedTuition > 0 ? storedTuition : fallback.annualTuition,
+    synchronousTeachingHourValue: Number.isFinite(stored.synchronousTeachingHourValue) && stored.synchronousTeachingHourValue > 0 ? nonNegative(stored.synchronousTeachingHourValue) : fallback.synchronousTeachingHourValue,
+    asynchronousTeachingHourValue: Number.isFinite(stored.asynchronousTeachingHourValue) && stored.asynchronousTeachingHourValue > 0 ? nonNegative(stored.asynchronousTeachingHourValue) : fallback.asynchronousTeachingHourValue,
+    maintenanceScholarshipMonthlyValue: Number.isFinite(stored.maintenanceScholarshipMonthlyValue) && stored.maintenanceScholarshipMonthlyValue > 0 ? nonNegative(stored.maintenanceScholarshipMonthlyValue) : fallback.maintenanceScholarshipMonthlyValue,
     directionAllocationRate: clampRate(stored.directionAllocationRate),
     assistanceAllocationRate: clampRate(stored.assistanceAllocationRate),
     annualOtherNonAcademicHonoraria: Number.isFinite(stored.annualOtherNonAcademicHonoraria) ? nonNegative(stored.annualOtherNonAcademicHonoraria) : fallback.annualOtherNonAcademicHonoraria,
@@ -186,6 +192,10 @@ export function validateBudget(budget: CohortBudget): string[] {
       if (rate < 0 || rate > 1) warnings.push(`${item.year}: el ${label} debe estar entre 0 % y 100 %.`);
     }
   }
+  for (const rule of budget.sharedCourses ?? []) {
+    if (new Set(rule.participantProgramIds).size < 2) warnings.push(`${rule.courseName}: una economía de escala debe incluir al menos dos programas.`);
+    if (rule.allocationRate <= 0 || rule.allocationRate > 1) warnings.push(`${rule.courseName}: el porcentaje imputado debe ser mayor a 0 % y hasta 100 %.`);
+  }
   if (!overheadApplies(budget.program.type) && (budget.annualOverrides ?? []).some((item) => item.centralOverheadRate > 0 || item.facultyOverheadRate > 0)) {
     warnings.push("Los valores de overhead se ignoran porque los doctorados y magísteres académicos no están afectos a overhead.");
   }
@@ -239,7 +249,26 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
     // La matrícula se muestra y controla en el flujo, pero no forma parte de INGRESOS TOTAL.
     const totalIncome = netTuitionIncome + externalIncome + otherIncome;
 
-    const directTeachingCost = sum(semesters.map((semester) => nonNegative(semester.directTeachingHours) * nonNegative(override.directTeachingHourValue)));
+    const grossPresentialTeachingCost = sum(semesters.map((semester) => nonNegative(semester.directTeachingHours) * nonNegative(override.directTeachingHourValue)));
+    const grossSynchronousTeachingCost = sum(semesters.map((semester) => nonNegative(semester.synchronousTeachingHours) * nonNegative(override.synchronousTeachingHourValue)));
+    const grossAsynchronousTeachingCost = sum(semesters.map((semester) => nonNegative(semester.asynchronousTeachingHours) * nonNegative(override.asynchronousTeachingHourValue)));
+    // Una economía de escala sólo tiene efecto financiero cuando participan efectivamente
+    // dos o más programas. Las reglas incompletas pueden guardarse como borrador, pero no
+    // generan ahorro hasta cumplir esa condición.
+    const validSharedCourseRules = (budget.sharedCourses ?? []).filter((rule) =>
+      rule.year === year && new Set(rule.participantProgramIds).size >= 2 && rule.allocationRate > 0,
+    );
+    const sharedCourseSavings = validSharedCourseRules.reduce((total, rule) => {
+      const rate = rule.teachingMode === "SINCRONICA" ? override.synchronousTeachingHourValue : rule.teachingMode === "ASINCRONICA" ? override.asynchronousTeachingHourValue : override.directTeachingHourValue;
+      return total + nonNegative(rule.hours) * nonNegative(rate) * (1 - clampRate(rule.allocationRate));
+    }, 0);
+    const presentialSavings = validSharedCourseRules.filter((rule) => rule.teachingMode === "PRESENCIAL").reduce((total, rule) => total + nonNegative(rule.hours) * nonNegative(override.directTeachingHourValue) * (1 - clampRate(rule.allocationRate)), 0);
+    const synchronousSavings = validSharedCourseRules.filter((rule) => rule.teachingMode === "SINCRONICA").reduce((total, rule) => total + nonNegative(rule.hours) * nonNegative(override.synchronousTeachingHourValue) * (1 - clampRate(rule.allocationRate)), 0);
+    const asynchronousSavings = validSharedCourseRules.filter((rule) => rule.teachingMode === "ASINCRONICA").reduce((total, rule) => total + nonNegative(rule.hours) * nonNegative(override.asynchronousTeachingHourValue) * (1 - clampRate(rule.allocationRate)), 0);
+    const presentialTeachingCost = Math.max(0, grossPresentialTeachingCost - presentialSavings);
+    const synchronousTeachingCost = Math.max(0, grossSynchronousTeachingCost - synchronousSavings);
+    const asynchronousTeachingCost = Math.max(0, grossAsynchronousTeachingCost - asynchronousSavings);
+    const directTeachingCost = budget.deliveryModality === "PRESENCIAL" ? presentialTeachingCost : synchronousTeachingCost + asynchronousTeachingCost;
     const replacementTeachingCost = sum(semesters.map((semester) => nonNegative(semester.replacementTeachingHours) * parameters.replacementHour));
     const graduatingStudents = Math.max(0, ...semesters.map((semester) => {
       const explicit = semester.graduatingStudents;
@@ -270,7 +299,7 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
     const maintenanceScholarships = (budget.scholarshipsEnabled ? sum(semesters.map((semester) =>
       nonNegative(semester.maintenanceScholarshipStudents)
       * nonNegative(semester.maintenanceScholarshipMonths)
-      * parameterForYear(parameters.maintenanceScholarshipMonthly, semester.year),
+      * nonNegative(override.maintenanceScholarshipMonthlyValue),
     )) : 0) + sumManualItems(budget, year, ["Becas de manutención"]);
     const otherScholarshipsAndAid = sumManualItems(budget, year, ["Becas y ayudas"]);
     const scholarshipsAndAid = maintenanceScholarships + otherScholarshipsAndAid;
@@ -327,6 +356,9 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
       otherIncome,
       totalIncome,
       directTeachingCost,
+      synchronousTeachingCost,
+      asynchronousTeachingCost,
+      sharedCourseSavings,
       replacementTeachingCost,
       thesisGuidanceCost,
       academicHonoraria,

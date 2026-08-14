@@ -1,4 +1,4 @@
-import { parameterForYear, programTypeParameters, resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
+import { programTypeParameters, resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
 import type { BudgetResult, CohortBudget, InstitutionalParameters } from "../calculations/types";
 
 export type ReportRowTone = "income" | "expense" | "section" | "result" | "plain";
@@ -58,7 +58,13 @@ export function buildFinancialReport(budget: CohortBudget, result: BudgetResult)
       { label: "Ingresos extraordinarios", values: positive("externalIncome"), tone: "income", valueKind: "currency" },
       { label: "INGRESOS TOTAL (sin matrícula)", values: positive("totalIncome"), tone: "income", bold: true, valueKind: "currency" },
 
-      { label: "Horas docentes directas", values: negative("directTeachingCost"), tone: "expense", valueKind: "currency" },
+      ...(budget.deliveryModality === "PRESENCIAL"
+        ? [{ label: "Horas docentes presenciales", values: negative("directTeachingCost"), tone: "expense" as const, valueKind: "currency" as const }]
+        : [
+            { label: "Docencia sincrónica", values: negative("synchronousTeachingCost"), tone: "expense" as const, valueKind: "currency" as const },
+            { label: "Docencia asincrónica", values: negative("asynchronousTeachingCost"), tone: "expense" as const, valueKind: "currency" as const },
+            ...(f.some((flow) => flow.sharedCourseSavings > 0) ? [{ label: "Ahorro economía de escala (informativo)", values: positive("sharedCourseSavings"), tone: "income" as const, valueKind: "currency" as const }] : []),
+          ]),
       { label: "Horas docentes de reemplazo", values: negative("replacementTeachingCost"), tone: "expense", valueKind: "currency" },
       { label: "Guía de tesis", values: negative("thesisGuidanceCost"), tone: "expense", valueKind: "currency" },
       { label: "HONORARIOS ACADÉMICOS (SUBTOTAL)", values: negative("academicHonoraria"), tone: "section", bold: true, valueKind: "currency" },
@@ -143,6 +149,7 @@ export function buildParameterReport(
   pushText("Identificación", "Programa", "General", budget.program.name, budget.program.code);
   pushText("Identificación", "Código del programa", "General", budget.program.code);
   pushText("Identificación", "Tipo de programa", "General", budget.program.type.replaceAll("_", " "));
+  pushText("Identificación", "Modalidad", "General", budget.deliveryModality.replaceAll("_", " "));
   pushText("Identificación", "Facultad / unidad", "General", budget.program.faculty || "No informado");
   pushText("Identificación", "Director", "General", budget.program.director || "No informado");
   pushText("Identificación", "Centro de costo", "General", budget.program.costCenter ?? "No informado");
@@ -184,11 +191,15 @@ export function buildParameterReport(
     const section = "Parámetros anuales";
     pushCurrency(section, "Arancel anual por estudiante", String(year), annual.annualTuition, "Valor efectivo usado para calcular el arancel bruto");
     pushCurrency(section, "Matrícula anual por estudiante", String(year), annual.annualEnrollmentFee, "Informativa; sin descuentos y fuera de INGRESOS TOTAL");
-    pushCurrency(section, "Valor hora docencia directa", String(year), annual.directTeachingHourValue);
+    pushCurrency(section, "Valor hora docencia presencial", String(year), annual.directTeachingHourValue);
+    if (budget.deliveryModality !== "PRESENCIAL") {
+      pushCurrency(section, "Valor hora docencia sincrónica", String(year), annual.synchronousTeachingHourValue);
+      pushCurrency(section, "Valor hora docencia asincrónica", String(year), annual.asynchronousTeachingHourValue);
+    }
     pushCurrency(section, "Valor hora docencia de reemplazo", String(year), parameters.replacementHour, "Parámetro institucional general");
     pushCurrency(section, "Guía de tesis por estudiante en graduación", String(year), annual.thesisGuidancePerGraduatingStudent);
     if (budget.scholarshipsEnabled) {
-      pushCurrency(section, "Beca de manutención mensual", String(year), parameterForYear(parameters.maintenanceScholarshipMonthly, year));
+      pushCurrency(section, "Beca de manutención mensual", String(year), annual.maintenanceScholarshipMonthlyValue);
     }
     pushPercent(section, "Incobrabilidad", String(year), scoped.badDebtRate, "Aplicada al arancel después de descuentos y beca de arancel");
 
@@ -228,7 +239,11 @@ export function buildParameterReport(
     const section = "Parámetros semestrales";
     pushNumber(section, "Estudiantes activos", period, semester.activeStudents, "estudiantes");
     pushNumber(section, "Estudiantes en graduación", period, semester.graduatingStudents, "estudiantes");
-    pushNumber(section, "Horas docentes directas", period, semester.directTeachingHours, "horas");
+    pushNumber(section, "Horas docentes presenciales", period, semester.directTeachingHours, "horas");
+    if (budget.deliveryModality !== "PRESENCIAL") {
+      pushNumber(section, "Horas docentes sincrónicas", period, semester.synchronousTeachingHours, "horas");
+      pushNumber(section, "Horas docentes asincrónicas", period, semester.asynchronousTeachingHours, "horas");
+    }
     pushNumber(section, "Horas docentes de reemplazo", period, semester.replacementTeachingHours, "horas");
     pushNumber(section, "Asignaturas electivas", period, semester.electiveSubjects);
     pushNumber(section, "Secciones de electivos", period, semester.electiveSections);
@@ -275,6 +290,12 @@ export function buildParameterReport(
     });
   }
 
+  if ((budget.sharedCourses ?? []).length) {
+    budget.sharedCourses.forEach((rule, index) => {
+      pushNumber("Economías de escala", `${index + 1}. ${rule.courseName}`, periodLabel(rule.year, rule.semester), rule.hours, appendDetail(rule.teachingMode, `${rule.participantProgramIds.length} programas participantes`, `Imputación ${(rule.allocationRate * 100).toLocaleString("es-CL", { maximumFractionDigits: 1 })}%`, rule.note));
+    });
+  }
+
   // Cada costo/gasto manual queda individualizado. La hoja Excel no resume ni oculta registros en cero.
   if (budget.manualItems.length === 0) {
     pushText("Costos y gastos registrados", "Costos manuales", "General", "Sin costos manuales");
@@ -315,6 +336,7 @@ const PDF_IDENTIFICATION_PARAMETERS = new Set([
   "Versión del programa / plan",
   "Revisión interna de la plataforma",
   "Fuente del arancel",
+  "Modalidad",
 ]);
 
 const PDF_CONTROL_PARAMETERS = new Set([
@@ -325,15 +347,20 @@ const PDF_CONTROL_PARAMETERS = new Set([
 const PDF_SEMESTER_PARAMETERS = new Set([
   "Estudiantes activos",
   "Estudiantes en graduación",
-  "Horas docentes directas",
+  "Horas docentes presenciales",
+  "Horas docentes sincrónicas",
+  "Horas docentes asincrónicas",
   "Horas docentes de reemplazo",
 ]);
 
 const PDF_PRIMARY_PARAMETERS = new Set([
   "Arancel anual por estudiante",
   "Matrícula anual por estudiante",
-  "Valor hora docencia directa",
+  "Valor hora docencia presencial",
+  "Valor hora docencia sincrónica",
+  "Valor hora docencia asincrónica",
   "Valor hora docencia de reemplazo",
+  "Beca de manutención mensual",
   "Guía de tesis por estudiante en graduación",
   "Incobrabilidad",
   "Dirección aplicada al presupuesto",
@@ -385,7 +412,7 @@ function rowHasMeaningfulInformation(row: ParameterReportRow): boolean {
   // Por semestre interesa la carga/estudiantes. Los demás detalles quedan completos en Excel.
   if (row.section === "Parámetros semestrales") {
     if (!PDF_SEMESTER_PARAMETERS.has(row.parameter)) return false;
-    if (row.parameter === "Estudiantes activos" || row.parameter === "Horas docentes directas") return true;
+    if (row.parameter === "Estudiantes activos" || row.parameter === "Horas docentes presenciales" || row.parameter === "Horas docentes sincrónicas" || row.parameter === "Horas docentes asincrónicas") return true;
     return typeof row.value === "number" && Math.abs(row.value) > 0.000001;
   }
 

@@ -7,6 +7,7 @@ import type {
   IncomeTemplateConfig,
   MaintenanceScholarshipTemplateConfig,
   TuitionScholarshipTemplateConfig,
+  AnnualParameterTemplateConfig,
 } from "../calculations/types";
 
 const clone = <T,>(value: T): T => structuredClone(value);
@@ -42,6 +43,35 @@ function templateStudents(activeStudents: number, mode: "TODOS_ACTIVOS" | "CANTI
   return mode === "TODOS_ACTIVOS" ? nonNegative(activeStudents) : nonNegative(configured);
 }
 
+
+function annualTemplateValue(config: AnnualParameterTemplateConfig, year: number): number {
+  const entries = Object.entries(config.values ?? {}).map(([key, value]) => [Number(key), nonNegative(value)] as const).filter(([key]) => Number.isFinite(key)).sort((a,b) => a[0]-b[0]);
+  if (!entries.length) return 0;
+  const exact = entries.find(([key]) => key === year);
+  if (exact) return exact[1];
+  const prior = [...entries].reverse().find(([key]) => key < year);
+  const first = entries[0];
+  const base = prior ?? first;
+  return Math.round(base[1] * Math.pow(1 + Number(config.annualAdjustmentRate ?? 0), Math.max(0, year - base[0])));
+}
+
+function applyAnnualParameter(budget: CohortBudget, config: AnnualParameterTemplateConfig) {
+  budget.annualOverrides = budget.annualOverrides.map((annual) => {
+    const value = annualTemplateValue(config, annual.year);
+    if (value <= 0) return annual;
+    if (config.parameter === "ARANCEL") return { ...annual, annualTuition: value };
+    if (config.parameter === "MATRICULA") return { ...annual, annualEnrollmentFee: value };
+    if (config.parameter === "BECA_MANUTENCION") return { ...annual, maintenanceScholarshipMonthlyValue: value };
+    if (config.parameter === "DOCENCIA_PRESENCIAL") return { ...annual, directTeachingHourValue: value };
+    if (config.parameter === "DOCENCIA_SINCRONICA") return { ...annual, synchronousTeachingHourValue: value };
+    if (config.parameter === "DOCENCIA_ASINCRONICA") return { ...annual, asynchronousTeachingHourValue: value };
+    if (config.parameter === "GUIA_TESIS") return { ...annual, thesisGuidancePerGraduatingStudent: value };
+    if (config.parameter === "DIRECCION") return { ...annual, annualDirection: value };
+    if (config.parameter === "ASISTENCIA") return { ...annual, annualAssistance: value };
+    return { ...annual, annualOtherNonAcademicHonoraria: value };
+  });
+}
+
 export function applyBudgetTemplate(source: CohortBudget, template: BudgetTemplate): CohortBudget {
   const budget = clone(source);
   budget.discounts = budget.discounts.filter((item) => !item.originTemplateItemKey);
@@ -55,7 +85,19 @@ export function applyBudgetTemplate(source: CohortBudget, template: BudgetTempla
     maintenanceScholarshipMonths: 0,
   }));
 
+  if (template.settings?.modality) budget.deliveryModality = template.settings.modality;
+  if (template.settings?.sharedCourses?.length) {
+    const periods = getActivePeriods(budget.startYear, budget.startSemester, budget.durationSemesters);
+    budget.sharedCourses = template.settings.sharedCourses.map((preset) => {
+      const period = periods[Math.max(0, Math.min(periods.length - 1, preset.semesterOffset - 1))];
+      return { id: uid("shared-course", preset.id), courseName: preset.courseName, year: period.year, semester: period.semester, teachingMode: preset.teachingMode, hours: nonNegative(preset.hours), participantProgramIds: [...new Set([budget.program.id, ...preset.participantProgramIds])], allocationRate: nonNegative(preset.allocationRate), note: preset.note };
+    });
+  }
+
   for (const item of template.items.filter((candidate) => candidate.active).sort((a, b) => a.position - b.position)) {
+    if (item.kind === "PARAMETRO_ANUAL") {
+      applyAnnualParameter(budget, item.config as AnnualParameterTemplateConfig);
+    }
     if (item.kind === "DESCUENTO") {
       const config = item.config as DiscountTemplateConfig;
       const period = bounds(budget, config.periodMode);

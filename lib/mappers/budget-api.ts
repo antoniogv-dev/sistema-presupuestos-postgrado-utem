@@ -53,6 +53,7 @@ export type ApiBudgetRecord = {
   enrollmentRecognitionRate: string | number;
   programVersionLabel?: string | null;
   scholarshipsEnabled?: boolean | number;
+  deliveryModality?: CohortBudget["deliveryModality"];
   authorizedInitialCarryover: string | number;
   includeAuthorizedCarryover?: boolean;
   normalizeSharedCosts?: boolean;
@@ -74,6 +75,7 @@ export type ApiBudgetRecord = {
   externalIncome?: Array<Record<string, unknown>>;
   items?: Array<Record<string, unknown>>;
   annualOverrides?: Array<Record<string, unknown>>;
+  sharedCourses?: Array<Record<string, unknown>>;
   versions?: Array<{ id?: string; number: number; status?: string; snapshot?: unknown; changeNote?: string | null; createdAt?: string }>;
   workflowEvents?: Array<{
     id: string;
@@ -181,6 +183,8 @@ export function emptySemester(year: number, semester: 1 | 2, students = 0): Seme
     activeStudents: students,
     graduatingStudents: 0,
     directTeachingHours: 0,
+    synchronousTeachingHours: 0,
+    asynchronousTeachingHours: 0,
     replacementTeachingHours: 0,
     electiveSubjects: 0,
     electiveSections: 0,
@@ -220,6 +224,9 @@ function annualOverride(item: Record<string, unknown>): BudgetAnnualOverride {
   return {
     year: numberValue(item.year),
     directTeachingHourValue: numberValue(item.directTeachingHourValue),
+    synchronousTeachingHourValue: numberValue(item.synchronousTeachingHourValue),
+    asynchronousTeachingHourValue: numberValue(item.asynchronousTeachingHourValue),
+    maintenanceScholarshipMonthlyValue: numberValue(item.maintenanceScholarshipMonthlyValue),
     annualEnrollmentFee: numberValue(item.annualEnrollmentFee),
     annualTuition: numberValue(item.annualTuition),
     thesisGuidancePerGraduatingStudent: numberValue(item.thesisGuidancePerGraduatingStudent),
@@ -254,6 +261,8 @@ export function toBudget(record: ApiBudgetRecord): CohortBudget {
       activeStudents: numberValue(parameters.activeStudents),
       graduatingStudents: numberValue(parameters.graduatingStudents),
       directTeachingHours: numberValue(parameters.directTeachingHours),
+      synchronousTeachingHours: numberValue(parameters.synchronousTeachingHours),
+      asynchronousTeachingHours: numberValue(parameters.asynchronousTeachingHours),
       replacementTeachingHours: numberValue(parameters.replacementTeachingHours),
       electiveSubjects: numberValue(parameters.electiveSubjects),
       electiveSections: numberValue(parameters.electiveSections),
@@ -290,6 +299,7 @@ export function toBudget(record: ApiBudgetRecord): CohortBudget {
     enrollmentRecognitionRate: numberValue(record.enrollmentRecognitionRate),
     programVersionLabel: record.programVersionLabel?.trim() || record.program.versionLabel?.trim() || "1",
     scholarshipsEnabled: record.scholarshipsEnabled === undefined ? record.program.type !== "MAGISTER_PROFESIONAL" : Boolean(record.scholarshipsEnabled),
+    deliveryModality: record.deliveryModality ?? "PRESENCIAL",
     authorizedInitialCarryover: numberValue(record.authorizedInitialCarryover),
     includeAuthorizedCarryover: record.includeAuthorizedCarryover ?? true,
     normalizeSharedCosts: record.normalizeSharedCosts ?? true,
@@ -327,6 +337,17 @@ export function toBudget(record: ApiBudgetRecord): CohortBudget {
       source: String(item.source),
       note: typeof item.note === "string" ? item.note : undefined,
       originTemplateItemKey: typeof item.originTemplateItemKey === "string" ? item.originTemplateItemKey : undefined,
+    })),
+    sharedCourses: (record.sharedCourses ?? []).map((item) => ({
+      id: String(item.id),
+      courseName: String(item.courseName),
+      year: numberValue(item.year),
+      semester: numberValue(item.semester) as 1 | 2,
+      teachingMode: String(item.teachingMode ?? "PRESENCIAL") as CohortBudget["sharedCourses"][number]["teachingMode"],
+      hours: numberValue(item.hours),
+      participantProgramIds: Array.isArray(item.participantProgramIds) ? item.participantProgramIds.map(String) : (() => { try { return JSON.parse(String(item.participantProgramIds ?? "[]")) as string[]; } catch { return []; } })(),
+      allocationRate: numberValue(item.allocationRate ?? 1),
+      note: typeof item.note === "string" ? item.note : undefined,
     })),
     manualItems: (record.items ?? []).map((item) => ({
       id: String(item.id),

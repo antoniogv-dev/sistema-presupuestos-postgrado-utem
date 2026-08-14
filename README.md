@@ -1,6 +1,19 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10.17 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.18 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
+
+## Mejoras funcionales v10.18
+
+- **Plantillas editables y versionadas:** las plantillas existentes pueden modificarse, guardarse, clonarse o asociarse a un programa específico.
+- **Ajuste anual por fila:** Arancel, Matrícula, Manutención, Docencia, Guía de tesis, Dirección, Asistencia y otros honorarios incorporan factor manual y botón `Aplicar ajuste a todos los años`.
+- **Modalidades profesionales:** Presencial, Semipresencial y E-learning; estas últimas separan horas y valores hora sincrónicos/asíncrónicos.
+- **Economías de escala:** asignaturas compartidas entre dos o más programas, con horas, modalidad y porcentaje de costo imputado. Una regla incompleta no genera ahorro.
+- **Workflow con avisos:** V°B°, aprobación, observación y envío manual permiten seleccionar destinatario y usar `Otros` para un correo no registrado.
+- **Correo con estado:** los avisos identifican programa, versión, cohorte, revisión y estado. El envío automático es opcional; sin proveedor se prepara un correo manual.
+- **Clonación de presupuestos:** crea un nuevo borrador independiente conservando los parámetros de formulación.
+- **PDF con relato financiero:** después del flujo se incorpora `Análisis financiero y principales consideraciones`, construido sólo desde los datos y parámetros del presupuesto.
+- **Migración D1 0008:** agrega parámetros anuales de plantillas, modalidades, horas sync/async, economías de escala y registro de notificaciones.
+- **Control de despliegue:** versión `v10.18 · 1.0.28-d1-web`.
 
 ## Mejoras funcionales v10.17
 
@@ -78,7 +91,7 @@ npm run deploy:cloudflare
 
 ## Migraciones D1
 
-El proyecto contiene siete migraciones, en este orden:
+El proyecto contiene ocho migraciones, en este orden:
 
 ```text
 0001_initial.sql
@@ -88,6 +101,7 @@ El proyecto contiene siete migraciones, en este orden:
 0005_cashflow_costs_and_annual_tuition.sql
 0006_repair_annual_tuition_and_enrollment_rules.sql
 0007_cashflow_editable_staff_and_costs.sql
+0008_templates_modalities_scale_notifications.sql
 ```
 
 El despliegue aplica automáticamente sólo las migraciones pendientes mediante:

@@ -8,6 +8,9 @@ import { d1Database } from "@/lib/runtime-env";
 const annualOverrideSchema = z.object({
   year: z.number().int().min(2000).max(2100),
   directTeachingHourValue: z.number().nonnegative(),
+  synchronousTeachingHourValue: z.number().nonnegative().default(0),
+  asynchronousTeachingHourValue: z.number().nonnegative().default(0),
+  maintenanceScholarshipMonthlyValue: z.number().int().nonnegative().default(0),
   annualEnrollmentFee: z.number().int().nonnegative(),
   annualTuition: z.number().int().positive(),
   thesisGuidancePerGraduatingStudent: z.number().int().nonnegative(),
@@ -44,6 +47,7 @@ const createSchema = z.object({
   enrollmentRecognitionRate: z.number().min(0).max(1).default(0),
   programVersionLabel: z.string().trim().min(1).max(80).optional(),
   scholarshipsEnabled: z.boolean().optional(),
+  deliveryModality: z.enum(["PRESENCIAL", "SEMIPRESENCIAL", "E_LEARNING"]).default("PRESENCIAL"),
   annualOverrides: z.array(annualOverrideSchema).max(20).optional(),
   authorizedInitialCarryover: z.number().int(),
   includeAuthorizedCarryover: z.boolean().default(true),
@@ -72,16 +76,17 @@ function appendAnnualOverrides(
   for (const item of annualOverrides) {
     statements.push(database.prepare(`
       INSERT INTO "BudgetAnnualOverride" (
-        "id", "budgetId", "year", "directTeachingHourValue", "annualEnrollmentFee", "annualTuition",
+        "id", "budgetId", "year", "directTeachingHourValue", "synchronousTeachingHourValue", "asynchronousTeachingHourValue", "maintenanceScholarshipMonthlyValue", "annualEnrollmentFee", "annualTuition",
         "thesisGuidancePerGraduatingStudent", "annualDirection", "directionProrated",
         "directionAllocationRate", "annualAssistance", "assistanceProrated",
         "assistanceAllocationRate", "annualOtherNonAcademicHonoraria", "otherNonAcademicProrated",
         "otherNonAcademicAllocationRate", "annualOperational", "annualSoftware", "annualDiffusion",
         "annualCongressesInternships", "annualBooksPublications", "annualTravelFreight", "annualPerDiem",
         "annualFoodBeverages", "annualOtherCosts", "centralOverheadRate", "facultyOverheadRate"
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       d1Id("annual-override"), budgetId, item.year, item.directTeachingHourValue,
+      item.synchronousTeachingHourValue, item.asynchronousTeachingHourValue, item.maintenanceScholarshipMonthlyValue,
       item.annualEnrollmentFee, item.annualTuition, item.thesisGuidancePerGraduatingStudent, item.annualDirection,
       item.directionProrated ? 1 : 0, item.directionAllocationRate, item.annualAssistance,
       item.assistanceProrated ? 1 : 0, item.assistanceAllocationRate,
@@ -107,6 +112,7 @@ export async function GET(request: Request) {
         externalIncome: true,
         items: true,
         annualOverrides: { orderBy: { year: "asc" } },
+        sharedCourses: { orderBy: [{ year: "asc" }, { semester: "asc" }] },
         versions: { orderBy: { number: "desc" }, take: 1 },
         workflowEvents: { include: { user: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
       },
@@ -136,6 +142,7 @@ export async function POST(request: Request) {
       enrollmentRecognitionRate: input.enrollmentRecognitionRate ?? 0,
       programVersionLabel: input.programVersionLabel?.trim() || program.versionLabel || "1",
       scholarshipsEnabled: input.scholarshipsEnabled ?? (program.type !== ProgramType.MAGISTER_PROFESIONAL),
+      deliveryModality: input.deliveryModality ?? "PRESENCIAL",
     };
     const budgetId = d1Id("budget");
     const versionId = d1Id("budget-version");
@@ -145,16 +152,16 @@ export async function POST(request: Request) {
         INSERT INTO "CohortBudget" (
           "id", "programId", "cohortName", "startYear", "startSemester", "durationSemesters",
           "initialStudents", "status", "workflowStage", "facultyOverheadRate",
-          "enrollmentRecognitionRate", "programVersionLabel", "scholarshipsEnabled",
+          "enrollmentRecognitionRate", "programVersionLabel", "scholarshipsEnabled", "deliveryModality",
           "authorizedInitialCarryover", "includeAuthorizedCarryover", "normalizeSharedCosts",
           "alertPotentialDuplicates", "appliedTemplateId", "appliedTemplateVersion", "notes",
           "responsibleId", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BORRADOR', 'GESTION', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BORRADOR', 'GESTION', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `).bind(
         budgetId, effectiveInput.programId, effectiveInput.cohortName, effectiveInput.startYear,
         effectiveInput.startSemester, effectiveInput.durationSemesters, effectiveInput.initialStudents,
         effectiveInput.facultyOverheadRate, effectiveInput.enrollmentRecognitionRate,
-        effectiveInput.programVersionLabel, effectiveInput.scholarshipsEnabled ? 1 : 0,
+        effectiveInput.programVersionLabel, effectiveInput.scholarshipsEnabled ? 1 : 0, effectiveInput.deliveryModality,
         effectiveInput.authorizedInitialCarryover, effectiveInput.includeAuthorizedCarryover ? 1 : 0,
         effectiveInput.normalizeSharedCosts ? 1 : 0, effectiveInput.alertPotentialDuplicates ? 1 : 0,
         effectiveInput.appliedTemplateId ?? null, effectiveInput.appliedTemplateVersion ?? null,
@@ -179,6 +186,7 @@ export async function POST(request: Request) {
       include: {
         program: { include: { annualTuitions: { orderBy: { year: "asc" } } } },
         annualOverrides: { orderBy: { year: "asc" } },
+        sharedCourses: { orderBy: [{ year: "asc" }, { semester: "asc" }] },
         versions: { orderBy: { number: "desc" }, take: 1 },
       },
     });

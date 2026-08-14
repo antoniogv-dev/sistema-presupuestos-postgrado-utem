@@ -5,6 +5,7 @@ import type { ConsolidationGroup } from "../calculations/consolidation";
 import { createFinancialReportPdf } from "./pdf";
 import { buildFinancialReport, buildParameterReport, compactParameterReportForPdf, type FinancialReport } from "./report-model";
 import { createFinancialReportXlsx } from "./xlsx";
+import { buildFinancialNarrative } from "./financial-narrative";
 
 function slug(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -62,7 +63,8 @@ export async function downloadBudgetPdf(budget: CohortBudget, result: BudgetResu
     title: budget.program.name,
     subtitle: `Versión ${budget.programVersionLabel}\nCohorte ${budget.startYear}-${budget.startSemester}S`,
   };
-  download(createFinancialReportPdf(report, parameterReport, cover), "application/pdf", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.pdf`);
+  const narrative = buildFinancialNarrative(budget, result, parameters);
+  download(createFinancialReportPdf(report, parameterReport, cover, narrative), "application/pdf", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.pdf`);
 }
 
 function csvCell(value: unknown): string {

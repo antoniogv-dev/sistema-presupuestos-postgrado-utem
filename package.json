@@ -1,6 +1,6 @@
 {
   "name": "sistema-presupuestos-postgrado-utem",
-  "version": "1.0.27-d1-web",
+  "version": "1.0.28-d1-web",
   "private": true,
   "description": "Sistema de Presupuestos de Postgrado UTEM para Cloudflare Workers y D1, desplegable desde GitHub y Cloudflare web.",
   "engines": {
@@ -75,6 +75,15 @@
       },
       "BOOTSTRAP_ADMIN_PASSWORD": {
         "description": "Secreto de Cloudflare para la contraseña inicial del Administrador. No debe almacenarse en wrangler.jsonc ni en GitHub."
+      },
+      "PUBLIC_APP_URL": {
+        "description": "URL pública del sistema usada en los avisos de workflow; opcional, si se omite se usa el origen del request."
+      },
+      "RESEND_API_KEY": {
+        "description": "Secreto opcional de Cloudflare para envío automático de avisos por correo mediante Resend. No almacenar en GitHub."
+      },
+      "NOTIFICATION_FROM_EMAIL": {
+        "description": "Remitente verificado para avisos automáticos. Si no se configura junto con RESEND_API_KEY, el sistema genera un correo para envío manual."
       }
     }
   }

@@ -1,4 +1,5 @@
 import type { FinancialReport, FinancialReportRow, ParameterReport, ParameterReportRow } from "./report-model";
+import type { FinancialNarrative, NarrativeSection } from "./financial-narrative";
 
 const PAGE_WIDTH = 595;
 const PAGE_HEIGHT = 842;
@@ -270,6 +271,52 @@ function createCoverPageContent(cover: PdfCover): string {
   return content;
 }
 
+
+function narrativeLines(section: NarrativeSection, width: number): Array<{ text: string; bold: boolean; gapAfter?: number }> {
+  const lines: Array<{ text: string; bold: boolean; gapAfter?: number }> = [];
+  for (const line of wrapText(section.heading, width, 10)) lines.push({ text: line, bold: true });
+  lines.push({ text: "", bold: false, gapAfter: 3 });
+  for (const paragraph of section.paragraphs) {
+    for (const line of wrapText(paragraph, width, 8.5)) lines.push({ text: line, bold: false });
+    lines.push({ text: "", bold: false, gapAfter: 5 });
+  }
+  return lines;
+}
+
+function createNarrativePages(narrative: FinancialNarrative): string[][] {
+  const width = PAGE_WIDTH - MARGIN * 2;
+  const entries: Array<{ text: string; bold: boolean; gapAfter?: number }> = [];
+  narrative.sections.forEach((section) => entries.push(...narrativeLines(section, width)));
+  const pages: string[][] = [];
+  let current: string[] = [];
+  let used = 0;
+  const maxHeight = PAGE_HEIGHT - MARGIN * 2 - 65;
+  for (const entry of entries) {
+    const height = entry.text ? 12 : (entry.gapAfter ?? 4);
+    if (used + height > maxHeight && current.length) { pages.push(current); current = []; used = 0; }
+    current.push(`${entry.bold ? "B" : "R"}|${entry.text}`);
+    used += height;
+  }
+  if (current.length) pages.push(current);
+  return pages;
+}
+
+function createNarrativePageContent(narrative: FinancialNarrative, lines: string[], page: number, totalPages: number): string {
+  let content = "";
+  content += drawText(narrative.title, MARGIN, PAGE_HEIGHT - MARGIN - 10, 16, true);
+  content += drawText("Relato técnico-financiero construido exclusivamente desde el presupuesto y sus parámetros", MARGIN, PAGE_HEIGHT - MARGIN - 28, 8, false);
+  let y = PAGE_HEIGHT - MARGIN - 55;
+  for (const encoded of lines) {
+    const bold = encoded.startsWith("B|");
+    const text = encoded.slice(2);
+    if (!text) { y -= 5; continue; }
+    content += drawText(text, MARGIN, y, bold ? 10 : 8.5, bold);
+    y -= 12;
+  }
+  content += drawRightText(`Página ${page} de ${totalPages}`, PAGE_WIDTH - MARGIN, 14, 7, false);
+  return content;
+}
+
 function jpegObject(cover: PdfCover): Uint8Array {
   return concatBytes([
     latin1(`<< /Type /XObject /Subtype /Image /Width ${cover.imageWidth} /Height ${cover.imageHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${cover.jpegBytes.length} >>\nstream\n`),
@@ -308,7 +355,7 @@ function buildPdf(objects: Array<string | Uint8Array>): Uint8Array {
   return output;
 }
 
-export function createFinancialReportPdf(report: FinancialReport, parameterReport?: ParameterReport, cover?: PdfCover): Uint8Array {
+export function createFinancialReportPdf(report: FinancialReport, parameterReport?: ParameterReport, cover?: PdfCover, narrative?: FinancialNarrative): Uint8Array {
   // PDF completamente vertical. Para mantener legibilidad, cuando existen
   // muchos años el flujo se divide en grupos de hasta 3 años, pero conserva
   // todas las filas y todos los valores del presupuesto.
@@ -333,17 +380,21 @@ export function createFinancialReportPdf(report: FinancialReport, parameterRepor
     }
   }
 
+  const narrativePages = narrative ? createNarrativePages(narrative) : [];
   const parameterPages = parameterReport ? paginateParameterRows(parameterReport.rows) : [];
   const hasCover = Boolean(cover?.jpegBytes.length);
-  const totalPages = financialPageSpecs.length + parameterPages.length + (hasCover ? 1 : 0);
+  const totalPages = financialPageSpecs.length + narrativePages.length + parameterPages.length + (hasCover ? 1 : 0);
 
   const regularPageContents: string[] = [];
   const pageOffset = hasCover ? 1 : 0;
   financialPageSpecs.forEach((spec, index) => {
     regularPageContents.push(createFinancialPageContent(spec.report, spec.rows, pageOffset + index + 1, totalPages));
   });
+  narrativePages.forEach((lines, index) => {
+    regularPageContents.push(createNarrativePageContent(narrative!, lines, pageOffset + financialPageSpecs.length + index + 1, totalPages));
+  });
   parameterPages.forEach((rows, index) => {
-    regularPageContents.push(createParameterPageContent(parameterReport!, rows, pageOffset + financialPageSpecs.length + index + 1, totalPages));
+    regularPageContents.push(createParameterPageContent(parameterReport!, rows, pageOffset + financialPageSpecs.length + narrativePages.length + index + 1, totalPages));
   });
 
   const regularStartId = hasCover ? 8 : 5;

@@ -12,6 +12,8 @@ const semesterSchema = z.object({
   activeStudents: z.number().int().min(0),
   graduatingStudents: z.number().int().min(0),
   directTeachingHours: z.number().min(0),
+  synchronousTeachingHours: z.number().min(0).default(0),
+  asynchronousTeachingHours: z.number().min(0).default(0),
   replacementTeachingHours: z.number().min(0),
   electiveSubjects: z.number().int().min(0).default(0),
   electiveSections: z.number().int().min(0).default(0),
@@ -63,6 +65,9 @@ const itemSchema = z.object({
 const annualOverrideSchema = z.object({
   year: z.number().int().min(2000).max(2100),
   directTeachingHourValue: z.number().nonnegative(),
+  synchronousTeachingHourValue: z.number().nonnegative().default(0),
+  asynchronousTeachingHourValue: z.number().nonnegative().default(0),
+  maintenanceScholarshipMonthlyValue: z.number().int().nonnegative().default(0),
   annualEnrollmentFee: z.number().int().nonnegative(),
   annualTuition: z.number().int().positive(),
   thesisGuidancePerGraduatingStudent: z.number().int().nonnegative(),
@@ -87,6 +92,17 @@ const annualOverrideSchema = z.object({
   centralOverheadRate: z.number().min(0).max(1).default(0),
   facultyOverheadRate: z.number().min(0).max(1).default(0),
 });
+const sharedCourseSchema = z.object({
+  id: z.string().optional(),
+  courseName: z.string().trim().min(2),
+  year: z.number().int().min(2000).max(2100),
+  semester: z.union([z.literal(1), z.literal(2)]),
+  teachingMode: z.enum(["PRESENCIAL", "SINCRONICA", "ASINCRONICA"]),
+  hours: z.number().min(0),
+  participantProgramIds: z.array(z.string().min(1)).min(1),
+  allocationRate: z.number().min(0).max(1),
+  note: z.string().optional(),
+});
 const updateSchema = z.object({
   programId: z.string().min(1).optional(),
   cohortName: z.string().trim().min(3).optional(),
@@ -98,6 +114,7 @@ const updateSchema = z.object({
   enrollmentRecognitionRate: z.number().min(0).max(1).optional(),
   programVersionLabel: z.string().trim().min(1).max(80).optional(),
   scholarshipsEnabled: z.boolean().optional(),
+  deliveryModality: z.enum(["PRESENCIAL", "SEMIPRESENCIAL", "E_LEARNING"]).optional(),
   annualOverrides: z.array(annualOverrideSchema).max(20).optional(),
   authorizedInitialCarryover: z.number().int().optional(),
   includeAuthorizedCarryover: z.boolean().optional(),
@@ -111,6 +128,7 @@ const updateSchema = z.object({
   discounts: z.array(discountSchema).optional(),
   externalIncome: z.array(incomeSchema).optional(),
   items: z.array(itemSchema).optional(),
+  sharedCourses: z.array(sharedCourseSchema).optional(),
 });
 
 function json(value: unknown) {
@@ -130,6 +148,7 @@ const includeAll = {
   externalIncome: true,
   items: true,
   annualOverrides: { orderBy: { year: "asc" as const } },
+  sharedCourses: { orderBy: [{ year: "asc" as const }, { semester: "asc" as const }] },
   versions: { orderBy: { number: "desc" as const } },
   approvals: { orderBy: { createdAt: "desc" as const } },
   workflowEvents: {
@@ -175,7 +194,7 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
       : current.program;
     if (!effectiveProgram) throw new Error("NOT_FOUND");
 
-    const { semesters, discounts, externalIncome, items, annualOverrides, changeNote, ...header } = input;
+    const { semesters, discounts, externalIncome, items, annualOverrides, sharedCourses, changeNote, ...header } = input;
     const nextVersion = (current.versions[0]?.number ?? 0) + 1;
     const nextStatus = current.status === BudgetStatus.OBSERVADO ? BudgetStatus.BORRADOR : current.status;
     const database = d1Database();
@@ -198,6 +217,7 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
     if (header.enrollmentRecognitionRate !== undefined) assign("enrollmentRecognitionRate", header.enrollmentRecognitionRate);
     if (header.programVersionLabel !== undefined) assign("programVersionLabel", header.programVersionLabel);
     if (header.scholarshipsEnabled !== undefined) assign("scholarshipsEnabled", header.scholarshipsEnabled ? 1 : 0);
+    if (header.deliveryModality !== undefined) assign("deliveryModality", header.deliveryModality);
     if (header.authorizedInitialCarryover !== undefined) assign("authorizedInitialCarryover", header.authorizedInitialCarryover);
     if (header.includeAuthorizedCarryover !== undefined) assign("includeAuthorizedCarryover", header.includeAuthorizedCarryover ? 1 : 0);
     if (header.normalizeSharedCosts !== undefined) assign("normalizeSharedCosts", header.normalizeSharedCosts ? 1 : 0);
@@ -225,16 +245,18 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
           database.prepare(`
             INSERT INTO "SemesterParameters" (
               "id", "periodId", "activeStudents", "graduatingStudents", "directTeachingHours",
-              "replacementTeachingHours", "electiveSubjects", "electiveSections", "specializedCourses",
+              "synchronousTeachingHours", "asynchronousTeachingHours", "replacementTeachingHours", "electiveSubjects", "electiveSections", "specializedCourses",
               "specializedSections", "internalTuitionScholarshipStudents", "internalTuitionScholarshipCoverage",
               "maintenanceScholarshipStudents", "maintenanceScholarshipMonths", "notes"
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             d1Id("semester-parameters"),
             periodId,
             semester.activeStudents,
             semester.graduatingStudents,
             semester.directTeachingHours,
+            semester.synchronousTeachingHours,
+            semester.asynchronousTeachingHours,
             semester.replacementTeachingHours,
             semester.electiveSubjects,
             semester.electiveSections,
@@ -340,16 +362,17 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
       for (const annual of annualOverrides) {
         statements.push(database.prepare(`
           INSERT INTO "BudgetAnnualOverride" (
-            "id", "budgetId", "year", "directTeachingHourValue", "annualEnrollmentFee", "annualTuition",
+            "id", "budgetId", "year", "directTeachingHourValue", "synchronousTeachingHourValue", "asynchronousTeachingHourValue", "maintenanceScholarshipMonthlyValue", "annualEnrollmentFee", "annualTuition",
             "thesisGuidancePerGraduatingStudent", "annualDirection", "directionProrated",
             "directionAllocationRate", "annualAssistance", "assistanceProrated",
             "assistanceAllocationRate", "annualOtherNonAcademicHonoraria", "otherNonAcademicProrated",
             "otherNonAcademicAllocationRate", "annualOperational", "annualSoftware", "annualDiffusion",
             "annualCongressesInternships", "annualBooksPublications", "annualTravelFreight", "annualPerDiem",
             "annualFoodBeverages", "annualOtherCosts", "centralOverheadRate", "facultyOverheadRate"
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           d1Id("annual-override"), budgetId, annual.year, annual.directTeachingHourValue,
+          annual.synchronousTeachingHourValue, annual.asynchronousTeachingHourValue, annual.maintenanceScholarshipMonthlyValue,
           annual.annualEnrollmentFee, annual.annualTuition, annual.thesisGuidancePerGraduatingStudent, annual.annualDirection,
           annual.directionProrated ? 1 : 0, annual.directionAllocationRate, annual.annualAssistance,
           annual.assistanceProrated ? 1 : 0, annual.assistanceAllocationRate,
@@ -357,6 +380,22 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
           annual.otherNonAcademicAllocationRate, annual.annualOperational, annual.annualSoftware, annual.annualDiffusion,
           annual.annualCongressesInternships, annual.annualBooksPublications, annual.annualTravelFreight, annual.annualPerDiem,
           annual.annualFoodBeverages, annual.annualOtherCosts, annual.centralOverheadRate, annual.facultyOverheadRate,
+        ));
+      }
+    }
+
+
+    if (sharedCourses) {
+      statements.push(database.prepare(`DELETE FROM "SharedCourseEconomy" WHERE "budgetId" = ?`).bind(budgetId));
+      for (const rule of sharedCourses) {
+        statements.push(database.prepare(`
+          INSERT INTO "SharedCourseEconomy" (
+            "id", "budgetId", "courseName", "year", "semester", "teachingMode", "hours",
+            "participantProgramIds", "allocationRate", "note", "createdAt", "updatedAt"
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `).bind(
+          d1Id("shared-course"), budgetId, rule.courseName, rule.year, rule.semester, rule.teachingMode,
+          rule.hours, d1Json(rule.participantProgramIds), rule.allocationRate, rule.note ?? null,
         ));
       }
     }
@@ -374,6 +413,7 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
       externalIncome,
       items,
       annualOverrides,
+      sharedCourses,
     };
     statements.push(
       database.prepare(`

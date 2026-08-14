@@ -9,6 +9,8 @@ export const semesterParametersSchema = z.object({
   activeStudents: nonNegativeInteger,
   graduatingStudents: nonNegativeInteger,
   directTeachingHours: z.number().min(0),
+  synchronousTeachingHours: z.number().min(0).default(0),
+  asynchronousTeachingHours: z.number().min(0).default(0),
   replacementTeachingHours: z.number().min(0),
   electiveSubjects: nonNegativeInteger,
   electiveSections: nonNegativeInteger,
@@ -64,6 +66,9 @@ export const budgetItemSchema = z.object({
 export const budgetAnnualOverrideSchema = z.object({
   year: z.number().int().min(2000).max(2100),
   directTeachingHourValue: z.number().min(0),
+  synchronousTeachingHourValue: z.number().min(0).default(0),
+  asynchronousTeachingHourValue: z.number().min(0).default(0),
+  maintenanceScholarshipMonthlyValue: nonNegativeInteger.default(0),
   annualEnrollmentFee: nonNegativeInteger,
   annualTuition: z.number().int().positive(),
   thesisGuidancePerGraduatingStudent: nonNegativeInteger,
@@ -87,6 +92,7 @@ export const cohortBudgetSchema = z.object({
   enrollmentRecognitionRate: percentage,
   programVersionLabel: z.string().trim().min(1).max(80),
   scholarshipsEnabled: z.boolean(),
+  deliveryModality: z.enum(["PRESENCIAL", "SEMIPRESENCIAL", "E_LEARNING"]).default("PRESENCIAL"),
   authorizedInitialCarryover: z.number().int(),
   includeAuthorizedCarryover: z.boolean(),
   normalizeSharedCosts: z.boolean(),
@@ -96,6 +102,7 @@ export const cohortBudgetSchema = z.object({
   discounts: z.array(cohortDiscountSchema),
   externalIncome: z.array(externalIncomeSchema),
   manualItems: z.array(budgetItemSchema),
+  sharedCourses: z.array(z.object({ id: z.string(), courseName: z.string().min(1), year: z.number().int(), semester: z.union([z.literal(1),z.literal(2)]), teachingMode: z.enum(["PRESENCIAL","SINCRONICA","ASINCRONICA"]), hours: z.number().min(0), participantProgramIds: z.array(z.string()).min(2), allocationRate: percentage, note: z.string().optional() })).default([]),
 }).superRefine((budget, context) => {
   for (const [index, semester] of budget.semesters.entries()) {
     if (semester.graduatingStudents > semester.activeStudents) {

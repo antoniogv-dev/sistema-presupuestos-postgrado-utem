@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { calculateBudget } from "@/lib/calculations/budget-engine";
 import { demoBudget, institutionalParameters } from "@/lib/demo-data";
 import { createFinancialReportPdf } from "@/lib/export/pdf";
+import { buildFinancialNarrative } from "@/lib/export/financial-narrative";
 import { buildFinancialReport, buildParameterReport, compactParameterReportForPdf } from "@/lib/export/report-model";
 import { createFinancialReportXlsx } from "@/lib/export/xlsx";
 
@@ -15,12 +16,12 @@ describe("exportación trazable de parámetros", () => {
 
     for (const parameter of [
       "Duración oficial del programa",
-      "Valor hora docencia directa",
+      "Valor hora docencia presencial",
       "Valor hora docencia de reemplazo",
       "Dirección aplicada al presupuesto",
       "Asistencia aplicada al presupuesto",
       "Estudiantes activos",
-      "Horas docentes directas",
+      "Horas docentes presenciales",
     ]) {
       expect(parameters.rows.some((row) => row.parameter === parameter)).toBe(true);
     }
@@ -87,18 +88,20 @@ describe("exportación trazable de parámetros", () => {
     const result = calculateBudget(budget, institutionalParameters);
     const financial = buildFinancialReport(budget, result);
     const parameters = compactParameterReportForPdf(buildParameterReport(budget, result, institutionalParameters));
+    const narrative = buildFinancialNarrative(budget, result, institutionalParameters);
     const bytes = createFinancialReportPdf(financial, parameters, {
       jpegBytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
       imageWidth: 10,
       imageHeight: 10,
       title: budget.program.name,
       subtitle: `Versión ${budget.programVersionLabel}\nCohorte ${budget.startYear}-${budget.startSemester}S`,
-    });
+    }, narrative);
     const text = new TextDecoder("latin1").decode(bytes);
 
     expect(text).toContain("/Subtype /Image");
     expect(text).toContain("/DCTDecode");
     expect(text).toContain(budget.program.name);
+    expect(text).toContain("Análisis financiero y principales consideraciones");
     expect(text).toContain("Parámetros principales utilizados");
     expect(text).toContain("/MediaBox [0 0 595 842]");
   });

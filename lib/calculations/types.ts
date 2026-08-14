@@ -5,7 +5,10 @@ export type TuitionSource = "PROPIO" | "PLANTILLA_DOCTORADO" | "PLANTILLA_MAGIST
 export type AccessRole = "ADMIN" | "CREADOR" | "LECTOR" | "GESTOR" | "VISTO_BUENO" | "APROBADOR";
 export type WorkflowStage = "GESTION" | "VISTO_BUENO" | "APROBACION" | "FINALIZADO";
 export type ReviewDecision = "ENVIADO" | "VISTO_BUENO" | "OBSERVADO" | "APROBADO" | "RECHAZADO";
-export type TemplateItemKind = "DESCUENTO" | "BECA_ARANCEL" | "BECA_MANUTENCION" | "COSTO" | "INGRESO_EXTRAORDINARIO";
+export type TemplateItemKind = "DESCUENTO" | "BECA_ARANCEL" | "BECA_MANUTENCION" | "COSTO" | "INGRESO_EXTRAORDINARIO" | "PARAMETRO_ANUAL";
+export type DeliveryModality = "PRESENCIAL" | "SEMIPRESENCIAL" | "E_LEARNING";
+export type TeachingMode = "PRESENCIAL" | "SINCRONICA" | "ASINCRONICA";
+export type AnnualTemplateParameter = "ARANCEL" | "MATRICULA" | "BECA_MANUTENCION" | "DOCENCIA_PRESENCIAL" | "DOCENCIA_SINCRONICA" | "DOCENCIA_ASINCRONICA" | "GUIA_TESIS" | "DIRECCION" | "ASISTENCIA" | "OTROS_HONORARIOS_NO_ACADEMICOS";
 export type StudentQuantityMode = "TODOS_ACTIVOS" | "CANTIDAD";
 export type BudgetCostType = "Único de esta versión" | "Compartido con otras cohortes";
 
@@ -55,6 +58,8 @@ export interface SemesterParameters {
   activeStudents: number;
   graduatingStudents: number;
   directTeachingHours: number;
+  synchronousTeachingHours: number;
+  asynchronousTeachingHours: number;
   replacementTeachingHours: number;
   electiveSubjects: number;
   electiveSections: number;
@@ -135,6 +140,30 @@ export interface CostTemplateConfig {
   periodicity: BudgetItem["periodicity"];
   note?: string;
 }
+
+export interface AnnualParameterTemplateConfig {
+  parameter: AnnualTemplateParameter;
+  values: Record<number, number>;
+  annualAdjustmentRate: number;
+  note?: string;
+}
+
+export interface SharedCourseTemplatePreset {
+  id: string;
+  courseName: string;
+  semesterOffset: number;
+  teachingMode: TeachingMode;
+  hours: number;
+  participantProgramIds: string[];
+  allocationRate: number;
+  note?: string;
+}
+
+export interface BudgetTemplateSettings {
+  modality?: DeliveryModality;
+  sharedCourses?: SharedCourseTemplatePreset[];
+}
+
 export interface IncomeTemplateConfig {
   type: ExternalIncome["type"];
   year?: number;
@@ -144,7 +173,7 @@ export interface IncomeTemplateConfig {
   source: string;
   note?: string;
 }
-export type BudgetTemplateConfig = DiscountTemplateConfig | TuitionScholarshipTemplateConfig | MaintenanceScholarshipTemplateConfig | CostTemplateConfig | IncomeTemplateConfig;
+export type BudgetTemplateConfig = DiscountTemplateConfig | TuitionScholarshipTemplateConfig | MaintenanceScholarshipTemplateConfig | CostTemplateConfig | IncomeTemplateConfig | AnnualParameterTemplateConfig;
 
 export interface BudgetTemplateItem {
   id: string;
@@ -164,6 +193,8 @@ export interface BudgetTemplate {
   description: string;
   version: number;
   active: boolean;
+  programId?: string;
+  settings?: BudgetTemplateSettings;
   items: BudgetTemplateItem[];
 }
 
@@ -181,6 +212,9 @@ export interface ReviewEvent {
 export interface BudgetAnnualOverride {
   year: number;
   directTeachingHourValue: number;
+  synchronousTeachingHourValue: number;
+  asynchronousTeachingHourValue: number;
+  maintenanceScholarshipMonthlyValue: number;
   annualEnrollmentFee: number;
   annualTuition: number;
   thesisGuidancePerGraduatingStudent: number;
@@ -206,6 +240,19 @@ export interface BudgetAnnualOverride {
   facultyOverheadRate: number;
 }
 
+
+export interface SharedCourseEconomyRule {
+  id: string;
+  courseName: string;
+  year: number;
+  semester: SemesterNumber;
+  teachingMode: TeachingMode;
+  hours: number;
+  participantProgramIds: string[];
+  allocationRate: number;
+  note?: string;
+}
+
 export interface CohortBudget {
   id: string;
   program: Program;
@@ -220,6 +267,7 @@ export interface CohortBudget {
   enrollmentRecognitionRate: number;
   programVersionLabel: string;
   scholarshipsEnabled: boolean;
+  deliveryModality: DeliveryModality;
   authorizedInitialCarryover: number;
   includeAuthorizedCarryover: boolean;
   normalizeSharedCosts: boolean;
@@ -238,6 +286,7 @@ export interface CohortBudget {
   discounts: CohortDiscount[];
   externalIncome: ExternalIncome[];
   manualItems: BudgetItem[];
+  sharedCourses: SharedCourseEconomyRule[];
   reviewHistory: ReviewEvent[];
 }
 
@@ -262,6 +311,9 @@ export interface AnnualFlow {
   otherIncome: number;
   totalIncome: number;
   directTeachingCost: number;
+  synchronousTeachingCost: number;
+  asynchronousTeachingCost: number;
+  sharedCourseSavings: number;
   replacementTeachingCost: number;
   thesisGuidanceCost: number;
   academicHonoraria: number;

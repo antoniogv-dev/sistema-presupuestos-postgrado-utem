@@ -12,6 +12,8 @@ import type {
   BudgetItem,
   BudgetTemplate,
   CohortBudget,
+  DeliveryModality,
+  TeachingMode,
   ExternalIncome,
   InstitutionalParameters,
   Program,
@@ -28,7 +30,7 @@ import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
 import { availableWorkflowActions, canDeleteBudget, canEditBudget, type WorkflowAction } from "@/lib/workflow/budget-workflow";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.17";
+const FUNCTIONAL_RELEASE = "v10.18";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -81,7 +83,7 @@ const uid = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toStrin
 function emptySemester(year: number, semester: 1 | 2, students: number): SemesterParameters {
   return {
     year, semester, activeStudents: students, graduatingStudents: 0,
-    directTeachingHours: 0, replacementTeachingHours: 0,
+    directTeachingHours: 0, synchronousTeachingHours: 0, asynchronousTeachingHours: 0, replacementTeachingHours: 0,
     electiveSubjects: 0, electiveSections: 0, specializedCourses: 0, specializedSections: 0,
     internalTuitionScholarshipStudents: 0, internalTuitionScholarshipCoverage: 1,
     maintenanceScholarshipStudents: 0, maintenanceScholarshipMonths: 0, notes: "",
@@ -104,11 +106,12 @@ function freshBudget(program: Program, responsible: string, parameters: Institut
     enrollmentRecognitionRate: 0,
     programVersionLabel: program.versionLabel ?? "1",
     scholarshipsEnabled: program.type !== "MAGISTER_PROFESIONAL",
+    deliveryModality: "PRESENCIAL",
     authorizedInitialCarryover: 0, includeAuthorizedCarryover: true,
     normalizeSharedCosts: true, alertPotentialDuplicates: true, responsible, version: 1,
     annualOverrides: getActiveYears(getActivePeriods(year, 1, duration)).map((activeYear) =>
       defaultAnnualOverrideForYear({ program, facultyOverheadRate: overheadApplies(program.type) ? typeParameters.facultyOverheadRate : 0 }, parameters, activeYear)),
-    createdAt: new Date().toISOString(), semesters, discounts: [], externalIncome: [], manualItems: [], reviewHistory: [],
+    createdAt: new Date().toISOString(), semesters, discounts: [], externalIncome: [], manualItems: [], sharedCourses: [], reviewHistory: [],
   };
 }
 
@@ -134,6 +137,12 @@ export function BudgetWorkspace() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [mailDialog, setMailDialog] = useState<{ action?: WorkflowAction; role: string; title: string } | null>(null);
+  const [recipients, setRecipients] = useState<Array<{ id: string; name: string; email: string; roles: string[] }>>([]);
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientMode, setRecipientMode] = useState("");
+  const [mailComment, setMailComment] = useState("");
 
   async function load(preferredId?: string) {
     setLoading(true);
@@ -165,7 +174,7 @@ export function BudgetWorkspace() {
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { const preferred = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("budget") ?? undefined : undefined; void load(preferred); }, []);
 
   const budget = budgets.find((item) => item.id === selectedId) ?? null;
   const result = useMemo(() => budget ? calculateBudget(budget, parameters) : null, [budget, parameters]);
@@ -217,7 +226,7 @@ export function BudgetWorkspace() {
           programId: program.id, cohortName: draft.cohortName, startYear: draft.startYear, startSemester: draft.startSemester,
           durationSemesters: draft.durationSemesters, initialStudents: draft.initialStudents,
           facultyOverheadRate: draft.facultyOverheadRate, enrollmentRecognitionRate: draft.enrollmentRecognitionRate,
-          programVersionLabel: draft.programVersionLabel, scholarshipsEnabled: draft.scholarshipsEnabled,
+          programVersionLabel: draft.programVersionLabel, scholarshipsEnabled: draft.scholarshipsEnabled, deliveryModality: draft.deliveryModality,
           annualOverrides: draft.annualOverrides,
           authorizedInitialCarryover: 0, includeAuthorizedCarryover: true, normalizeSharedCosts: true, alertPotentialDuplicates: true,
           appliedTemplateId: null, appliedTemplateVersion: null, responsibleId: identity.userId,
@@ -248,6 +257,7 @@ export function BudgetWorkspace() {
           enrollmentRecognitionRate: budget.enrollmentRecognitionRate,
           programVersionLabel: budget.programVersionLabel,
           scholarshipsEnabled: budget.scholarshipsEnabled,
+          deliveryModality: budget.deliveryModality,
           annualOverrides: budget.annualOverrides,
           authorizedInitialCarryover: budget.authorizedInitialCarryover,
           includeAuthorizedCarryover: budget.includeAuthorizedCarryover,
@@ -261,6 +271,7 @@ export function BudgetWorkspace() {
           discounts: budget.discounts,
           externalIncome: budget.externalIncome,
           items: budget.manualItems,
+          sharedCourses: budget.sharedCourses,
         }),
       });
       await responseBody(response);
@@ -285,18 +296,43 @@ export function BudgetWorkspace() {
     }
   }
 
-  async function executeWorkflow(action: WorkflowAction) {
-    if (!budget) return;
-    const comment = window.prompt("Comentario de revisión (opcional):", "") ?? "";
+  function workflowRecipientRole(action: WorkflowAction): string {
+    if (action === "SUBMIT_VB") return "VISTO_BUENO";
+    if (action === "VB_APPROVE") return "APROBADOR";
+    return "GESTOR";
+  }
+
+  async function openMailDialog(action?: WorkflowAction) {
+    const targetRole = action ? workflowRecipientRole(action) : "TODOS";
     try {
-      await responseBody(await fetch(`/api/budgets/${budget.id}/workflow`, {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, comment }),
-      }));
-      await load(budget.id);
-      setMessage("Acción de flujo registrada correctamente.");
-    } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "No fue posible ejecutar la acción de flujo.");
-    }
+      const list = await responseBody<Array<{ id: string; name: string; email: string; roles: string[] }>>(await fetch(`/api/workflow/recipients?role=${targetRole}`, { cache: "no-store" }));
+      setRecipients(list); setRecipientMode(list[0]?.email ?? "OTROS"); setRecipientEmail(list[0]?.email ?? ""); setRecipientName(list[0]?.name ?? ""); setMailComment("");
+      setMailDialog({ action, role: targetRole, title: action ? `${actionLabels[action]} y notificar` : "Enviar presupuesto por correo" });
+    } catch (reason) { setMessage(reason instanceof Error ? reason.message : "No fue posible cargar los destinatarios."); }
+  }
+
+  async function confirmMailAction() {
+    if (!budget || !mailDialog || !recipientEmail.trim()) return;
+    try {
+      if (mailDialog.action) {
+        await responseBody(await fetch(`/api/budgets/${budget.id}/workflow`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: mailDialog.action, comment: mailComment }) }));
+      }
+      const notice = await responseBody<{ sent: boolean; mailtoUrl: string; warning?: string | null }>(await fetch("/api/notifications/email", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ budgetId: budget.id, recipientEmail: recipientEmail.trim(), recipientName: recipientName.trim() || undefined, action: mailDialog.action ?? "SHARE", comment: mailComment }) }));
+      setMailDialog(null); await load(budget.id);
+      setMessage(notice.sent ? "Acción registrada y aviso enviado por correo." : (notice.warning ?? "Aviso preparado. Se abrirá su cliente de correo para enviarlo."));
+      if (!notice.sent && notice.mailtoUrl) window.location.href = notice.mailtoUrl;
+    } catch (reason) { setMessage(reason instanceof Error ? reason.message : "No fue posible completar la acción y el aviso."); }
+  }
+
+  async function cloneBudget() {
+    if (!budget || !identity || !canCreate(identity.roles)) return;
+    try {
+      const cloneTag = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+      const clonedCohortName = `${budget.cohortName} · copia ${cloneTag}`;
+      const created = await responseBody<{ id: string }>(await fetch("/api/budgets", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ programId: budget.program.id, cohortName: clonedCohortName, startYear: budget.startYear, startSemester: budget.startSemester, durationSemesters: budget.durationSemesters, initialStudents: budget.initialStudents, facultyOverheadRate: budget.facultyOverheadRate, enrollmentRecognitionRate: budget.enrollmentRecognitionRate, programVersionLabel: budget.programVersionLabel, scholarshipsEnabled: budget.scholarshipsEnabled, deliveryModality: budget.deliveryModality, annualOverrides: budget.annualOverrides, authorizedInitialCarryover: budget.authorizedInitialCarryover, includeAuthorizedCarryover: budget.includeAuthorizedCarryover, normalizeSharedCosts: budget.normalizeSharedCosts, alertPotentialDuplicates: budget.alertPotentialDuplicates, appliedTemplateId: budget.appliedTemplateId ?? null, appliedTemplateVersion: budget.appliedTemplateVersion ?? null, notes: `Clonado desde ${budget.cohortName}`, responsibleId: identity.userId }) }));
+      await responseBody(await fetch(`/api/budgets/${created.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ deliveryModality: budget.deliveryModality, annualOverrides: budget.annualOverrides, semesters: budget.semesters.map((semester, position) => ({ ...semester, position })), discounts: budget.discounts, externalIncome: budget.externalIncome, items: budget.manualItems, sharedCourses: budget.sharedCourses, notes: `Clonado desde ${budget.program.code} · ${budget.cohortName}`, changeNote: "Clonación de presupuesto" }) }));
+      await load(created.id); setMessage("Presupuesto clonado como nuevo borrador independiente.");
+    } catch (reason) { setMessage(reason instanceof Error ? reason.message : "No fue posible clonar el presupuesto."); }
   }
 
   function applyTemplate(template: BudgetTemplate) {
@@ -434,7 +470,7 @@ export function BudgetWorkspace() {
     {message ? <div className="notice info"><p>{message}</p></div> : null}
     <section className="panel budget-selector">
       <div><label>Presupuesto<select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>{budgets.map((item) => <option key={item.id} value={item.id}>{item.program.code} · {item.cohortName} · Versión {item.programVersionLabel} · R{item.version}</option>)}</select></label><label>Rol activo<select value={role} onChange={(event) => setActiveRole(event.target.value as AccessRole)}>{roles.map((candidate) => <option key={candidate} value={candidate}>{roleLabels[candidate]}</option>)}</select></label></div>
-      <div className="workspace-actions"><button className="button secondary" type="button" onClick={() => void exportBudget("xlsx")}>Exportar XLSX</button><button className="button secondary" type="button" onClick={() => void exportBudget("pdf")}>Exportar PDF</button><button className="button primary" type="button" disabled={!editable || saving} onClick={() => void saveBudget()}>{saving ? "Guardando…" : "Guardar cambios"}</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void createBudget()}>Nuevo presupuesto</button><button className="text-button danger-text" type="button" disabled={!deletable} onClick={() => void deleteBudget()}>Eliminar</button></div>
+      <div className="workspace-actions"><button className="button secondary" type="button" onClick={() => void exportBudget("xlsx")}>Exportar XLSX</button><button className="button secondary" type="button" onClick={() => void exportBudget("pdf")}>Exportar PDF</button><button className="button secondary" type="button" onClick={() => void openMailDialog()}>Enviar por correo</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void cloneBudget()}>Clonar presupuesto</button><button className="button primary" type="button" disabled={!editable || saving} onClick={() => void saveBudget()}>{saving ? "Guardando…" : "Guardar cambios"}</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void createBudget()}>Nuevo presupuesto</button><button className="text-button danger-text" type="button" disabled={!deletable} onClick={() => void deleteBudget()}>Eliminar</button></div>
     </section>
 
     <section className="panel">
@@ -455,6 +491,7 @@ export function BudgetWorkspace() {
         <label>Duración<input disabled={!editable} type="number" min="2" max="8" value={budget.durationSemesters} onChange={(event) => regeneratePeriods(budget.startYear, budget.startSemester, Math.min(8, Math.max(2, numberValue(event.target.value))), budget.initialStudents)} /></label>
         <label>Estudiantes iniciales<input disabled={!editable} type="number" min="0" value={budget.initialStudents} onChange={(event) => regeneratePeriods(budget.startYear, budget.startSemester, budget.durationSemesters, numberValue(event.target.value))} /></label>
         <label>Estado<div className="input-like"><StatusBadge status={budget.status} /></div></label>
+        {budget.program.type === "MAGISTER_PROFESIONAL" ? <label>Modalidad<select disabled={!editable} value={budget.deliveryModality} onChange={(event) => patchBudget({ deliveryModality: event.target.value as DeliveryModality })}><option value="PRESENCIAL">Presencial</option><option value="SEMIPRESENCIAL">Semipresencial</option><option value="E_LEARNING">E-learning</option></select></label> : null}
       </div>
     </section>
 
@@ -470,6 +507,8 @@ export function BudgetWorkspace() {
       <div className="subpanel annual-parameter-panel"><h3>Valores anuales del presupuesto</h3><p>Estos valores se aplican sólo a esta versión del programa. El arancel se define para cada año activo. La matrícula se cobra una vez por cada dos semestres activos, es informativa y no recibe descuentos. Los años sin cobro de matrícula se muestran sólo como referencia y no generan ingreso.</p>
         <div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Año</th><th>Arancel anual</th><th>Periodo de cobro matrícula</th><th>Matrícula anual</th><th>Valor hora docente directa</th><th>Guía de tesis por graduando</th></tr></thead><tbody>{budget.annualOverrides.map((annual) => { const chargePeriods = getActivePeriods(budget.startYear, budget.startSemester, budget.durationSemesters).filter((period, index) => index % 2 === 0 && period.year === annual.year); return <tr key={`annual-values-${annual.year}`}><th>{annual.year}</th><InputCell label={`Arancel ${annual.year}`} value={annual.annualTuition} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { annualTuition: value })} /><td>{chargePeriods.length ? chargePeriods.map((period) => `${period.year}-${period.semester}S`).join(", ") : <span className="muted">Sin cobro</span>}</td><InputCell label={`Matrícula ${annual.year}`} value={annual.annualEnrollmentFee} disabled={!editable || chargePeriods.length === 0} onChange={(value) => updateAnnualOverride(annual.year, { annualEnrollmentFee: value })} /><InputCell label={`Hora directa ${annual.year}`} value={annual.directTeachingHourValue} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { directTeachingHourValue: value })} /><InputCell label={`Guía de tesis ${annual.year}`} value={annual.thesisGuidancePerGraduatingStudent} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { thesisGuidancePerGraduatingStudent: value })} /></tr>; })}</tbody></table></div>
       </div>
+
+      {budget.program.type === "MAGISTER_PROFESIONAL" && budget.deliveryModality !== "PRESENCIAL" ? <div className="subpanel annual-parameter-panel"><h3>Valores hora según modalidad</h3><p>La docencia sincrónica y asincrónica se valorizan de forma independiente para cada año.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Año</th><th>Hora sincrónica</th><th>Hora asincrónica</th><th>Beca manutención mensual</th></tr></thead><tbody>{budget.annualOverrides.map((annual) => <tr key={`modality-rate-${annual.year}`}><th>{annual.year}</th><InputCell label={`Hora sincrónica ${annual.year}`} value={annual.synchronousTeachingHourValue} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { synchronousTeachingHourValue: value })} /><InputCell label={`Hora asincrónica ${annual.year}`} value={annual.asynchronousTeachingHourValue} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { asynchronousTeachingHourValue: value })} /><InputCell label={`Manutención mensual ${annual.year}`} value={annual.maintenanceScholarshipMonthlyValue} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { maintenanceScholarshipMonthlyValue: value })} /></tr>)}</tbody></table></div></div> : null}
 
       <div className="subpanel annual-parameter-panel">
         <h3>Staff comprometido/prorrateable y overhead</h3>
@@ -512,7 +551,20 @@ export function BudgetWorkspace() {
 
     <section className="panel"><SectionHeading number="3" id="estudiantes" title="Estudiantes y graduación" description="Matrícula activa y estudiantes que se encuentran en etapa de graduación por semestre." /><div className="table-wrap"><table className="data-table semester-table"><thead><tr><th>Periodo</th><th>Estudiantes activos</th><th>Estudiantes en graduación</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Activos ${semester.year}-${semester.semester}`} value={semester.activeStudents} disabled={!editable} onChange={(value) => updateSemester(index, "activeStudents", value)} /><InputCell label={`Graduación ${semester.year}-${semester.semester}`} value={semester.graduatingStudents} disabled={!editable} onChange={(value) => updateSemester(index, "graduatingStudents", value)} /></tr>)}</tbody></table></div></section>
 
-    <section className="panel"><SectionHeading number="4" id="carga-academica" title="Carga académica" description="Las horas docentes directas y las horas de reemplazo se gestionan separadamente de estudiantes y becas." /><div className="academic-hours-grid"><div className="subpanel"><h3>Horas docentes directas</h3><p>Se valorizan con el parámetro anual de hora docente directa.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas directas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`direct-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas directas ${semester.year}-${semester.semester}`} value={semester.directTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "directTeachingHours", value)} /></tr>)}</tbody></table></div></div><div className="subpanel"><h3>Horas docentes de reemplazo</h3><p>Se valorizan con el parámetro general de hora de reemplazo.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas de reemplazo</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`replacement-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas reemplazo ${semester.year}-${semester.semester}`} value={semester.replacementTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "replacementTeachingHours", value)} /></tr>)}</tbody></table></div></div></div></section>
+    <section className="panel"><SectionHeading number="4" id="carga-academica" title="Carga académica" description="La modalidad define qué horas docentes se valorizan; las horas de reemplazo se mantienen separadas." />
+      <div className="academic-hours-grid">
+        {budget.deliveryModality === "PRESENCIAL" ? <div className="subpanel"><h3>Horas docentes presenciales</h3><p>Se valorizan con el valor hora presencial.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`direct-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas presenciales ${semester.year}-${semester.semester}`} value={semester.directTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "directTeachingHours", value)} /></tr>)}</tbody></table></div></div> : <>
+          <div className="subpanel"><h3>Horas sincrónicas</h3><p>Clases en tiempo real, con valor hora propio.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`sync-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas sincrónicas ${semester.year}-${semester.semester}`} value={semester.synchronousTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "synchronousTeachingHours", value)} /></tr>)}</tbody></table></div></div>
+          <div className="subpanel"><h3>Horas asincrónicas</h3><p>Docencia y actividades no simultáneas, con valor hora propio.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`async-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas asincrónicas ${semester.year}-${semester.semester}`} value={semester.asynchronousTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "asynchronousTeachingHours", value)} /></tr>)}</tbody></table></div></div>
+        </>}
+        <div className="subpanel"><h3>Horas docentes de reemplazo</h3><p>Se valorizan con el parámetro general de reemplazo.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`replacement-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas reemplazo ${semester.year}-${semester.semester}`} value={semester.replacementTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "replacementTeachingHours", value)} /></tr>)}</tbody></table></div></div>
+      </div>
+    </section>
+
+    {budget.program.type === "MAGISTER_PROFESIONAL" ? <section className="panel"><SectionHeading number="4.1" id="economias-escala" title="Economías de escala" description="Asignaturas compartidas entre dos o más programas. El porcentaje imputado reduce el costo docente de esta cohorte." action={<button className="button secondary" disabled={!editable} onClick={() => { const period = getActivePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)[0]; patchBudget({ sharedCourses: [...budget.sharedCourses, { id: uid("shared-course"), courseName: "Asignatura compartida", year: period.year, semester: period.semester, teachingMode: budget.deliveryModality === "PRESENCIAL" ? "PRESENCIAL" : "SINCRONICA", hours: 0, participantProgramIds: [budget.program.id], allocationRate: 0.5 }] }); }}>Agregar asignatura compartida</button>} />
+      <div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Asignatura</th><th>Periodo</th><th>Tipo de docencia</th><th>Horas</th><th>Programas participantes</th><th>% imputado</th><th>Acción</th></tr></thead><tbody>{budget.sharedCourses.length ? budget.sharedCourses.map((rule, index) => <tr key={rule.id}><td><input disabled={!editable} value={rule.courseName} onChange={(event) => patchBudget({ sharedCourses: budget.sharedCourses.map((candidate, i) => i === index ? { ...candidate, courseName: event.target.value } : candidate) })} /></td><td><PeriodInputs disabled={!editable} years={result.years} year={rule.year} semester={rule.semester} onYear={(value) => patchBudget({ sharedCourses: budget.sharedCourses.map((candidate, i) => i === index ? { ...candidate, year: value } : candidate) })} onSemester={(value) => patchBudget({ sharedCourses: budget.sharedCourses.map((candidate, i) => i === index ? { ...candidate, semester: value } : candidate) })} /></td><td><select disabled={!editable} value={rule.teachingMode} onChange={(event) => patchBudget({ sharedCourses: budget.sharedCourses.map((candidate, i) => i === index ? { ...candidate, teachingMode: event.target.value as TeachingMode } : candidate) })}><option value="PRESENCIAL">Presencial</option><option value="SINCRONICA">Sincrónica</option><option value="ASINCRONICA">Asincrónica</option></select></td><td><input disabled={!editable} type="number" min="0" value={rule.hours} onChange={(event) => patchBudget({ sharedCourses: budget.sharedCourses.map((candidate, i) => i === index ? { ...candidate, hours: numberValue(event.target.value) } : candidate) })} /></td><td><select multiple disabled={!editable} value={rule.participantProgramIds} onChange={(event) => { const values = Array.from((event.currentTarget as HTMLSelectElement).selectedOptions, (option) => option.value); if (!values.includes(budget.program.id)) values.unshift(budget.program.id); patchBudget({ sharedCourses: budget.sharedCourses.map((candidate, i) => i === index ? { ...candidate, participantProgramIds: values, allocationRate: values.length > 1 ? 1 / values.length : candidate.allocationRate } : candidate) }); }}>{programs.filter((program) => program.type === "MAGISTER_PROFESIONAL").map((program) => <option key={program.id} value={program.id}>{program.code} · {program.name}</option>)}</select></td><PercentCell label={`Imputación ${rule.courseName}`} value={rule.allocationRate} disabled={!editable} onChange={(value) => patchBudget({ sharedCourses: budget.sharedCourses.map((candidate, i) => i === index ? { ...candidate, allocationRate: value } : candidate) })} /><td><button className="text-button danger-text" disabled={!editable} onClick={() => patchBudget({ sharedCourses: budget.sharedCourses.filter((_, i) => i !== index) })}>Quitar</button></td></tr>) : <tr><td colSpan={7}>No hay asignaturas compartidas.</td></tr>}</tbody></table></div>
+      {result.annualFlows.some((flow) => flow.sharedCourseSavings > 0) ? <div className="notice success"><strong>Ahorro docente estimado por economía de escala:</strong> {formatCLP(result.annualFlows.reduce((sum, flow) => sum + flow.sharedCourseSavings, 0))}</div> : null}
+    </section> : null}
 
     <section className="panel">
       <SectionHeading number="5" id="becas" title="Becas" description="En programas profesionales se mantienen deshabilitadas por defecto y se habilitan sólo cuando corresponda." action={budget.program.type === "MAGISTER_PROFESIONAL" ? <button className="button secondary" type="button" disabled={!editable} onClick={() => patchBudget({ scholarshipsEnabled: !budget.scholarshipsEnabled })}>{budget.scholarshipsEnabled ? "Deshabilitar becas" : "Habilitar becas"}</button> : undefined} />
@@ -552,7 +604,7 @@ export function BudgetWorkspace() {
             <FlowRow label="Ingresos extraordinarios" values={result.annualFlows.map((flow) => flow.externalIncome)} tone="income" />
             <FlowRow label="INGRESOS TOTAL (sin matrícula)" values={result.annualFlows.map((flow) => flow.totalIncome)} total tone="income" />
 
-            <FlowRow label="Horas docentes directas" values={result.annualFlows.map((flow) => -flow.directTeachingCost)} />
+            {budget.deliveryModality === "PRESENCIAL" ? <FlowRow label="Horas docentes presenciales" values={result.annualFlows.map((flow) => -flow.directTeachingCost)} /> : <><FlowRow label="Docencia sincrónica" values={result.annualFlows.map((flow) => -flow.synchronousTeachingCost)} /><FlowRow label="Docencia asincrónica" values={result.annualFlows.map((flow) => -flow.asynchronousTeachingCost)} />{result.annualFlows.some((flow) => flow.sharedCourseSavings > 0) ? <FlowRow label="Ahorro economía de escala (informativo)" values={result.annualFlows.map((flow) => flow.sharedCourseSavings)} tone="income" /> : null}</>}
             <FlowRow label="Horas docentes de reemplazo" values={result.annualFlows.map((flow) => -flow.replacementTeachingCost)} />
             <FlowRow label="Guía de tesis" values={result.annualFlows.map((flow) => -flow.thesisGuidanceCost)} />
             <FlowRow label="HONORARIOS ACADÉMICOS (SUBTOTAL)" values={result.annualFlows.map((flow) => -flow.academicHonoraria)} total />
@@ -672,7 +724,8 @@ export function BudgetWorkspace() {
       </div>
     </section>
 
-    <section className="panel"><SectionHeading number="11" id="workflow" title="Revisión y aprobación" description="Gestión → V°B° → Aprobación, con historial auditable." /><div className="workflow-actions">{workflowActions.length ? workflowActions.map((transition) => <button key={transition.action} className="button primary" type="button" onClick={() => void executeWorkflow(transition.action)}>{actionLabels[transition.action]}</button>) : <span>No hay acciones disponibles para el rol y etapa actuales.</span>}</div></section>
+    <section className="panel"><SectionHeading number="11" id="workflow" title="Revisión y aprobación" description="Gestión → V°B° → Aprobación, con historial auditable y aviso por correo." /><div className="workflow-actions">{workflowActions.length ? workflowActions.map((transition) => <button key={transition.action} className="button primary" type="button" onClick={() => void openMailDialog(transition.action)}>{actionLabels[transition.action]}</button>) : <span>No hay acciones disponibles para el rol y etapa actuales.</span>}</div></section>
+    {mailDialog ? <div className="modal-backdrop" role="presentation"><div className="modal-card" role="dialog" aria-modal="true"><h3>{mailDialog.title}</h3><p>Seleccione a quién avisar. El correo identifica programa, cohorte, revisión y estado del presupuesto.</p><label>Destinatario<select value={recipientMode} onChange={(event) => { const value = event.target.value; setRecipientMode(value); if (value === "OTROS") { setRecipientEmail(""); setRecipientName(""); } else { const found = recipients.find((item) => item.email === value); setRecipientEmail(value); setRecipientName(found?.name ?? ""); } }}>{recipients.map((item) => <option key={item.id} value={item.email}>{item.name} · {item.email}</option>)}<option value="OTROS">Otros</option></select></label>{recipientMode === "OTROS" ? <><label>Correo<input type="email" value={recipientEmail} onChange={(event) => setRecipientEmail(event.target.value)} /></label><label>Nombre (opcional)<input value={recipientName} onChange={(event) => setRecipientName(event.target.value)} /></label></> : null}<label>Comentario<textarea value={mailComment} onChange={(event) => setMailComment(event.target.value)} rows={4} /></label><div className="workspace-actions"><button className="button secondary" onClick={() => setMailDialog(null)}>Cancelar</button><button className="button primary" disabled={!recipientEmail.trim()} onClick={() => void confirmMailAction()}>{mailDialog.action ? "Registrar y preparar aviso" : "Preparar correo"}</button></div></div></div> : null}
   </div>;
 }
 

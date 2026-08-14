@@ -9,6 +9,7 @@ export const defaultBudgetTemplates: BudgetTemplate[] = [
     description: "Incluye beca de excelencia académica de arancel y beca de atención económica de manutención.",
     version: 1,
     active: true,
+    settings: {},
     items: [
       {
         id: "doctorado-beca-arancel",
@@ -38,6 +39,7 @@ export const defaultBudgetTemplates: BudgetTemplate[] = [
     description: "Incluye beca de excelencia académica de arancel y beca de atención económica de manutención.",
     version: 1,
     active: true,
+    settings: {},
     items: [
       {
         id: "ma-beca-arancel",
@@ -62,11 +64,12 @@ export const defaultBudgetTemplates: BudgetTemplate[] = [
   {
     id: "template-magister-profesional",
     code: "MAGISTER_PROFESIONAL",
-    name: "Plantilla Magíster Profesional",
+    name: "Plantilla Magíster Profesional Presencial",
     programType: "MAGISTER_PROFESIONAL",
     description: "Incluye únicamente descuentos configurables; no incorpora becas académicas por defecto.",
     version: 1,
     active: true,
+    settings: { modality: "PRESENCIAL" },
     items: [
       {
         id: "mp-descuento",
@@ -78,5 +81,27 @@ export const defaultBudgetTemplates: BudgetTemplate[] = [
         config: { percentage: 0, students: 0, periodMode: "TODOS", note: "Complete porcentaje y estudiantes según autorización." },
       },
     ],
+  },
+  {
+    id: "template-magister-profesional-semipresencial",
+    code: "MAGISTER_PROFESIONAL_SEMIPRESENCIAL",
+    name: "Plantilla Magíster Profesional Semipresencial",
+    programType: "MAGISTER_PROFESIONAL",
+    description: "Separa docencia sincrónica y asincrónica con valores hora diferenciados y permite economías de escala.",
+    version: 1,
+    active: true,
+    settings: { modality: "SEMIPRESENCIAL" },
+    items: [],
+  },
+  {
+    id: "template-magister-profesional-elearning",
+    code: "MAGISTER_PROFESIONAL_ELEARNING",
+    name: "Plantilla Magíster Profesional E-learning",
+    programType: "MAGISTER_PROFESIONAL",
+    description: "Separa docencia sincrónica y asincrónica con valores hora diferenciados y permite economías de escala.",
+    version: 1,
+    active: true,
+    settings: { modality: "E_LEARNING" },
+    items: [],
   },
 ];

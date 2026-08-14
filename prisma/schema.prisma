@@ -69,6 +69,19 @@ enum TemplateItemKind {
   BECA_MANUTENCION
   COSTO
   INGRESO_EXTRAORDINARIO
+  PARAMETRO_ANUAL
+}
+
+enum DeliveryModality {
+  PRESENCIAL
+  SEMIPRESENCIAL
+  E_LEARNING
+}
+
+enum TeachingMode {
+  PRESENCIAL
+  SINCRONICA
+  ASINCRONICA
 }
 
 enum ParameterScope {
@@ -97,6 +110,7 @@ model User {
   auditLogs   AuditLog[]
   deletedBudgets CohortBudget[] @relation("BudgetDeletedBy")
   workflowEvents BudgetWorkflowEvent[]
+  notifications BudgetNotification[]
 }
 
 
@@ -178,6 +192,7 @@ model BudgetTemplate {
   programId   String?
   program     Program?           @relation(fields: [programId], references: [id], onDelete: Cascade)
   items       BudgetTemplateItem[]
+  settings    Json               @default("{}")
   budgets     CohortBudget[]
 
   @@index([programType, active])
@@ -215,6 +230,7 @@ model CohortBudget {
   enrollmentRecognitionRate Decimal
   programVersionLabel        String        @default("1")
   scholarshipsEnabled        Boolean       @default(true)
+  deliveryModality           DeliveryModality @default(PRESENCIAL)
   authorizedInitialCarryover BigInt        @default(0)
   includeAuthorizedCarryover Boolean        @default(true)
   normalizeSharedCosts       Boolean        @default(true)
@@ -243,6 +259,8 @@ model CohortBudget {
   approvals                  Approval[]
   auditLogs                  AuditLog[]
   workflowEvents             BudgetWorkflowEvent[]
+  sharedCourses              SharedCourseEconomy[]
+  notifications              BudgetNotification[]
 
   @@index([programId, cohortName])
   @@index([programId, startYear, startSemester])
@@ -281,6 +299,8 @@ model SemesterParameters {
   activeStudents                    Int
   graduatingStudents                Int            @default(0)
   directTeachingHours               Decimal
+  synchronousTeachingHours          Decimal        @default(0)
+  asynchronousTeachingHours         Decimal        @default(0)
   replacementTeachingHours          Decimal
   electiveSubjects                  Int            @default(0)
   electiveSections                  Int            @default(0)
@@ -415,6 +435,9 @@ model BudgetAnnualOverride {
   budgetId                         String
   year                             Int
   directTeachingHourValue          Decimal
+  synchronousTeachingHourValue     Decimal      @default(0)
+  asynchronousTeachingHourValue    Decimal      @default(0)
+  maintenanceScholarshipMonthlyValue BigInt     @default(0)
   annualEnrollmentFee              BigInt
   annualTuition                    BigInt       @default(0)
   thesisGuidancePerGraduatingStudent BigInt
@@ -442,6 +465,43 @@ model BudgetAnnualOverride {
 
   @@unique([budgetId, year])
   @@index([year])
+}
+
+
+model SharedCourseEconomy {
+  id                    String       @id @default(cuid())
+  budgetId              String
+  courseName            String
+  year                   Int
+  semester               Int
+  teachingMode           TeachingMode @default(PRESENCIAL)
+  hours                   Decimal
+  participantProgramIds  Json
+  allocationRate         Decimal      @default(1)
+  note                    String?
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+  budget                  CohortBudget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@index([budgetId, year, semester])
+}
+
+model BudgetNotification {
+  id              String       @id @default(cuid())
+  budgetId        String
+  userId          String
+  action          String
+  recipientEmail  String
+  recipientName   String?
+  channel         String       @default("EMAIL")
+  status          String       @default("PREPARADO")
+  subject         String
+  createdAt       DateTime     @default(now())
+  budget          CohortBudget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([budgetId, createdAt])
+  @@index([recipientEmail])
 }
 
 model AnnualFinancialFlow {
