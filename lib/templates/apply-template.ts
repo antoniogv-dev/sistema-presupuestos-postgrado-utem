@@ -1,10 +1,12 @@
 import { getActivePeriods, isPeriodWithinRange } from "../calculations/periods";
+import { hydrateAnnualOverrides } from "../calculations/budget-engine";
 import type {
   BudgetTemplate,
   CohortBudget,
   CostTemplateConfig,
   DiscountTemplateConfig,
   IncomeTemplateConfig,
+  InstitutionalParameters,
   MaintenanceScholarshipTemplateConfig,
   TuitionScholarshipTemplateConfig,
   AnnualParameterTemplateConfig,
@@ -72,8 +74,19 @@ function applyAnnualParameter(budget: CohortBudget, config: AnnualParameterTempl
   });
 }
 
-export function applyBudgetTemplate(source: CohortBudget, template: BudgetTemplate): CohortBudget {
-  const budget = clone(source);
+export function applyBudgetTemplate(
+  source: CohortBudget,
+  template: BudgetTemplate,
+  parameters?: InstitutionalParameters,
+): CohortBudget {
+  let budget = clone(source);
+  // Las plantillas con parámetros anuales deben poder aplicarse incluso a un presupuesto
+  // recién creado que todavía no tenga overrides persistidos. Cuando están disponibles
+  // los parámetros institucionales, hidratamos todos los años activos antes de aplicar
+  // los valores particulares de la plantilla.
+  if (parameters && template.items.some((item) => item.active && item.kind === "PARAMETRO_ANUAL")) {
+    budget = hydrateAnnualOverrides(budget, parameters);
+  }
   budget.discounts = budget.discounts.filter((item) => !item.originTemplateItemKey);
   budget.externalIncome = budget.externalIncome.filter((item) => !item.originTemplateItemKey);
   budget.manualItems = budget.manualItems.filter((item) => !item.originTemplateItemKey);

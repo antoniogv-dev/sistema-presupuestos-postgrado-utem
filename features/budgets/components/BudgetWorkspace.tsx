@@ -337,7 +337,7 @@ export function BudgetWorkspace() {
 
   function applyTemplate(template: BudgetTemplate) {
     if (!budget) return;
-    replaceBudget(applyBudgetTemplate(budget, template));
+    replaceBudget(applyBudgetTemplate(budget, template, parameters));
     setMessage(`${template.name} aplicada al presupuesto. Guarde para persistir los cambios.`);
   }
 

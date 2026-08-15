@@ -63,7 +63,7 @@ describe("v10.18 plantillas, modalidades y economía de escala", () => {
           config: { parameter: "DOCENCIA_ASINCRONICA", values: { 2027: 15_000, 2028: 15_750 }, annualAdjustmentRate: 0.05 } },
       ],
     };
-    const applied = applyBudgetTemplate(clone(demoBudget), template);
+    const applied = applyBudgetTemplate(clone(demoBudget), template, institutionalParameters);
     expect(applied.deliveryModality).toBe("SEMIPRESENCIAL");
     expect(applied.annualOverrides.find((item) => item.year === 2027)?.annualTuition).toBe(5_000_000);
     expect(applied.annualOverrides.find((item) => item.year === 2028)?.synchronousTeachingHourValue).toBe(31_500);
@@ -76,7 +76,7 @@ describe("v10.18 relato financiero", () => {
     const budget = clone(demoBudget);
     const result = calculateBudget(budget, institutionalParameters);
     const narrative = buildFinancialNarrative(budget, result, institutionalParameters);
-    const text = narrative.sections.flatMap((section) => [section.heading, ...section.paragraphs]).join(" ");
+    const text = [narrative.title, ...narrative.sections.flatMap((section) => [section.heading, ...section.paragraphs])].join(" ");
     expect(text).toContain("Análisis financiero y principales consideraciones");
     expect(text.toLowerCase()).toContain("arancel bruto");
     expect(text).toContain("incobrabilidad");
