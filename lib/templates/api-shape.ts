@@ -21,6 +21,20 @@ interface RawBudgetTemplate {
   items: RawTemplateItem[];
 }
 
+function jsonObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (typeof value === "string" && value.trim()) {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+    } catch {
+      // Una plantilla histórica con JSON inválido se entrega como objeto vacío para que
+      // la interfaz pueda corregirla y volver a guardarla en vez de quedar bloqueada.
+    }
+  }
+  return {};
+}
+
 export function templateApiShape(record: RawBudgetTemplate) {
   return {
     id: record.id,
@@ -31,7 +45,7 @@ export function templateApiShape(record: RawBudgetTemplate) {
     version: record.version,
     active: record.active,
     programId: record.programId ?? undefined,
-    settings: record.settings && typeof record.settings === "object" ? record.settings : {},
-    items: record.items.map(({ itemKey, ...item }) => ({ ...item, key: itemKey })),
+    settings: jsonObject(record.settings),
+    items: record.items.map(({ itemKey, config, ...item }) => ({ ...item, key: itemKey, config: jsonObject(config) })),
   };
 }

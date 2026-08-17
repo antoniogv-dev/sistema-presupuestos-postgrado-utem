@@ -256,7 +256,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.19"',
+  'FUNCTIONAL_RELEASE = "v10.20"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -276,8 +276,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.19") || !appShellV110.includes("1.0.29-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.19 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.20") || !appShellV110.includes("1.0.30-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.20 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -516,7 +516,7 @@ for (const marker of ["Proyectar reajuste desde valor base", "Valor base manual"
   if (!templateManagerV1018.includes(marker)) fail(`TemplateManager v10.18: falta ${marker}.`);
 }
 const workspaceV1018 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de escala", "/api/workflow/recipients", "v10.19"]) {
+for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de escala", "/api/workflow/recipients", "v10.20"]) {
   if (!workspaceV1018.includes(marker)) fail(`BudgetWorkspace v10.18: falta ${marker}.`);
 }
 const narrativeV1018 = await readFile(path.join(root, "lib/export/financial-narrative.ts"), "utf8");
@@ -548,6 +548,24 @@ for (const marker of ["institutional-approved", "Borrador y Reemplazado nunca se
 const annualProjectionV1019 = await readFile(path.join(root, "lib/templates/annual-projection.ts"), "utf8");
 for (const marker of ["projectAnnualValues", "projectedAnnualValue", "resolveAnnualTemplateValue"]) {
   if (!annualProjectionV1019.includes(marker)) fail(`Proyección anual v10.19: falta ${marker}.`);
+}
+
+// v10.20: guardado verificable de plantillas y matrícula anual profesional corregida.
+const templateUpdateV1020 = await readFile(path.join(root, "app/api/templates/[templateId]/route.ts"), "utf8");
+for (const marker of ["readTemplate", "normalizeItemKeys", "await runD1Batch(statements)", "const persisted = await readTemplate(templateId)"]) {
+  if (!templateUpdateV1020.includes(marker)) fail(`Guardado de plantillas v10.20: falta ${marker}.`);
+}
+for (const marker of ["Guardando…", "Guardar cambios", "Plantilla guardada y verificada"]) {
+  if (!templateManagerV1018.includes(marker)) fail(`TemplateManager v10.20: falta ${marker}.`);
+}
+const periodsV1020 = await readFile(path.join(root, "lib/calculations/periods.ts"), "utf8");
+if (!periodsV1020.includes("getAnnualEnrollmentChargePeriods")) fail("Matrícula v10.20: falta helper único de periodos anuales de cobro.");
+for (const marker of [
+  "annualEnrollmentFee: nonNegative(stored.annualEnrollmentFee) > 0",
+  "getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)",
+  "const enrollmentDiscounts = 0;",
+]) {
+  if (!engineV108.includes(marker)) fail(`Matrícula v10.20: falta ${marker}.`);
 }
 
 

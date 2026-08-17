@@ -1,7 +1,17 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10.19 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.20 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
+
+
+## Correcciones funcionales v10.20
+
+- **Plantillas profesionales editables y verificadas:** el guardado de una plantilla existente se realiza directamente en D1, normaliza claves de filas, incrementa la versión y vuelve a leer el registro persistido antes de confirmar éxito en pantalla.
+- **Matrícula profesional anual corregida:** se cobra una sola vez por cada bloque de dos semestres desde el ingreso de la cohorte, usando los estudiantes activos del semestre en que corresponde el cobro. Funciona para cohortes que comienzan en 1S o 2S.
+- **Matrícula sin descuentos y fuera de ingresos:** los descuentos siguen afectando exclusivamente al arancel; la matrícula se mantiene informativa y no integra `INGRESOS TOTAL`.
+- **Recuperación de registros históricos:** si una anualidad antigua quedó con matrícula `0` por ausencia del parámetro, se utiliza la referencia anual institucional/plantilla vigente para ese año.
+- **Trazabilidad en pantalla:** la tabla anual muestra el periodo de cobro y los estudiantes utilizados para calcular la matrícula.
+- **Control de despliegue:** versión `v10.20 · 1.0.30-d1-web`.
 
 ## Mejoras funcionales v10.19
 

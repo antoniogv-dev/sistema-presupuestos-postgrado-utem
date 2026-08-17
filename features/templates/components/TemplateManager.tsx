@@ -110,6 +110,7 @@ export function TemplateManager() {
   const [selectedId, setSelectedId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const years = useMemo(() => {
     const candidates = parameters ? Object.keys(parameters.annualEnrollmentFee).map(Number).filter(Number.isFinite).sort() : [];
@@ -190,18 +191,31 @@ export function TemplateManager() {
   }
 
   async function save() {
-    if (!template || !editable) return;
+    if (!template || !editable || saving) return;
+    setSaving(true); setError(""); setMessage("");
     try {
-      const payload = { name: template.name, description: template.description, active: template.active, programId: template.programId ?? null, settings: template.settings ?? {}, items: template.items.map((item, position) => ({ ...item, position })) };
-      const saved = await responseBody<BudgetTemplate>(await fetch(`/api/templates/${template.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }));
-      replace(normalizeTemplate(saved)); setMessage(`Plantilla guardada como versión ${saved.version}.`); setError("");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "No fue posible guardar la plantilla."); }
+      const payload = {
+        name: template.name, description: template.description, active: template.active, programId: template.programId ?? null,
+        settings: template.settings ?? {}, items: template.items.map((item, position) => ({ ...item, position })),
+      };
+      const saved = await responseBody<BudgetTemplate>(await fetch(`/api/templates/${template.id}`, {
+        method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(payload),
+      }));
+      // Verifica el guardado contra la API antes de informar éxito. Esto evita que una plantilla
+      // profesional parezca guardada localmente cuando no quedó persistida en D1.
+      await load(saved.id);
+      setMessage(`Plantilla guardada y verificada como versión ${saved.version}.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No fue posible guardar la plantilla.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (!template) return <section className="panel"><p>No hay plantillas disponibles.</p><button className="button primary" onClick={() => void createTemplate(false)}>Crear plantilla</button></section>;
 
   return <section className="panel template-manager">
-    <div className="panel-header"><div><h2>Plantillas presupuestarias</h2><p>Edite, clone y parametrice ajustes anuales, modalidades docentes y economías de escala.</p></div><div className="workspace-actions"><button className="button secondary" disabled={!editable} onClick={() => void createTemplate(false)}>Nueva plantilla</button><button className="button secondary" disabled={!editable} onClick={() => void createTemplate(true)}>Clonar plantilla</button><button className="button primary" disabled={!editable} onClick={() => void save()}>Guardar plantilla</button></div></div>
+    <div className="panel-header"><div><h2>Plantillas presupuestarias</h2><p>Edite, clone y parametrice ajustes anuales, modalidades docentes y economías de escala.</p></div><div className="workspace-actions"><button className="button secondary" disabled={!editable} onClick={() => void createTemplate(false)}>Nueva plantilla</button><button className="button secondary" disabled={!editable} onClick={() => void createTemplate(true)}>Clonar plantilla</button><button className="button primary" disabled={!editable || saving} onClick={() => void save()}>{saving ? "Guardando…" : "Guardar cambios"}</button></div></div>
     {error ? <div className="notice warning">{error}</div> : null}{message ? <div className="notice success">{message}</div> : null}
     <div className="parameter-tabs">{TYPES.map((type) => <button key={type} className={`tab-button ${activeType === type ? "active" : ""}`} onClick={() => setActiveType(type)}>{typeLabel(type)}</button>)}</div>
     <div className="form-grid cols-4">

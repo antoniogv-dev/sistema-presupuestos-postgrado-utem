@@ -1,0 +1,12 @@
+Sistema de Presupuestos de Postgrado UTEM - v10.20 / 1.0.30-d1-web
+
+Cambios:
+- Plantillas profesionales modificables y guardado verificado en D1.
+- Normalización de claves de ítems de plantilla.
+- Matrícula profesional anual corregida por bloques de dos semestres.
+- Soporte correcto para cohortes que inician en 1S o 2S.
+- Matrícula sin descuentos y excluida de INGRESOS TOTAL.
+- Recuperación de matrícula histórica en cero desde referencia anual.
+- Visualización de periodo y estudiantes utilizados en el cobro de matrícula.
+
+Sin migración D1 nueva. No reemplazar wrangler.jsonc.

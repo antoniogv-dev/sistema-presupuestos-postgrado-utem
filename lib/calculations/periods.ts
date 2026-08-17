@@ -23,6 +23,17 @@ export function getActivePeriods(startYear: number, startSemester: SemesterNumbe
   });
 }
 
+export function getAnnualEnrollmentChargePeriods(
+  startYear: number,
+  startSemester: SemesterNumber,
+  durationSemesters: number,
+): ActivePeriod[] {
+  // La matrícula es anual: se cobra una sola vez por cada bloque de dos semestres,
+  // contado desde el semestre de ingreso de la cohorte. Esto funciona igual para
+  // cohortes que comienzan en 1S o 2S y evita duplicar matrícula por año calendario.
+  return getActivePeriods(startYear, startSemester, durationSemesters).filter((period) => period.index % 2 === 0);
+}
+
 export function getActiveYears(periods: ActivePeriod[]): number[] {
   return [...new Set(periods.map((period) => period.year))].sort((a, b) => a - b);
 }

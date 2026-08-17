@@ -1,4 +1,4 @@
-import { getActivePeriods, getActiveYears, isPeriodWithinRange, periodKey } from "./periods";
+import { getActivePeriods, getActiveYears, getAnnualEnrollmentChargePeriods, isPeriodWithinRange, periodKey } from "./periods";
 import type {
   AnnualFlow,
   BudgetAnnualOverride,
@@ -91,6 +91,11 @@ export function resolvedAnnualOverrideForYear(
     // Un arancel 0 en un año activo se interpreta como dato faltante, no como arancel válido.
     // Esto permite recuperar cohortes antiguas que sólo tenían informado el primer año.
     annualTuition: storedTuition > 0 ? storedTuition : fallback.annualTuition,
+    // v10.20: en presupuestos históricos, un 0 de matrícula anual proviene de filas
+    // creadas antes de que este parámetro se persistiera por año. Para programas
+    // profesionales se recupera la referencia institucional/plantilla en vez de
+    // interpretar ese 0 como una matrícula real.
+    annualEnrollmentFee: nonNegative(stored.annualEnrollmentFee) > 0 ? nonNegative(stored.annualEnrollmentFee) : fallback.annualEnrollmentFee,
     synchronousTeachingHourValue: Number.isFinite(stored.synchronousTeachingHourValue) && stored.synchronousTeachingHourValue > 0 ? nonNegative(stored.synchronousTeachingHourValue) : fallback.synchronousTeachingHourValue,
     asynchronousTeachingHourValue: Number.isFinite(stored.asynchronousTeachingHourValue) && stored.asynchronousTeachingHourValue > 0 ? nonNegative(stored.asynchronousTeachingHourValue) : fallback.asynchronousTeachingHourValue,
     maintenanceScholarshipMonthlyValue: Number.isFinite(stored.maintenanceScholarshipMonthlyValue) && stored.maintenanceScholarshipMonthlyValue > 0 ? nonNegative(stored.maintenanceScholarshipMonthlyValue) : fallback.maintenanceScholarshipMonthlyValue,
@@ -211,7 +216,8 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
   let previousAccumulated = budget.includeAuthorizedCarryover ? budget.authorizedInitialCarryover : 0;
 
   const enrollmentChargePeriods = new Set(
-    periods.filter((_, index) => index % 2 === 0).map((period) => periodKey(period.year, period.semester)),
+    getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
+      .map((period) => periodKey(period.year, period.semester)),
   );
 
   const annualFlows: AnnualFlow[] = years.map((year, yearIndex) => {
