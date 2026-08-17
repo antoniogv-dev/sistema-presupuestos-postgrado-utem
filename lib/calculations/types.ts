@@ -145,6 +145,10 @@ export interface AnnualParameterTemplateConfig {
   parameter: AnnualTemplateParameter;
   values: Record<number, number>;
   annualAdjustmentRate: number;
+  /** Año desde el cual se proyecta el valor base manual. */
+  baseYear?: number;
+  /** Valor inicial manual que puede reemplazar la referencia institucional antes de proyectar. */
+  baseValue?: number;
   note?: string;
 }
 

@@ -1,5 +1,6 @@
 import { getActivePeriods, isPeriodWithinRange } from "../calculations/periods";
 import { hydrateAnnualOverrides } from "../calculations/budget-engine";
+import { resolveAnnualTemplateValue } from "./annual-projection";
 import type {
   BudgetTemplate,
   CohortBudget,
@@ -46,20 +47,9 @@ function templateStudents(activeStudents: number, mode: "TODOS_ACTIVOS" | "CANTI
 }
 
 
-function annualTemplateValue(config: AnnualParameterTemplateConfig, year: number): number {
-  const entries = Object.entries(config.values ?? {}).map(([key, value]) => [Number(key), nonNegative(value)] as const).filter(([key]) => Number.isFinite(key)).sort((a,b) => a[0]-b[0]);
-  if (!entries.length) return 0;
-  const exact = entries.find(([key]) => key === year);
-  if (exact) return exact[1];
-  const prior = [...entries].reverse().find(([key]) => key < year);
-  const first = entries[0];
-  const base = prior ?? first;
-  return Math.round(base[1] * Math.pow(1 + Number(config.annualAdjustmentRate ?? 0), Math.max(0, year - base[0])));
-}
-
 function applyAnnualParameter(budget: CohortBudget, config: AnnualParameterTemplateConfig) {
   budget.annualOverrides = budget.annualOverrides.map((annual) => {
-    const value = annualTemplateValue(config, annual.year);
+    const value = resolveAnnualTemplateValue(config, annual.year);
     if (value <= 0) return annual;
     if (config.parameter === "ARANCEL") return { ...annual, annualTuition: value };
     if (config.parameter === "MATRICULA") return { ...annual, annualEnrollmentFee: value };

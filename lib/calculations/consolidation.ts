@@ -1,8 +1,20 @@
 import { calculateBudget } from "./budget-engine";
-import type { BudgetItem, CohortBudget, DuplicateCostAlert, InstitutionalParameters, ProgramType } from "./types";
+import type { BudgetItem, BudgetStatus, CohortBudget, DuplicateCostAlert, InstitutionalParameters, ProgramType } from "./types";
 
+export type ConsolidationScope = "ACTIVE" | "APPROVED";
 export interface ConsolidatedYear { year: number; grossIncome: number; grossExpenses: number; normalizedExpenses: number; duplicateAvoided: number; netFlow: number; }
-export interface ConsolidationGroup { id: string; label: string; kind: "PROGRAM" | "ACADEMIC" | "PROFESSIONAL" | "INSTITUTIONAL"; programTypes: ProgramType[]; budgetCount: number; rows: ConsolidatedYear[]; }
+export interface ConsolidationGroup {
+  id: string;
+  label: string;
+  kind: "PROGRAM" | "ACADEMIC" | "PROFESSIONAL" | "INSTITUTIONAL";
+  programTypes: ProgramType[];
+  scope: ConsolidationScope;
+  budgetCount: number;
+  rows: ConsolidatedYear[];
+}
+
+export const ACTIVE_CONSOLIDATION_STATUSES: BudgetStatus[] = ["En revisión", "Observado", "Aprobado"];
+export const APPROVED_CONSOLIDATION_STATUSES: BudgetStatus[] = ["Aprobado"];
 
 export const SHARED_CATEGORIES: BudgetItem["category"][] = [
   "Dirección", "Asistencia de dirección", "Otros honorarios no académicos",
@@ -10,6 +22,20 @@ export const SHARED_CATEGORIES: BudgetItem["category"][] = [
 ];
 const normalizedName = (value: string) => value.trim().toLocaleLowerCase("es-CL").replace(/\s+/g, " ");
 const sum = (values: number[]) => values.reduce((acc, value) => acc + value, 0);
+
+export function isBudgetEligibleForConsolidation(budget: CohortBudget, scope: ConsolidationScope): boolean {
+  if (budget.deletedAt) return false;
+  const statuses = scope === "APPROVED" ? APPROVED_CONSOLIDATION_STATUSES : ACTIVE_CONSOLIDATION_STATUSES;
+  return statuses.includes(budget.status);
+}
+
+export function budgetsForConsolidationGroup(budgets: CohortBudget[], group: Pick<ConsolidationGroup, "kind" | "id" | "programTypes" | "scope">): CohortBudget[] {
+  return budgets.filter((budget) => {
+    if (!isBudgetEligibleForConsolidation(budget, group.scope)) return false;
+    if (group.kind === "PROGRAM") return `program-${budget.program.id}` === group.id;
+    return group.programTypes.includes(budget.program.type);
+  });
+}
 
 export function detectPotentialDuplicateCosts(budgets: CohortBudget[], selectedBudgetId?: string): DuplicateCostAlert[] {
   const groups = new Map<string, Array<{ budget: CohortBudget; item: BudgetItem }>>();
@@ -78,18 +104,38 @@ export function consolidateBudgets(budgets: CohortBudget[], parameters: Institut
   });
 }
 
+function groupFromBudgets(
+  id: string,
+  label: string,
+  kind: ConsolidationGroup["kind"],
+  programTypes: ProgramType[],
+  scope: ConsolidationScope,
+  budgets: CohortBudget[],
+  parameters: InstitutionalParameters,
+): ConsolidationGroup {
+  return { id, label, kind, programTypes, scope, budgetCount: budgets.length, rows: consolidateBudgets(budgets, parameters) };
+}
+
 export function buildConsolidationGroups(budgets: CohortBudget[], parameters: InstitutionalParameters): ConsolidationGroup[] {
-  const active = budgets.filter((budget) => !budget.deletedAt);
-  const programGroups = [...new Map(active.map((budget) => [budget.program.id, budget.program])).values()].sort((a, b) => a.code.localeCompare(b.code, "es")).map((program) => {
-    const programBudgets = active.filter((budget) => budget.program.id === program.id);
-    return { id: `program-${program.id}`, label: `${program.code} · ${program.name}`, kind: "PROGRAM" as const, programTypes: [program.type], budgetCount: programBudgets.length, rows: consolidateBudgets(programBudgets, parameters) };
-  });
+  const active = budgets.filter((budget) => isBudgetEligibleForConsolidation(budget, "ACTIVE"));
+  const approved = budgets.filter((budget) => isBudgetEligibleForConsolidation(budget, "APPROVED"));
+
+  const programGroups = [...new Map(active.map((budget) => [budget.program.id, budget.program])).values()]
+    .sort((a, b) => a.code.localeCompare(b.code, "es"))
+    .map((program) => {
+      const programBudgets = active.filter((budget) => budget.program.id === program.id);
+      return groupFromBudgets(`program-${program.id}`, `${program.code} · ${program.name}`, "PROGRAM", [program.type], "ACTIVE", programBudgets, parameters);
+    });
+
   const academic = active.filter((budget) => budget.program.type === "DOCTORADO" || budget.program.type === "MAGISTER_ACADEMICO");
   const professional = active.filter((budget) => budget.program.type === "MAGISTER_PROFESIONAL");
+  const allTypes: ProgramType[] = ["DOCTORADO", "MAGISTER_ACADEMICO", "MAGISTER_PROFESIONAL", "OTRO"];
+
   return [
-    { id: "academic", label: "Programas académicos", kind: "ACADEMIC", programTypes: ["DOCTORADO", "MAGISTER_ACADEMICO"], budgetCount: academic.length, rows: consolidateBudgets(academic, parameters) },
-    { id: "professional", label: "Programas profesionales", kind: "PROFESSIONAL", programTypes: ["MAGISTER_PROFESIONAL"], budgetCount: professional.length, rows: consolidateBudgets(professional, parameters) },
-    { id: "institutional", label: "Consolidado institucional", kind: "INSTITUTIONAL", programTypes: ["DOCTORADO", "MAGISTER_ACADEMICO", "MAGISTER_PROFESIONAL", "OTRO"], budgetCount: active.length, rows: consolidateBudgets(active, parameters) },
+    groupFromBudgets("institutional-approved", "Consolidado institucional · Aprobados", "INSTITUTIONAL", allTypes, "APPROVED", approved, parameters),
+    groupFromBudgets("institutional-active", "Consolidado institucional · Activos", "INSTITUTIONAL", allTypes, "ACTIVE", active, parameters),
+    groupFromBudgets("academic", "Programas académicos · Activos", "ACADEMIC", ["DOCTORADO", "MAGISTER_ACADEMICO"], "ACTIVE", academic, parameters),
+    groupFromBudgets("professional", "Programas profesionales · Activos", "PROFESSIONAL", ["MAGISTER_PROFESIONAL"], "ACTIVE", professional, parameters),
     ...programGroups,
   ];
 }

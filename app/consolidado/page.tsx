@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { PageHeader } from "@/components/PageHeader";
-import { buildConsolidationGroups, detectPotentialDuplicateCosts } from "@/lib/calculations/consolidation";
+import { buildConsolidationGroups, budgetsForConsolidationGroup, detectPotentialDuplicateCosts } from "@/lib/calculations/consolidation";
 import { formatCLP } from "@/lib/calculations/currency";
 import type { CohortBudget, InstitutionalParameters } from "@/lib/calculations/types";
 import { institutionalParameters as fallbackParameters } from "@/lib/demo-data";
@@ -15,7 +15,7 @@ import { responseBody, toBudget } from "@/lib/mappers/budget-api";
 export default function ConsolidatedPage() {
   const [budgets, setBudgets] = useState<CohortBudget[]>([]);
   const [parameters, setParameters] = useState<InstitutionalParameters>(() => structuredClone(fallbackParameters));
-  const [groupId, setGroupId] = useState("institutional");
+  const [groupId, setGroupId] = useState("institutional-approved");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -37,17 +37,11 @@ export default function ConsolidatedPage() {
   }, []);
 
   const groups = useMemo(() => buildConsolidationGroups(budgets, parameters), [budgets, parameters]);
-  const group = groups.find((candidate) => candidate.id === groupId) ?? groups.find((candidate) => candidate.id === "institutional") ?? groups[0];
+  const group = groups.find((candidate) => candidate.id === groupId) ?? groups.find((candidate) => candidate.id === "institutional-approved") ?? groups[0];
   const principal = groups.filter((candidate) => candidate.kind !== "PROGRAM");
   const programs = groups.filter((candidate) => candidate.kind === "PROGRAM");
 
-  const selectedBudgets = useMemo(() => {
-    if (!group) return [];
-    if (group.kind === "PROGRAM") return budgets.filter((budget) => `program-${budget.program.id}` === group.id);
-    if (group.kind === "ACADEMIC") return budgets.filter((budget) => budget.program.type === "DOCTORADO" || budget.program.type === "MAGISTER_ACADEMICO");
-    if (group.kind === "PROFESSIONAL") return budgets.filter((budget) => budget.program.type === "MAGISTER_PROFESIONAL");
-    return budgets;
-  }, [budgets, group]);
+  const selectedBudgets = useMemo(() => group ? budgetsForConsolidationGroup(budgets, group) : [], [budgets, group]);
 
   if (!group) {
     return <AppShell><PageHeader eyebrow="Consolidación" title="Consolidado institucional" description="No existen presupuestos para consolidar." />{message ? <div className="notice warning"><p>{message}</p></div> : null}<section className="panel"><p>{loading ? "Cargando…" : "Aún no existen presupuestos persistidos en D1."}</p></section></AppShell>;
@@ -68,9 +62,9 @@ export default function ConsolidatedPage() {
   }
 
   return <AppShell>
-    <PageHeader eyebrow="Consolidación" title={group.label} description="Consolidado real de los presupuestos almacenados en D1, con normalización de costos compartidos." actions={<button className="button secondary" type="button" disabled={!group.rows.length} onClick={exportConsolidated}>Exportar consolidado</button>} />
+    <PageHeader eyebrow="Consolidación" title={group.label} description={group.scope === "APPROVED" ? "Consolidado formal: incluye exclusivamente presupuestos aprobados. Los borradores, observados, en revisión y reemplazados quedan fuera." : "Consolidado de gestión: incluye presupuestos en revisión, observados y aprobados. Los borradores y reemplazados quedan fuera."} actions={<button className="button secondary" type="button" disabled={!group.rows.length} onClick={exportConsolidated}>Exportar consolidado</button>} />
     {message ? <div className="notice info"><p>{message}</p></div> : null}
-    <section className="panel"><div className="panel-title"><div><h2>Vista de consolidación</h2><p>Seleccione una agrupación institucional o un programa específico.</p></div></div><div className="consolidation-tabs" role="tablist" aria-label="Consolidados institucionales">{principal.map((item) => <button className="button secondary" role="tab" type="button" aria-selected={group.id === item.id} onClick={() => setGroupId(item.id)} key={item.id}>{item.label}</button>)}</div><label>Consolidado por programa<select value={group.kind === "PROGRAM" ? group.id : ""} onChange={(event) => event.target.value && setGroupId(event.target.value)}><option value="">Seleccione un programa</option>{programs.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label></section>
+    <section className="panel"><div className="panel-title"><div><h2>Vista de consolidación</h2><p>Seleccione el consolidado institucional aprobado, el consolidado activo o una agrupación específica. Ninguna vista activa incorpora borradores.</p></div></div><div className="consolidation-tabs" role="tablist" aria-label="Consolidados institucionales">{principal.map((item) => <button className="button secondary" role="tab" type="button" aria-selected={group.id === item.id} onClick={() => setGroupId(item.id)} key={item.id}>{item.label}</button>)}</div><div className="notice info consolidation-scope-note"><strong>Regla de estados</strong><p><b>Aprobados:</b> sólo estado Aprobado. <b>Activos:</b> En revisión + Observado + Aprobado. Borrador y Reemplazado nunca se suman.</p></div><label>Consolidado por programa (activos)<select value={group.kind === "PROGRAM" ? group.id : ""} onChange={(event) => event.target.value && setGroupId(event.target.value)}><option value="">Seleccione un programa</option>{programs.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label></section>
     <section className="kpi-grid"><KpiCard label="Presupuestos incluidos" value={String(group.budgetCount)} detail={group.label} /><KpiCard label="Ingresos consolidados" value={formatCLP(income)} detail="Total del horizonte visible" /><KpiCard label="Duplicidad evitada" value={formatCLP(avoided)} detail="Costos compartidos normalizados" tone="positive" /><KpiCard label="Resultado neto" value={formatCLP(income-normalizedExpenses)} detail="Flujo consolidado" tone={income-normalizedExpenses >= 0 ? "positive" : "negative"} /></section>
     {duplicateAlerts.length > 0 && <section className="panel duplicate-alerts" aria-labelledby="duplicate-alert-title"><div className="panel-title"><div><h2 id="duplicate-alert-title">Posibles duplicidades</h2><p>Coincidencias por programa, año, categoría y nombre del costo.</p></div></div>{duplicateAlerts.map((alert) => <article key={alert.key}><strong>{alert.name} · {alert.year}</strong><p>{alert.message} {alert.allMarkedShared ? "Está marcado como compartido y será normalizado cuando corresponda." : "Revise si debe marcarse como compartido."}</p></article>)}</section>}
     <section className="panel"><div className="table-wrap"><table className="data-table"><thead><tr><th>Año</th><th className="numeric">Ingresos</th><th className="numeric">Egresos brutos</th><th className="numeric">Egresos normalizados</th><th className="numeric">Duplicidad evitada</th><th className="numeric">Flujo neto</th></tr></thead><tbody>{group.rows.length ? group.rows.map((row) => <tr key={row.year}><th>{row.year}</th><td className="numeric">{formatCLP(row.grossIncome)}</td><td className="numeric">{formatCLP(row.grossExpenses)}</td><td className="numeric">{formatCLP(row.normalizedExpenses)}</td><td className="numeric positive-text">{formatCLP(row.duplicateAvoided)}</td><td className={`numeric ${row.netFlow >= 0 ? "positive-text" : "negative-text"}`}>{formatCLP(row.netFlow)}</td></tr>) : <tr><td colSpan={6}>{loading ? "Cargando…" : "No existen presupuestos en esta agrupación."}</td></tr>}</tbody></table></div></section>

@@ -1,6 +1,17 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10.18 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.19 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
+
+
+## Mejoras funcionales v10.19
+
+- **Dos consolidados institucionales separados:** `Aprobados` incluye exclusivamente presupuestos en estado Aprobado; `Activos` incluye En revisión, Observado y Aprobado. Los estados Borrador y Reemplazado nunca se suman.
+- **Consolidados por programa sin borradores:** las vistas académica, profesional y por programa usan sólo presupuestos activos, evitando que un presupuesto todavía en formulación distorsione los resultados.
+- **Valor base manual en plantillas:** cada parámetro anual permite elegir año base, reemplazar manualmente el valor inicial y definir un reajuste anual propio.
+- **Proyección desde el nuevo valor base:** el botón `Proyectar reajuste desde valor base` recalcula el año base y todos los años posteriores. Si se modifica directamente la celda del año base, ese valor también queda como nueva base.
+- **Compatibilidad con plantillas existentes:** si una plantilla antigua no tiene `baseYear` o `baseValue`, la interfaz deriva automáticamente la primera referencia positiva disponible.
+- **Sin migración D1 nueva:** los nuevos campos de proyección se guardan dentro del JSON de configuración de cada fila de plantilla.
+- **Control de despliegue:** versión `v10.19 · 1.0.29-d1-web`.
 
 ## Mejoras funcionales v10.18
 

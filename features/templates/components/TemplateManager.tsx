@@ -24,6 +24,7 @@ import type {
 import type { ApiIdentity, ApiProgram } from "@/lib/mappers/budget-api";
 import { responseBody, toProgram } from "@/lib/mappers/budget-api";
 import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
+import { projectAnnualValues } from "@/lib/templates/annual-projection";
 
 const COST_CATEGORIES = [
   "Otros honorarios no académicos", "Dirección", "Asistencia de dirección",
@@ -50,7 +51,7 @@ const uid = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toStrin
 const canEdit = (roles: AccessRole[]) => roles.includes("ADMIN") || roles.includes("GESTOR");
 
 function defaultConfig(kind: TemplateItemKind, years: number[]): BudgetTemplateConfig {
-  if (kind === "PARAMETRO_ANUAL") return { parameter: "ARANCEL", values: Object.fromEntries(years.map((year) => [year, 0])), annualAdjustmentRate: 0 } satisfies AnnualParameterTemplateConfig;
+  if (kind === "PARAMETRO_ANUAL") return { parameter: "ARANCEL", values: Object.fromEntries(years.map((year) => [year, 0])), annualAdjustmentRate: 0, baseYear: years[0], baseValue: 0 } satisfies AnnualParameterTemplateConfig;
   if (kind === "DESCUENTO") return { percentage: 0, students: 0, periodMode: "TODOS" } satisfies DiscountTemplateConfig;
   if (kind === "BECA_ARANCEL") return { studentMode: "TODOS_ACTIVOS", students: 0, coverage: 1, periodMode: "TODOS" } satisfies TuitionScholarshipTemplateConfig;
   if (kind === "BECA_MANUTENCION") return { studentMode: "TODOS_ACTIVOS", students: 0, months: 0, periodMode: "TODOS" } satisfies MaintenanceScholarshipTemplateConfig;
@@ -92,7 +93,11 @@ function defaultTemplateRows(type: ProgramType, modality: DeliveryModality, para
     name: annualLabel[parameter],
     active: true,
     position,
-    config: { parameter, values: annualReferenceValues(parameter, type, parameters, years), annualAdjustmentRate: adjustment } satisfies AnnualParameterTemplateConfig,
+    config: (() => {
+      const values = annualReferenceValues(parameter, type, parameters, years);
+      const baseYear = years[0];
+      return { parameter, values, annualAdjustmentRate: adjustment, baseYear, baseValue: Number(values[baseYear] ?? 0) } satisfies AnnualParameterTemplateConfig;
+    })(),
   }));
 }
 
@@ -153,7 +158,11 @@ export function TemplateManager() {
     const added = requiredTeaching.map((parameter, offset) => ({
       id: uid("template-item"), key: uid(`param-${parameter.toLowerCase()}`), kind: "PARAMETRO_ANUAL" as const, name: annualLabel[parameter], active: true,
       position: retained.length + offset,
-      config: { parameter, values: annualReferenceValues(parameter, activeType, parameters, years), annualAdjustmentRate: adjustment } satisfies AnnualParameterTemplateConfig,
+      config: (() => {
+        const values = annualReferenceValues(parameter, activeType, parameters, years);
+        const baseYear = years[0];
+        return { parameter, values, annualAdjustmentRate: adjustment, baseYear, baseValue: Number(values[baseYear] ?? 0) } satisfies AnnualParameterTemplateConfig;
+      })(),
     }));
     replace({ ...template, settings: { ...(template.settings ?? {}), modality }, items: [...retained, ...added].map((item, position) => ({ ...item, position })) });
   }
@@ -221,12 +230,57 @@ function ItemConfig({ item, years, programType, parameters, disabled, onChange }
     const parameter = String(config.parameter ?? "ARANCEL") as AnnualTemplateParameter;
     const values = (config.values && typeof config.values === "object" ? config.values : {}) as Record<number, number>;
     const rate = Number(config.annualAdjustmentRate ?? 0);
-    const applyRate = () => {
-      const baseYear = years.find((year) => Number(values[year]) > 0) ?? years[0]; const base = Number(values[baseYear] ?? 0);
-      const next = { ...values }; years.forEach((year) => { if (year >= baseYear) next[year] = Math.round(base * Math.pow(1 + rate, year - baseYear)); }); onChange({ values: next });
+    const firstYearWithValue = years.find((year) => Number(values[year] ?? 0) > 0) ?? years[0];
+    const configuredBaseYear = Number(config.baseYear ?? firstYearWithValue);
+    const baseYear = years.includes(configuredBaseYear) ? configuredBaseYear : firstYearWithValue;
+    const baseValue = Number(config.baseValue ?? values[baseYear] ?? 0);
+
+    const applyProjection = () => onChange({
+      baseYear,
+      baseValue,
+      values: projectAnnualValues(years, baseYear, baseValue, rate, values),
+    });
+
+    const loadReference = () => {
+      const referenceValues = annualReferenceValues(parameter, programType, parameters, years);
+      const referenceBaseYear = years[0];
+      onChange({
+        values: referenceValues,
+        baseYear: referenceBaseYear,
+        baseValue: Number(referenceValues[referenceBaseYear] ?? 0),
+        annualAdjustmentRate: rate || parameters?.annualAdjustmentRate || 0,
+      });
     };
-    const loadReference = () => onChange({ values: annualReferenceValues(parameter, programType, parameters, years), annualAdjustmentRate: rate || parameters?.annualAdjustmentRate || 0 });
-    return <div className="template-annual-row"><label>Parámetro<select disabled={disabled} value={parameter} onChange={(e) => { const nextParameter = e.target.value as AnnualTemplateParameter; onChange({ parameter: nextParameter, values: annualReferenceValues(nextParameter, programType, parameters, years) }); }}>{ANNUAL_PARAMETERS.map((p) => <option key={p} value={p}>{annualLabel[p]}</option>)}</select></label>{years.map((year) => <label key={year}>{year}<input disabled={disabled} type="number" min="0" value={Number(values[year] ?? 0)} onChange={(e) => onChange({ values: { ...values, [year]: Number(e.target.value) } })} /></label>)}<label>Ajuste anual (%)<input disabled={disabled} type="number" step="0.1" value={(rate * 100).toFixed(1)} onChange={(e) => onChange({ annualAdjustmentRate: Number(e.target.value) / 100 })} /></label><div className="field-action"><button className="button secondary" disabled={disabled || !parameters} onClick={loadReference}>Cargar referencia institucional</button><button className="button secondary" disabled={disabled} onClick={applyRate}>Aplicar ajuste a todos los años</button></div></div>;
+
+    const changeParameter = (nextParameter: AnnualTemplateParameter) => {
+      const referenceValues = annualReferenceValues(nextParameter, programType, parameters, years);
+      const referenceBaseYear = years[0];
+      onChange({
+        parameter: nextParameter,
+        values: referenceValues,
+        baseYear: referenceBaseYear,
+        baseValue: Number(referenceValues[referenceBaseYear] ?? 0),
+      });
+    };
+
+    const changeBaseYear = (nextBaseYear: number) => onChange({
+      baseYear: nextBaseYear,
+      baseValue: Number(values[nextBaseYear] ?? baseValue),
+    });
+
+    return <div className="template-annual-config">
+      <div className="template-annual-row">
+        <label>Parámetro<select disabled={disabled} value={parameter} onChange={(e) => changeParameter(e.target.value as AnnualTemplateParameter)}>{ANNUAL_PARAMETERS.map((p) => <option key={p} value={p}>{annualLabel[p]}</option>)}</select></label>
+        {years.map((year) => <label key={year}>{year}<input disabled={disabled} type="number" min="0" value={Number(values[year] ?? 0)} onChange={(e) => { const amount = Number(e.target.value); onChange({ values: { ...values, [year]: amount }, ...(year === baseYear ? { baseValue: amount } : {}) }); }} /></label>)}
+      </div>
+      <div className="template-projection-controls">
+        <label>Año base<select disabled={disabled} value={baseYear} onChange={(e) => changeBaseYear(Number(e.target.value))}>{years.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
+        <label>Valor base manual<input disabled={disabled} type="number" min="0" value={baseValue} onChange={(e) => onChange({ baseValue: Number(e.target.value) })} /></label>
+        <label>Reajuste anual (%)<input disabled={disabled} type="number" step="0.1" value={(rate * 100).toFixed(1)} onChange={(e) => onChange({ annualAdjustmentRate: Number(e.target.value) / 100 })} /></label>
+        <div className="field-action"><button className="button secondary" disabled={disabled || !parameters} onClick={loadReference}>Cargar referencia institucional</button><button className="button primary" disabled={disabled} onClick={applyProjection}>Proyectar reajuste desde valor base</button></div>
+      </div>
+      <p className="field-help">Puede reemplazar el valor inicial de la plantilla por un monto manual y proyectarlo a los años siguientes con el factor indicado. Ejemplo: cambiar Asistencia de $2.000.000 a $3.000.000 y reajustar desde ese nuevo valor base.</p>
+    </div>;
   }
   if (item.kind === "DESCUENTO") return <div className="template-item-config"><label>Descuento (%)<input disabled={disabled} type="number" min="0" max="100" value={Number(config.percentage ?? 0) * 100} onChange={(e) => onChange({ percentage: Number(e.target.value) / 100 })} /></label><label>Estudiantes<input disabled={disabled} type="number" min="0" value={Number(config.students ?? 0)} onChange={(e) => onChange({ students: Number(e.target.value) })} /></label></div>;
   if (item.kind === "BECA_ARANCEL") return <div className="template-item-config"><label>Cantidad<input disabled={disabled} type="number" min="0" value={Number(config.students ?? 0)} onChange={(e) => onChange({ students: Number(e.target.value), studentMode: "CANTIDAD" })} /></label><label>Cobertura (%)<input disabled={disabled} type="number" min="0" max="100" value={Number(config.coverage ?? 1) * 100} onChange={(e) => onChange({ coverage: Number(e.target.value) / 100 })} /></label></div>;

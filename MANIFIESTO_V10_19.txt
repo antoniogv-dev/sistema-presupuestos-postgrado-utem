@@ -1,0 +1,7 @@
+Sistema de Presupuestos de Postgrado UTEM - v10.19 / 1.0.29-d1-web
+
+- Consolidado institucional Aprobados: sólo estado Aprobado.
+- Consolidado institucional Activos: En revisión, Observado y Aprobado.
+- Borradores y reemplazados excluidos de consolidación.
+- Plantillas: año base + valor base manual + reajuste anual + proyección hacia años posteriores.
+- Sin migración D1 nueva.
