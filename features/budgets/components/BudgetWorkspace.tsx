@@ -30,7 +30,7 @@ import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
 import { availableWorkflowActions, canDeleteBudget, canEditBudget, type WorkflowAction } from "@/lib/workflow/budget-workflow";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.20";
+const FUNCTIONAL_RELEASE = "v10.21";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -133,6 +133,9 @@ export function BudgetWorkspace() {
   const [parameters, setParameters] = useState<InstitutionalParameters>(() => structuredClone(fallbackParameters));
   const [identity, setIdentity] = useState<ApiIdentity | null>(null);
   const [selectedId, setSelectedId] = useState("");
+  const [candidateBudgetId, setCandidateBudgetId] = useState("");
+  const [draftBudget, setDraftBudget] = useState<CohortBudget | null>(null);
+  const [dirty, setDirty] = useState(false);
   const [role, setRole] = useState<AccessRole>("LECTOR");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -165,7 +168,16 @@ export function BudgetWorkspace() {
       const resolvedRole = storedRole && me.roles.includes(storedRole) ? storedRole : me.roles[0] ?? "LECTOR";
       setRole(resolvedRole);
       const nextId = preferredId && mapped.some((item) => item.id === preferredId) ? preferredId : mapped[0]?.id ?? "";
+      const nextBudget = mapped.find((item) => item.id === nextId) ?? null;
       setSelectedId(nextId);
+      setCandidateBudgetId(nextId);
+      setDraftBudget(nextBudget ? structuredClone(nextBudget) : null);
+      setDirty(false);
+      if (typeof window !== "undefined" && nextId) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("budget", nextId);
+        window.history.replaceState({}, "", url.toString());
+      }
       setMessage("");
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "No fue posible cargar el espacio de presupuestos.");
@@ -176,12 +188,39 @@ export function BudgetWorkspace() {
 
   useEffect(() => { const preferred = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("budget") ?? undefined : undefined; void load(preferred); }, []);
 
-  const budget = budgets.find((item) => item.id === selectedId) ?? null;
+  useEffect(() => {
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [dirty]);
+
+  async function applyBudgetFilter() {
+    if (!candidateBudgetId) return;
+    const candidate = budgets.find((item) => item.id === candidateBudgetId);
+    if (!candidate) return;
+    if (dirty && !window.confirm(`El presupuesto activo “${budget?.cohortName ?? ""}” tiene cambios sin guardar. ¿Desea descartarlos y cargar “${candidate.cohortName}”?`)) {
+      setCandidateBudgetId(selectedId);
+      return;
+    }
+    if (candidateBudgetId === selectedId && !dirty) return;
+    await load(candidateBudgetId);
+    setMessage(candidateBudgetId === selectedId
+      ? `Presupuesto recargado desde D1. Se descartaron los cambios locales no guardados de ${candidate.cohortName}.`
+      : `Filtro aplicado. Ahora está trabajando únicamente con ${candidate.program.code} · ${candidate.cohortName} · Versión ${candidate.programVersionLabel} · R${candidate.version}.`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  const budget = draftBudget;
   const result = useMemo(() => budget ? calculateBudget(budget, parameters) : null, [budget, parameters]);
-  const editable = budget ? canEditBudget(budget, role) : false;
-  const deletable = budget ? canDeleteBudget(budget, role) : false;
+  const editable = budget ? canEditBudget(budget, role) && !loading : false;
+  const deletable = budget ? canDeleteBudget(budget, role) && !loading : false;
   const workflowActions = budget ? availableWorkflowActions(budget.workflowStage, role) : [];
-  const duplicateAlerts = budget ? detectPotentialDuplicateCosts(budgets, budget.id) : [];
+  const budgetsForChecks = budget ? budgets.map((item) => item.id === budget.id ? budget : item) : budgets;
+  const duplicateAlerts = budget ? detectPotentialDuplicateCosts(budgetsForChecks, budget.id) : [];
   const relevantTemplates = budget ? templates.filter((template) => template.programType === budget.program.type && template.active) : [];
 
   function setActiveRole(next: AccessRole) {
@@ -190,7 +229,9 @@ export function BudgetWorkspace() {
   }
 
   function replaceBudget(next: CohortBudget) {
-    setBudgets((current) => current.map((item) => item.id === next.id ? next : item));
+    if (!draftBudget || next.id !== draftBudget.id) return;
+    setDraftBudget(structuredClone(next));
+    setDirty(true);
   }
 
   function patchBudget(patch: Partial<CohortBudget>) {
@@ -217,6 +258,7 @@ export function BudgetWorkspace() {
 
   async function createBudget() {
     if (!identity || !programs.length) return;
+    if (dirty && !window.confirm(`El presupuesto activo “${budget?.cohortName ?? ""}” tiene cambios sin guardar. Crear un presupuesto nuevo descartará esos cambios locales. ¿Desea continuar?`)) return;
     const program = programs[0];
     const draft = freshBudget(program, identity.name, parameters);
     try {
@@ -326,6 +368,7 @@ export function BudgetWorkspace() {
 
   async function cloneBudget() {
     if (!budget || !identity || !canCreate(identity.roles)) return;
+    if (dirty && !window.confirm("El presupuesto activo tiene cambios sin guardar. La copia incluirá esos cambios locales, pero el presupuesto original permanecerá sin guardarlos. ¿Desea continuar?")) return;
     try {
       const cloneTag = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
       const clonedCohortName = `${budget.cohortName} · copia ${cloneTag}`;
@@ -468,21 +511,37 @@ export function BudgetWorkspace() {
 
   return <div className="budget-workspace">
     {message ? <div className="notice info"><p>{message}</p></div> : null}
-    <section className="panel budget-selector">
-      <div><label>Presupuesto<select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>{budgets.map((item) => <option key={item.id} value={item.id}>{item.program.code} · {item.cohortName} · Versión {item.programVersionLabel} · R{item.version}</option>)}</select></label><label>Rol activo<select value={role} onChange={(event) => setActiveRole(event.target.value as AccessRole)}>{roles.map((candidate) => <option key={candidate} value={candidate}>{roleLabels[candidate]}</option>)}</select></label></div>
+    <section className="panel budget-selector isolated-budget-selector">
+      <div className="budget-filter-controls">
+        <label>Seleccionar presupuesto
+          <select value={candidateBudgetId} onChange={(event) => setCandidateBudgetId(event.target.value)}>
+            {budgets.map((item) => <option key={item.id} value={item.id}>[{item.status}] {item.program.code} · {item.cohortName} · Versión {item.programVersionLabel} · R{item.version}</option>)}
+          </select>
+          <small>La selección no modifica la página hasta presionar “Aplicar filtro”.</small>
+        </label>
+        <button className="button secondary budget-filter-button" type="button" disabled={loading || !candidateBudgetId || (candidateBudgetId === selectedId && !dirty)} onClick={() => void applyBudgetFilter()}>{loading ? "Cargando…" : candidateBudgetId === selectedId && dirty ? "Recargar activo" : "Aplicar filtro"}</button>
+        <label>Rol activo<select value={role} onChange={(event) => setActiveRole(event.target.value as AccessRole)}>{roles.map((candidate) => <option key={candidate} value={candidate}>{roleLabels[candidate]}</option>)}</select></label>
+      </div>
+      <div className="active-budget-context" aria-live="polite">
+        <span>Presupuesto activo</span>
+        <strong>{budget.program.code} · {budget.cohortName} · Versión {budget.programVersionLabel} · R{budget.version}</strong>
+        <small>{dirty ? "Cambios locales sin guardar. Sólo afectan este presupuesto hasta que presione Guardar cambios." : "Datos cargados desde D1. La edición está aislada de los demás presupuestos."}</small>
+        {dirty ? <span className="badge dirty-badge">Cambios sin guardar</span> : <span className="badge approved">Presupuesto cargado</span>}
+      </div>
       <div className="workspace-actions"><button className="button secondary" type="button" onClick={() => void exportBudget("xlsx")}>Exportar XLSX</button><button className="button secondary" type="button" onClick={() => void exportBudget("pdf")}>Exportar PDF</button><button className="button secondary" type="button" onClick={() => void openMailDialog()}>Enviar por correo</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void cloneBudget()}>Clonar presupuesto</button><button className="button primary" type="button" disabled={!editable || saving} onClick={() => void saveBudget()}>{saving ? "Guardando…" : "Guardar cambios"}</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void createBudget()}>Nuevo presupuesto</button><button className="text-button danger-text" type="button" disabled={!deletable} onClick={() => void deleteBudget()}>Eliminar</button></div>
     </section>
 
     <section className="panel">
       <SectionHeading number="1" id="identificacion" title="Identificación" description="Programa, cohorte, duración y versión del plan/programa." />
       <div className="form-grid cols-4">
-        <label>Programa<select disabled={!editable} value={budget.program.id} onChange={(event) => {
+        <label>Programa del presupuesto<select disabled={!editable} value={budget.program.id} onChange={(event) => {
           const program = programs.find((candidate) => candidate.id === event.target.value);
-          if (!program) return;
+          if (!program || program.id === budget.program.id) return;
+          if (!window.confirm(`Cambiar el programa reasignará únicamente el presupuesto activo “${budget.cohortName}” a ${program.code}. Los demás presupuestos no serán modificados. ¿Continuar?`)) return;
           const facultyOverheadRate = overheadApplies(program.type) ? programTypeParameters(parameters, program.type).facultyOverheadRate : 0;
           const next = hydrateAnnualOverrides({ ...budget, program, facultyOverheadRate, programVersionLabel: program.versionLabel ?? "1", scholarshipsEnabled: program.type !== "MAGISTER_PROFESIONAL", annualOverrides: [] }, parameters);
           replaceBudget(next);
-        }}>{programs.map((program) => <option key={program.id} value={program.id}>{program.code} · {program.name}</option>)}</select></label>
+        }}>{programs.map((program) => <option key={program.id} value={program.id}>{program.code} · {program.name}</option>)}</select><small className="field-help">Este campo reasigna únicamente el presupuesto activo. Para cambiar de presupuesto use el filtro superior.</small></label>
         <label>Cohorte<input disabled={!editable} value={budget.cohortName} onChange={(event) => patchBudget({ cohortName: event.target.value })} /></label>
         <label>Versión del programa / plan<input disabled={!editable} value={budget.programVersionLabel} onChange={(event) => patchBudget({ programVersionLabel: event.target.value })} /></label>
         <label>Revisión interna<div className="input-like">R{budget.version}</div></label>

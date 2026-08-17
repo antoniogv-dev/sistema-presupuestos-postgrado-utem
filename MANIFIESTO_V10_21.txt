@@ -1,0 +1,2 @@
+Sistema de Presupuestos de Postgrado UTEM - v10.21 / 1.0.31-d1-web
+Mejora principal: selector de presupuesto con aplicación explícita y edición local aislada por presupuesto.

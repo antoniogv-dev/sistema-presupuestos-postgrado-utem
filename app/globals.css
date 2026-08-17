@@ -447,3 +447,20 @@ input:disabled { background: var(--surface-muted); color: #52606b; }
 .template-annual-config{display:grid;gap:10px;margin-top:10px}.template-annual-config .template-annual-row{margin-top:0;grid-template-columns:minmax(190px,1.35fr) repeat(auto-fit,minmax(105px,1fr))}.template-projection-controls{display:grid;grid-template-columns:minmax(120px,.7fr) minmax(170px,1fr) minmax(145px,.8fr) minmax(280px,1.8fr);gap:10px;align-items:end;padding:10px;border:1px solid #d6e0ea;border-radius:8px;background:#f7fafc}.template-projection-controls .field-action{align-self:end}.field-help{margin:0;color:#5c6f82;font-size:.86rem;line-height:1.35}.consolidation-scope-note{margin:0 0 14px}.consolidation-scope-note p{margin:.25rem 0 0}@media(max-width:980px){.template-projection-controls{grid-template-columns:repeat(2,minmax(160px,1fr))}}@media(max-width:620px){.template-projection-controls{grid-template-columns:1fr}}
 
 /* v10.20 · guardado verificable de plantillas profesionales y matrícula anual corregida */
+
+/* v10.21 · selector aislado de presupuestos */
+.isolated-budget-selector{display:grid;grid-template-columns:minmax(360px,1.15fr) minmax(300px,.85fr);gap:16px;align-items:start}
+.isolated-budget-selector>.workspace-actions{grid-column:1/-1;border-top:1px solid var(--border);padding-top:14px}
+.budget-filter-controls{display:grid!important;grid-template-columns:minmax(320px,1fr) auto minmax(190px,.45fr);gap:10px!important;align-items:end}
+.budget-filter-controls label{min-width:0!important}
+.budget-filter-controls label:first-child small{display:block;margin-top:5px;color:var(--muted);font-weight:400;line-height:1.35}
+.budget-filter-button{margin-bottom:0;white-space:nowrap}
+.active-budget-context{border:1px solid #c8d6e5;border-left:4px solid var(--navy);border-radius:8px;background:#f7fafc;padding:12px 14px;display:grid;gap:4px;align-content:start}
+.active-budget-context>span:first-child{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800}
+.active-budget-context strong{font-size:14px;line-height:1.35;color:var(--navy)}
+.active-budget-context small{color:var(--muted);line-height:1.4}
+.active-budget-context .badge{justify-self:start;margin-top:4px}
+.dirty-badge{background:#fff4d6!important;border-color:#e7c66d!important;color:#6b4a00!important}
+@media(max-width:1080px){.isolated-budget-selector{grid-template-columns:1fr}.budget-filter-controls{grid-template-columns:1fr auto}.budget-filter-controls label:last-child{grid-column:1/-1}.isolated-budget-selector>.workspace-actions{grid-column:auto}}
+@media(max-width:700px){.budget-filter-controls{grid-template-columns:1fr}.budget-filter-controls label:last-child{grid-column:auto}.budget-filter-button{width:100%}}
+.field-help{display:block;margin-top:5px;color:var(--muted);font-size:11px;font-weight:400;line-height:1.35}
