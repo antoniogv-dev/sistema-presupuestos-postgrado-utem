@@ -69,6 +69,9 @@ export function applyBudgetTemplate(
   template: BudgetTemplate,
   parameters?: InstitutionalParameters,
 ): CohortBudget {
+  if (template.programType !== source.program.type || (template.programId && template.programId !== source.program.id)) {
+    throw new Error(`La plantilla ${template.code} no corresponde al programa ${source.program.code}.`);
+  }
   let budget = clone(source);
   // Las plantillas con parámetros anuales deben poder aplicarse incluso a un presupuesto
   // recién creado que todavía no tenga overrides persistidos. Cuando están disponibles

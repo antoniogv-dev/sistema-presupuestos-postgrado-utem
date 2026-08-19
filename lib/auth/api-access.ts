@@ -296,6 +296,9 @@ export function apiError(error: unknown): Response {
   if (message === "NOT_FOUND") return Response.json({ error: "Registro no encontrado." }, { status: 404 });
   if (message === "CONFLICT") return Response.json({ error: "El registro entra en conflicto con información existente." }, { status: 409 });
   if (message === "INVALID_STAGE") return Response.json({ error: "La operación no corresponde a la etapa actual." }, { status: 409 });
+  if (message === "PROGRAM_IMMUTABLE") return Response.json({ error: "El programa es parte de la identidad del presupuesto y no puede reasignarse. Cree o clone una cohorte para otro programa." }, { status: 409 });
+  if (message === "COHORT_PROGRAM_MISMATCH") return Response.json({ error: "La identificación de la cohorte corresponde a otro código de programa. Corrija la cohorte antes de guardar." }, { status: 409 });
+  if (message === "TEMPLATE_PROGRAM_MISMATCH") return Response.json({ error: "La plantilla seleccionada no corresponde al programa del presupuesto." }, { status: 409 });
 
   const normalized = message.toLowerCase();
   if (

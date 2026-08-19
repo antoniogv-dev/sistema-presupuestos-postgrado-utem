@@ -29,9 +29,10 @@ import { tuitionSourceLabel } from "@/lib/programs/tuition-source";
 import { applyBudgetTemplate } from "@/lib/templates/apply-template";
 import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
 import { availableWorkflowActions, canDeleteBudget, canEditBudget, type WorkflowAction } from "@/lib/workflow/budget-workflow";
+import { auditBudgetIntegrity } from "@/lib/validation/budget-integrity";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.22";
+const FUNCTIONAL_RELEASE = "v10.23";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -135,7 +136,7 @@ export function BudgetWorkspace() {
   const [parameters, setParameters] = useState<InstitutionalParameters>(() => structuredClone(fallbackParameters));
   const [identity, setIdentity] = useState<ApiIdentity | null>(null);
   const [selectedId, setSelectedId] = useState("");
-  const [candidateBudgetId, setCandidateBudgetId] = useState("");
+  const [programFilterId, setProgramFilterId] = useState("");
   const [draftBudget, setDraftBudget] = useState<CohortBudget | null>(null);
   const [dirty, setDirty] = useState(false);
   const [role, setRole] = useState<AccessRole>("LECTOR");
@@ -161,8 +162,15 @@ export function BudgetWorkspace() {
         responseBody<InstitutionalParameters>(await fetch("/api/parameters", { cache: "no-store" })),
         responseBody<ApiIdentity>(await fetch("/api/me", { cache: "no-store" })),
       ]);
-      const mapped = budgetRecords.map(toBudget).map((item) => hydrateAnnualOverrides(item, parameterValues));
       const mappedPrograms = programRecords.map(toProgram);
+      let mapped = budgetRecords.map(toBudget).map((item) => hydrateAnnualOverrides(item, parameterValues));
+      const nextId = preferredId && mapped.some((item) => item.id === preferredId) ? preferredId : mapped[0]?.id ?? "";
+      let nextBudget = mapped.find((item) => item.id === nextId) ?? null;
+      if (nextId) {
+        const exactRecord = await responseBody<ApiBudgetRecord>(await fetch(`/api/budgets/${nextId}`, { cache: "no-store" }));
+        nextBudget = hydrateAnnualOverrides(toBudget(exactRecord), parameterValues);
+        mapped = mapped.map((item) => item.id === nextId ? nextBudget! : item);
+      }
       setBudgets(mapped);
       setPrograms(mappedPrograms);
       setTemplates(templateRecords.length ? templateRecords : defaultBudgetTemplates);
@@ -172,10 +180,9 @@ export function BudgetWorkspace() {
       const storedRole = typeof window !== "undefined" ? window.localStorage.getItem(ROLE_KEY) as AccessRole | null : null;
       const resolvedRole = storedRole && me.roles.includes(storedRole) ? storedRole : me.roles[0] ?? "LECTOR";
       setRole(resolvedRole);
-      const nextId = preferredId && mapped.some((item) => item.id === preferredId) ? preferredId : mapped[0]?.id ?? "";
-      const nextBudget = mapped.find((item) => item.id === nextId) ?? null;
       setSelectedId(nextId);
-      setCandidateBudgetId(nextId);
+      setProgramFilterId(nextBudget?.program.id ?? mappedPrograms[0]?.id ?? "");
+      setSelectedTemplateId(nextBudget?.appliedTemplateId ?? "");
       setDraftBudget(nextBudget ? structuredClone(nextBudget) : null);
       setDirty(false);
       if (typeof window !== "undefined" && nextId) {
@@ -203,19 +210,29 @@ export function BudgetWorkspace() {
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [dirty]);
 
-  async function applyBudgetFilter() {
-    if (!candidateBudgetId) return;
-    const candidate = budgets.find((item) => item.id === candidateBudgetId);
+  async function selectBudget(nextId: string) {
+    if (!nextId) return;
+    const candidate = budgets.find((item) => item.id === nextId);
     if (!candidate) return;
-    if (dirty && !window.confirm(`El presupuesto activo “${budget?.cohortName ?? ""}” tiene cambios sin guardar. ¿Desea descartarlos y cargar “${candidate.cohortName}”?`)) {
-      setCandidateBudgetId(selectedId);
+    if (nextId === selectedId && !dirty) return;
+    if (dirty && !window.confirm(`El presupuesto activo “${budget?.cohortName ?? ""}” tiene cambios sin guardar. ¿Desea descartarlos y cargar “${candidate.cohortName}”?`)) return;
+    await load(nextId);
+    setMessage(`Presupuesto cargado: ${candidate.program.code} · ${candidate.program.name} · ${candidate.cohortName}. Toda la página quedó sincronizada con este presupuesto.`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function selectProgram(nextProgramId: string) {
+    if (!nextProgramId) return;
+    const program = programs.find((item) => item.id === nextProgramId);
+    if (!program) return;
+    const programBudgets = budgets.filter((item) => item.program.id === nextProgramId);
+    if (!programBudgets.length) {
+      setMessage(`${program.code} · ${program.name} todavía no tiene presupuestos. Use “Nuevo presupuesto” para crear una cohorte vinculada a este programa.`);
       return;
     }
-    if (candidateBudgetId === selectedId && !dirty) return;
-    await load(candidateBudgetId);
-    setMessage(candidateBudgetId === selectedId
-      ? `Presupuesto recargado desde D1. Se descartaron los cambios locales no guardados de ${candidate.cohortName}.`
-      : `Filtro aplicado. Ahora está trabajando únicamente con ${candidate.program.code} · ${candidate.cohortName} · Versión ${candidate.programVersionLabel} · R${candidate.version}.`);
+    if (dirty && !window.confirm(`El presupuesto activo “${budget?.cohortName ?? ""}” tiene cambios sin guardar. ¿Desea descartarlos y abrir el presupuesto más reciente de ${program.code}?`)) return;
+    await load(programBudgets[0].id);
+    setMessage(`Programa seleccionado: ${program.code} · ${program.name}. Se cargó su presupuesto más reciente y toda la formulación quedó sincronizada.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -229,8 +246,10 @@ export function BudgetWorkspace() {
   const workflowActions = budget ? availableWorkflowActions(budget.workflowStage, role) : [];
   const budgetsForChecks = budget ? budgets.map((item) => item.id === budget.id ? budget : item) : budgets;
   const duplicateAlerts = budget ? detectPotentialDuplicateCosts(budgetsForChecks, budget.id) : [];
+  const integrityIssues = budget ? auditBudgetIntegrity(budget, programs, templates) : [];
+  const blockingIntegrityIssues = integrityIssues.filter((issue) => issue.severity === "error");
   const relevantTemplates = budget ? templates
-    .filter((template) => template.programType === budget.program.type && template.active)
+    .filter((template) => template.programType === budget.program.type && template.active && (!template.programId || template.programId === budget.program.id))
     .sort((a, b) => a.name.localeCompare(b.name, "es")) : [];
   const effectiveTemplateId = relevantTemplates.some((template) => template.id === selectedTemplateId)
     ? selectedTemplateId
@@ -282,7 +301,8 @@ export function BudgetWorkspace() {
   async function createBudget() {
     if (!identity || !programs.length) return;
     if (dirty && !window.confirm(`El presupuesto activo “${budget?.cohortName ?? ""}” tiene cambios sin guardar. Crear un presupuesto nuevo descartará esos cambios locales. ¿Desea continuar?`)) return;
-    const program = programs[0];
+    const program = programs.find((item) => item.id === programFilterId) ?? budget?.program ?? programs[0];
+    if (!program) return;
     const draft = freshBudget(program, identity.name, parameters);
     try {
       const response = await fetch("/api/budgets", {
@@ -312,7 +332,6 @@ export function BudgetWorkspace() {
       const response = await fetch(`/api/budgets/${budget.id}`, {
         method: "PUT", headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          programId: budget.program.id,
           cohortName: budget.cohortName,
           startYear: budget.startYear,
           startSemester: budget.startSemester,
@@ -368,6 +387,14 @@ export function BudgetWorkspace() {
   }
 
   async function openMailDialog(action?: WorkflowAction) {
+    if (dirty) {
+      setMessage("Guarde o descarte los cambios locales antes de enviar el presupuesto o avanzar en el flujo de aprobación. Los correos y el workflow siempre usan la versión persistida en D1.");
+      return;
+    }
+    if (blockingIntegrityIssues.length) {
+      setMessage("Resuelva las inconsistencias de identidad del presupuesto antes de enviarlo o avanzar en el flujo de aprobación.");
+      return;
+    }
     const targetRole = action ? workflowRecipientRole(action) : "TODOS";
     try {
       const list = await responseBody<Array<{ id: string; name: string; email: string; roles: string[] }>>(await fetch(`/api/workflow/recipients?role=${targetRole}`, { cache: "no-store" }));
@@ -403,6 +430,10 @@ export function BudgetWorkspace() {
 
   function applyTemplate(template: BudgetTemplate) {
     if (!budget) return;
+    if (template.programType !== budget.program.type || (template.programId && template.programId !== budget.program.id)) {
+      setMessage(`La plantilla “${template.name}” no corresponde a ${budget.program.code}. No se aplicó ningún cambio.`);
+      return;
+    }
     let next = applyBudgetTemplate(budget, template, parameters);
     if (next.program.type === "MAGISTER_PROFESIONAL") {
       next = {
@@ -575,48 +606,36 @@ export function BudgetWorkspace() {
     {message ? <div className="notice info"><p>{message}</p></div> : null}
     <section className="panel budget-selector isolated-budget-selector">
       <div className="budget-filter-controls">
-        <label>Seleccionar presupuesto
-          <select value={candidateBudgetId} onChange={(event) => setCandidateBudgetId(event.target.value)}>
-            {budgets.map((item) => <option key={item.id} value={item.id}>[{item.status}] {item.program.code} · {item.cohortName} · Versión {item.programVersionLabel} · R{item.version}</option>)}
+        <label>Programa
+          <select value={budget.program.id} onChange={(event) => void selectProgram(event.target.value)}>
+            {programs.filter((program) => budgets.some((item) => item.program.id === program.id)).map((program) => <option key={program.id} value={program.id}>{program.code} · {program.name}</option>)}
           </select>
-          <small>La selección no modifica la página hasta presionar “Aplicar filtro”.</small>
+          <small>Elegir un programa carga un presupuesto de ese programa; nunca reasigna el presupuesto activo.</small>
         </label>
-        <button className="button secondary budget-filter-button" type="button" disabled={loading || !candidateBudgetId || (candidateBudgetId === selectedId && !dirty)} onClick={() => void applyBudgetFilter()}>{loading ? "Cargando…" : candidateBudgetId === selectedId && dirty ? "Recargar activo" : "Aplicar filtro"}</button>
+        <label>Presupuesto / cohorte
+          <select value={selectedId} onChange={(event) => void selectBudget(event.target.value)}>
+            {budgets.filter((item) => item.program.id === budget.program.id).map((item) => <option key={item.id} value={item.id}>[{item.status}] {item.cohortName} · Versión {item.programVersionLabel} · R{item.version}</option>)}
+          </select>
+          <small>Al cambiar de cohorte se vuelve a leer ese presupuesto desde D1 y se reemplaza toda la página.</small>
+        </label>
+        <button className="button secondary budget-filter-button" type="button" disabled={loading || !dirty} onClick={() => void selectBudget(selectedId)}>{loading ? "Cargando…" : "Descartar cambios y recargar"}</button>
         <label>Rol activo<select value={role} onChange={(event) => setActiveRole(event.target.value as AccessRole)}>{roles.map((candidate) => <option key={candidate} value={candidate}>{roleLabels[candidate]}</option>)}</select></label>
       </div>
       <div className="active-budget-context" aria-live="polite">
         <span>Presupuesto activo</span>
-        <strong>{budget.program.code} · {budget.cohortName} · Versión {budget.programVersionLabel} · R{budget.version}</strong>
+        <strong>{budget.program.code} · {budget.program.name} · {budget.cohortName} · Versión {budget.programVersionLabel} · R{budget.version}</strong>
         <small>{dirty ? "Cambios locales sin guardar. Sólo afectan este presupuesto hasta que presione Guardar cambios." : "Datos cargados desde D1. La edición está aislada de los demás presupuestos."}</small>
         {dirty ? <span className="badge dirty-badge">Cambios sin guardar</span> : <span className="badge approved">Presupuesto cargado</span>}
       </div>
-      <div className="workspace-actions"><button className="button secondary" type="button" onClick={() => void exportBudget("xlsx")}>Exportar XLSX</button><button className="button secondary" type="button" onClick={() => void exportBudget("pdf")}>Exportar PDF</button><button className="button secondary" type="button" onClick={() => void openMailDialog()}>Enviar por correo</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void cloneBudget()}>Clonar presupuesto</button><button className="button primary" type="button" disabled={!editable || saving} onClick={() => void saveBudget()}>{saving ? "Guardando…" : "Guardar cambios"}</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void createBudget()}>Nuevo presupuesto</button><button className="text-button danger-text" type="button" disabled={!deletable} onClick={() => void deleteBudget()}>Eliminar</button></div>
+      <div className="workspace-actions"><button className="button secondary" type="button" onClick={() => void exportBudget("xlsx")}>Exportar XLSX</button><button className="button secondary" type="button" onClick={() => void exportBudget("pdf")}>Exportar PDF</button><button className="button secondary" type="button" disabled={dirty || blockingIntegrityIssues.length > 0} onClick={() => void openMailDialog()}>Enviar por correo</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void cloneBudget()}>Clonar presupuesto</button><button className="button primary" type="button" disabled={!editable || saving || blockingIntegrityIssues.length > 0} onClick={() => void saveBudget()}>{saving ? "Guardando…" : "Guardar cambios"}</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void createBudget()}>Nuevo presupuesto</button><button className="text-button danger-text" type="button" disabled={!deletable} onClick={() => void deleteBudget()}>Eliminar</button></div>
     </section>
+
+    {integrityIssues.length ? <section className="panel integrity-panel"><div className="notice warning"><strong>Auditoría de integridad del presupuesto</strong><ul>{integrityIssues.map((issue) => <li key={issue.code}>{issue.message}{issue.suggestedCohortName && editable ? <> <button className="text-button" type="button" onClick={() => patchBudget({ cohortName: issue.suggestedCohortName })}>Usar “{issue.suggestedCohortName}”</button></> : null}</li>)}</ul>{blockingIntegrityIssues.length ? <p><strong>Guardar queda bloqueado hasta resolver las inconsistencias de identidad.</strong></p> : null}</div></section> : null}
 
     <section className="panel">
       <SectionHeading number="1" id="identificacion" title="Identificación" description="Programa, cohorte, duración y versión del plan/programa." />
       <div className="form-grid cols-4">
-        <label>Programa del presupuesto<select disabled={!editable} value={budget.program.id} onChange={(event) => {
-          const program = programs.find((candidate) => candidate.id === event.target.value);
-          if (!program || program.id === budget.program.id) return;
-          if (!window.confirm(`Cambiar el programa reasignará únicamente el presupuesto activo “${budget.cohortName}” a ${program.code}. Los demás presupuestos no serán modificados. ¿Continuar?`)) return;
-          const facultyOverheadRate = overheadApplies(program.type) ? programTypeParameters(parameters, program.type).facultyOverheadRate : 0;
-          const next = hydrateAnnualOverrides({
-            ...budget,
-            program,
-            facultyOverheadRate,
-            programVersionLabel: program.versionLabel ?? "1",
-            scholarshipsEnabled: program.type !== "MAGISTER_PROFESIONAL",
-            annualOverrides: [],
-            semesters: budget.semesters.map((semester) => program.type === "MAGISTER_PROFESIONAL" ? {
-              ...semester,
-              internalTuitionScholarshipStudents: 0,
-              maintenanceScholarshipStudents: 0,
-              maintenanceScholarshipMonths: 0,
-            } : semester),
-          }, parameters);
-          replaceBudget(next);
-        }}>{programs.map((program) => <option key={program.id} value={program.id}>{program.code} · {program.name}</option>)}</select><small className="field-help">Este campo reasigna únicamente el presupuesto activo. Para cambiar de presupuesto use el filtro superior.</small></label>
+        <label>Programa del presupuesto<div className="input-like program-identity"><strong>{budget.program.code}</strong> · {budget.program.name}</div><small className="field-help">El programa es parte de la identidad del presupuesto y no puede reasignarse. Para trabajar con otro programa use el selector superior o cree una nueva cohorte.</small></label>
         <label>Cohorte<input disabled={!editable} value={budget.cohortName} onChange={(event) => patchBudget({ cohortName: event.target.value })} /></label>
         <label>Versión del programa / plan<input disabled={!editable} value={budget.programVersionLabel} onChange={(event) => patchBudget({ programVersionLabel: event.target.value })} /></label>
         <label>Revisión interna<div className="input-like">R{budget.version}</div></label>
@@ -866,7 +885,7 @@ export function BudgetWorkspace() {
       </div>
     </section>
 
-    <section className="panel"><SectionHeading number="11" id="workflow" title="Revisión y aprobación" description="Gestión → V°B° → Aprobación, con historial auditable y aviso por correo." /><div className="workflow-actions">{workflowActions.length ? workflowActions.map((transition) => <button key={transition.action} className="button primary" type="button" onClick={() => void openMailDialog(transition.action)}>{actionLabels[transition.action]}</button>) : <span>No hay acciones disponibles para el rol y etapa actuales.</span>}</div></section>
+    <section className="panel"><SectionHeading number="11" id="workflow" title="Revisión y aprobación" description="Gestión → V°B° → Aprobación, con historial auditable y aviso por correo." /><div className="workflow-actions">{workflowActions.length ? workflowActions.map((transition) => <button key={transition.action} className="button primary" type="button" disabled={dirty || blockingIntegrityIssues.length > 0} onClick={() => void openMailDialog(transition.action)}>{actionLabels[transition.action]}</button>) : <span>No hay acciones disponibles para el rol y etapa actuales.</span>}</div></section>
     {mailDialog ? <div className="modal-backdrop" role="presentation"><div className="modal-card" role="dialog" aria-modal="true"><h3>{mailDialog.title}</h3><p>Seleccione a quién avisar. El correo identifica programa, cohorte, revisión y estado del presupuesto.</p><label>Destinatario<select value={recipientMode} onChange={(event) => { const value = event.target.value; setRecipientMode(value); if (value === "OTROS") { setRecipientEmail(""); setRecipientName(""); } else { const found = recipients.find((item) => item.email === value); setRecipientEmail(value); setRecipientName(found?.name ?? ""); } }}>{recipients.map((item) => <option key={item.id} value={item.email}>{item.name} · {item.email}</option>)}<option value="OTROS">Otros</option></select></label>{recipientMode === "OTROS" ? <><label>Correo<input type="email" value={recipientEmail} onChange={(event) => setRecipientEmail(event.target.value)} /></label><label>Nombre (opcional)<input value={recipientName} onChange={(event) => setRecipientName(event.target.value)} /></label></> : null}<label>Comentario<textarea value={mailComment} onChange={(event) => setMailComment(event.target.value)} rows={4} /></label><div className="workspace-actions"><button className="button secondary" onClick={() => setMailDialog(null)}>Cancelar</button><button className="button primary" disabled={!recipientEmail.trim()} onClick={() => void confirmMailAction()}>{mailDialog.action ? "Registrar y preparar aviso" : "Preparar correo"}</button></div></div></div> : null}
   </div>;
 }

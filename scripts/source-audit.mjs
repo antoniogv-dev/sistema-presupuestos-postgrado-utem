@@ -256,7 +256,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.22"',
+  'FUNCTIONAL_RELEASE = "v10.23"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -276,8 +276,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.22") || !appShellV110.includes("1.0.32-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.22 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.23") || !appShellV110.includes("1.0.33-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.23 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -516,7 +516,7 @@ for (const marker of ["Proyectar reajuste desde valor base", "Valor base manual"
   if (!templateManagerV1018.includes(marker)) fail(`TemplateManager v10.18: falta ${marker}.`);
 }
 const workspaceV1018 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de escala", "/api/workflow/recipients", "v10.22"]) {
+for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de escala", "/api/workflow/recipients", "v10.23"]) {
   if (!workspaceV1018.includes(marker)) fail(`BudgetWorkspace v10.18: falta ${marker}.`);
 }
 const narrativeV1018 = await readFile(path.join(root, "lib/export/financial-narrative.ts"), "utf8");
@@ -569,22 +569,25 @@ for (const marker of [
 }
 
 
-// v10.21: selección aislada de presupuestos. Cambiar el selector superior no debe
-// mutar el formulario hasta aplicar explícitamente el filtro; el borrador activo
-// se mantiene fuera de la colección cargada desde D1.
+// v10.23: selección canónica por programa y presupuesto. El programa de una cohorte
+// es inmutable; cambiar el selector superior debe recargar un presupuesto exacto desde D1.
 const budgetWorkspaceV1021 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
 for (const marker of [
-  "candidateBudgetId",
   "draftBudget",
   "setDraftBudget(nextBudget ? structuredClone(nextBudget) : null)",
   "setDirty(true)",
-  "Aplicar filtro",
-  "Presupuesto activo",
-  "La edición está aislada de los demás presupuestos",
+  "Programa del presupuesto",
+  "El programa es parte de la identidad del presupuesto y no puede reasignarse",
+  "Presupuesto / cohorte",
+  "Toda la página quedó sincronizada con este presupuesto",
+  "auditBudgetIntegrity",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v10.22"',
+  'FUNCTIONAL_RELEASE = "v10.23"',
 ]) {
-  if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.21: falta ${marker}.`);
+  if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.23: falta ${marker}.`);
+}
+for (const forbidden of ["candidateBudgetId", "Aplicar filtro", "reasignará únicamente el presupuesto activo", "Programa del presupuesto<select"]) {
+  if (budgetWorkspaceV1021.includes(forbidden)) fail(`Aislamiento de presupuestos v10.23: no debe permanecer ${forbidden}.`);
 }
 const globalsV1021 = await readFile(path.join(root, "app/globals.css"), "utf8");
 for (const marker of ["isolated-budget-selector", "active-budget-context", "dirty-badge"]) {
@@ -606,7 +609,7 @@ for (const marker of [
   "setInitialStudentsForAllSemesters",
   "Punto de equilibrio",
   "Viabilidad mínima de dictación",
-  'FUNCTIONAL_RELEASE = "v10.22"',
+  'FUNCTIONAL_RELEASE = "v10.23"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
 }
@@ -628,6 +631,21 @@ for (const marker of ["parseXlsx", "DecompressionStream", "parametros completos"
 const migrationV1022 = await readFile(path.join(root, "migrations/0009_remove_seeded_operational_defaults.sql"), "utf8");
 for (const marker of ["param-operating-expenses", "param-software-licenses", "param-diffusion-admission", 'SET "amount" = 0', 'UPDATE "BudgetAnnualOverride"', 'annualEnrollmentFee', 'MAGISTER_PROFESIONAL']) {
   if (!migrationV1022.includes(marker)) fail(`Migración 0009 v10.22: falta ${marker}.`);
+}
+
+// v10.23: barreras contra mezcla de programas/presupuestos y plantillas cruzadas.
+const budgetRouteV1023 = await readFile(path.join(root, "app/api/budgets/[budgetId]/route.ts"), "utf8");
+for (const marker of ["PROGRAM_IMMUTABLE", "COHORT_PROGRAM_MISMATCH", "TEMPLATE_PROGRAM_MISMATCH"]) {
+  if (!budgetRouteV1023.includes(marker)) fail(`API presupuesto v10.23: falta ${marker}.`);
+}
+if (budgetRouteV1023.includes('assign("programId"')) fail('API presupuesto v10.23: programId no debe actualizarse en un presupuesto existente.');
+const integrityV1023 = await readFile(path.join(root, "lib/validation/budget-integrity.ts"), "utf8");
+for (const marker of ["auditBudgetIntegrity", "COHORT_PROGRAM_PREFIX_MISMATCH", "templateAppliesToProgram", "canonicalCohortName"]) {
+  if (!integrityV1023.includes(marker)) fail(`Auditoría de integridad v10.23: falta ${marker}.`);
+}
+if (importPageV1022.includes('programs[0]?.id')) fail('Importación v10.23: no debe asignar silenciosamente el primer programa cuando el archivo no identifica uno.');
+for (const marker of ['!template.programId || template.programId === budget.program.id', 'fetch(`/api/budgets/${nextId}`', 'setSelectedTemplateId(nextBudget?.appliedTemplateId ?? "")']) {
+  if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento v10.23: falta ${marker}.`);
 }
 
 for (const message of warnings) console.warn(`ADVERTENCIA: ${message}`);

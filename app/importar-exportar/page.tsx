@@ -174,8 +174,11 @@ export default function ImportExportPage() {
         const candidate = normalizeProgramMatch(program.name);
         return candidate === importedName || candidate.includes(importedName) || importedName.includes(candidate);
       }) : undefined;
-      setImportProgramId((byCode ?? byName)?.id ?? programs[0]?.id ?? "");
-      setMessage(`Archivo analizado localmente: ${next.recognized.length} variables reconocidas, confianza ${next.confidence} %. Revise la vista previa antes de crear el borrador.`);
+      const matchedProgram = byCode ?? byName;
+      setImportProgramId(matchedProgram?.id ?? "");
+      setMessage(matchedProgram
+        ? `Archivo analizado localmente: ${next.recognized.length} variables reconocidas, confianza ${next.confidence} %. Programa reconocido: ${matchedProgram.code} · ${matchedProgram.name}. Revise la vista previa antes de crear el borrador.`
+        : `Archivo analizado localmente: ${next.recognized.length} variables reconocidas, confianza ${next.confidence} %. No se asignó un programa automáticamente; seleccione explícitamente el programa correcto antes de importar.`);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "No fue posible interpretar el archivo seleccionado.");
     } finally {
@@ -222,7 +225,6 @@ export default function ImportExportPage() {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          programId: program.id,
           cohortName: prepared.cohortName,
           startYear: prepared.startYear,
           startSemester: prepared.startSemester,

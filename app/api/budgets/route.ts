@@ -132,9 +132,24 @@ export async function POST(request: Request) {
     const prisma = getPrismaClient();
     const program = await prisma.program.findUnique({
       where: { id: input.programId },
-      select: { type: true, versionLabel: true },
+      select: { id: true, code: true, type: true, versionLabel: true },
     });
     if (!program) throw new Error("NOT_FOUND");
+    const cohortPrefix = input.cohortName.trim().split(/[\s·|/]+/)[0]?.toUpperCase() ?? "";
+    if (cohortPrefix) {
+      const programCodes = await prisma.program.findMany({ select: { id: true, code: true } });
+      const prefixProgram = programCodes.find((candidate) => candidate.code.toUpperCase() === cohortPrefix);
+      if (prefixProgram && prefixProgram.id !== program.id) throw new Error("COHORT_PROGRAM_MISMATCH");
+    }
+    if (input.appliedTemplateId) {
+      const template = await prisma.budgetTemplate.findUnique({
+        where: { id: input.appliedTemplateId },
+        select: { programType: true, programId: true, active: true },
+      });
+      if (!template || !template.active || template.programType !== program.type || (template.programId && template.programId !== program.id)) {
+        throw new Error("TEMPLATE_PROGRAM_MISMATCH");
+      }
+    }
 
     const effectiveInput = {
       ...input,

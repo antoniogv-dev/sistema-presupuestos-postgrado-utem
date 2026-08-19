@@ -45,6 +45,10 @@ export async function POST(request: Request) {
     if (!hasAccess(identity, "GESTOR")) throw new Error("FORBIDDEN");
     const input = schema.parse(await request.json());
     const prisma = getPrismaClient();
+    if (input.programId) {
+      const program = await prisma.program.findUnique({ where: { id: input.programId }, select: { type: true } });
+      if (!program || program.type !== input.programType) throw new Error("TEMPLATE_PROGRAM_MISMATCH");
+    }
 
     const templateId = d1Id("template");
     const database = d1Database();

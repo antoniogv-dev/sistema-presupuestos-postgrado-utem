@@ -189,12 +189,27 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
     if (!current) throw new Error("NOT_FOUND");
     if (current.workflowStage !== "GESTION" || current.status === "APROBADO") throw new Error("INVALID_STAGE");
 
-    const effectiveProgram = input.programId && input.programId !== current.programId
-      ? await prisma.program.findUnique({ where: { id: input.programId }, select: { type: true } })
-      : current.program;
-    if (!effectiveProgram) throw new Error("NOT_FOUND");
+    if (input.programId && input.programId !== current.programId) throw new Error("PROGRAM_IMMUTABLE");
+    const effectiveProgram = current.program;
 
-    const { semesters, discounts, externalIncome, items, annualOverrides, sharedCourses, changeNote, ...header } = input;
+    const { programId: ignoredProgramId, semesters, discounts, externalIncome, items, annualOverrides, sharedCourses, changeNote, ...header } = input;
+    void ignoredProgramId;
+    const effectiveCohortName = header.cohortName ?? current.cohortName;
+    const cohortPrefix = effectiveCohortName.trim().split(/[\s·|/]+/)[0]?.toUpperCase() ?? "";
+    if (cohortPrefix) {
+      const programCodes = await prisma.program.findMany({ select: { id: true, code: true } });
+      const prefixProgram = programCodes.find((program) => program.code.toUpperCase() === cohortPrefix);
+      if (prefixProgram && prefixProgram.id !== current.programId) throw new Error("COHORT_PROGRAM_MISMATCH");
+    }
+    if (header.appliedTemplateId) {
+      const template = await prisma.budgetTemplate.findUnique({
+        where: { id: header.appliedTemplateId },
+        select: { programType: true, programId: true, active: true },
+      });
+      if (!template || !template.active || template.programType !== effectiveProgram.type || (template.programId && template.programId !== current.programId)) {
+        throw new Error("TEMPLATE_PROGRAM_MISMATCH");
+      }
+    }
     const nextVersion = (current.versions[0]?.number ?? 0) + 1;
     const nextStatus = current.status === BudgetStatus.OBSERVADO ? BudgetStatus.BORRADOR : current.status;
     const database = d1Database();
@@ -206,7 +221,6 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
       values.push(value);
     };
 
-    if (header.programId !== undefined) assign("programId", header.programId);
     if (header.cohortName !== undefined) assign("cohortName", header.cohortName);
     if (header.startYear !== undefined) assign("startYear", header.startYear);
     if (header.startSemester !== undefined) assign("startSemester", header.startSemester);

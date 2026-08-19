@@ -2,6 +2,7 @@ import { z } from "zod";
 import { apiError, hasAccess, requireApiIdentity } from "@/lib/auth/api-access";
 import { d1Id, d1Json, runD1Batch } from "@/lib/database/d1-atomic";
 import { d1Database } from "@/lib/runtime-env";
+import { getPrismaClient } from "@/lib/database/prisma";
 
 const itemSchema = z.object({
   key: z.string().min(1),
@@ -118,6 +119,10 @@ export async function PUT(request: Request, context: { params: Promise<{ templat
     const input = schema.parse(await request.json());
     const previous = await readTemplate(templateId);
     if (!previous) throw new Error("NOT_FOUND");
+    if (input.programId) {
+      const program = await getPrismaClient().program.findUnique({ where: { id: input.programId }, select: { type: true } });
+      if (!program || program.type !== previous.template.programType) throw new Error("TEMPLATE_PROGRAM_MISMATCH");
+    }
 
     // v10.20: las plantillas profesionales deben poder modificarse sin depender de una
     // lectura Prisma posterior al batch. Se normalizan claves y se devuelve lo persistido

@@ -1,6 +1,6 @@
 {
   "name": "sistema-presupuestos-postgrado-utem",
-  "version": "1.0.32-d1-web",
+  "version": "1.0.33-d1-web",
   "private": true,
   "description": "Sistema de Presupuestos de Postgrado UTEM para Cloudflare Workers y D1, desplegable desde GitHub y Cloudflare web.",
   "engines": {
@@ -29,8 +29,9 @@
     "preview:cloudflare": "npm run build:cloudflare && opennextjs-cloudflare preview",
     "verify": "npm run build:cloudflare",
     "source:audit": "node scripts/source-audit.mjs",
-    "quality:cloudflare": "npm run preflight && npm run source:audit && npm run typecheck && npm run lint && npm run test:engine && npm run test && npm run test:standalone",
-    "db:validate": "prisma validate"
+    "quality:cloudflare": "npm run preflight && npm run source:audit && npm run integrity:audit && npm run typecheck && npm run lint && npm run test:engine && npm run test && npm run test:standalone",
+    "db:validate": "prisma validate",
+    "integrity:audit": "node scripts/platform-integrity-audit.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "3.9.1",

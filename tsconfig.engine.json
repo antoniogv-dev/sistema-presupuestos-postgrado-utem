@@ -14,6 +14,7 @@
     "lib/templates/**/*.ts",
     "lib/demo-data.ts",
     "lib/workflow/**/*.ts",
+    "lib/validation/budget-integrity.ts",
     "lib/export/report-model.ts",
     "lib/export/xlsx.ts",
     "lib/export/pdf.ts"

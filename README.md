@@ -1,20 +1,21 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10.22 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.23 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
 
 
-## Mejoras funcionales v10.22
+## Mejoras funcionales v10.23
 
-- **Formulación profesional simplificada:** se elimina Valor hora docente directa de la tabla anual y se mantiene una única tarifa visible Hora sincrónica para la valorización profesional.
-- **Parámetros profesionales iniciales:** manutención mensual en $0 y matrícula 2027 en $192.150, reajustada desde esa base.
-- **Reajuste de staff:** Dirección, Asistencia y Otros honorarios pueden proyectarse al año siguiente con un factor porcentual.
-- **Plantillas en su lugar funcional:** Presencial, Semipresencial y E-learning se seleccionan dentro de Parámetros y plantillas.
-- **Estudiantes autocompletados:** Estudiantes iniciales replica el valor a todos los semestres activos.
-- **Sin costos de referencia automáticos:** Gastos operacionales, Software y Difusión parten en $0; la migración 0009 limpia defaults históricos sin tocar valores personalizados.
-- **Punto de equilibrio profesional:** calcula matrículas equivalentes mínimas para saldo final no negativo, con umbral a dos decimales y aproximación a estudiantes completos.
-- **Importación local inteligente:** admite XLSX/XLSM/CSV/JSON, genera vista previa, reconoce variables por estructura/etiquetas y crea siempre un Borrador para revisión.
-- **Control de despliegue:** versión `v10.22 · 1.0.32-d1-web`.
+- **Identidad programa-presupuesto inmutable:** un presupuesto existente ya no puede reasignarse desde MGIB a MDTIS, MGP u otro programa. El programa queda de sólo lectura dentro de Identificación y la API rechaza cambios de `programId`.
+- **Selección simplificada y canónica:** la cabecera usa `Programa` y `Presupuesto / cohorte`; al cambiar se vuelve a leer el presupuesto exacto por ID desde D1 y toda la página se sincroniza con él. Se elimina el estado candidato que podía diferir del presupuesto activo.
+- **Nombre institucional completo:** el presupuesto activo y la Identificación muestran código y nombre completo del programa, por ejemplo `MGIB · Magíster en Gestión de la Información y Bibliotecología`.
+- **Auditoría de integridad en pantalla:** detecta cohortes rotuladas con el código de otro programa, plantillas incompatibles, periodos incongruentes y otros desajustes. Los errores de identidad bloquean Guardar, correo y workflow hasta corregirse.
+- **Plantillas aisladas:** una plantilla específica sólo aparece y se aplica al programa para el cual fue creada. Las APIs de plantillas y presupuestos verifican además tipo y programa.
+- **Importación segura:** si un archivo no identifica con suficiente precisión el programa, el importador ya no selecciona silenciosamente el primer programa; exige selección explícita.
+- **Workflow consistente:** no permite enviar por correo, V°B° o aprobación mientras existan cambios locales sin guardar o errores de identidad.
+- **Auditoría transversal permanente:** `npm run integrity:audit` ejecuta 12 controles de aislamiento e identidad dentro del build de Cloudflare.
+- **Se mantienen las mejoras v10.22:** simplificación profesional, matrícula 2027 en $192.150, manutención profesional inicial en $0, reajuste de staff, autocompletado de estudiantes, punto de equilibrio e importación inteligente.
+- **Control de despliegue:** versión `v10.23 · 1.0.33-d1-web`.
 
 ## Mejora funcional v10.21
 
