@@ -239,7 +239,7 @@ export function BudgetWorkspace() {
     setProgramFilterId(nextProgramId);
     const programBudgets = budgets
       .filter((item) => item.program.id === nextProgramId)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
 
     if (!programBudgets.length) {
       setSelectedId("");
