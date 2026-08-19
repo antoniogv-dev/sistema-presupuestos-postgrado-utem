@@ -16,7 +16,7 @@ describe("exportación trazable de parámetros", () => {
 
     for (const parameter of [
       "Duración oficial del programa",
-      "Valor hora docencia presencial",
+      "Valor hora docencia sincrónica",
       "Valor hora docencia de reemplazo",
       "Dirección aplicada al presupuesto",
       "Asistencia aplicada al presupuesto",
@@ -25,6 +25,8 @@ describe("exportación trazable de parámetros", () => {
     ]) {
       expect(parameters.rows.some((row) => row.parameter === parameter)).toBe(true);
     }
+    expect(parameters.rows.some((row) => row.parameter === "Valor hora docencia presencial")).toBe(false);
+    expect(parameters.rows.some((row) => row.parameter === "Valor hora docencia sincrónica")).toBe(true);
     expect(parameters.rows.some((row) => row.section === "Descuentos de arancel" && row.parameter.includes("Convenio institucional"))).toBe(true);
     expect(parameters.rows.some((row) => row.section === "Ingresos extraordinarios" && row.parameter.includes("Aporte asociado a convenio"))).toBe(true);
     expect(parameters.rows.some((row) => row.section === "Costos y gastos registrados" && row.parameter.includes("Textos y publicaciones"))).toBe(true);
