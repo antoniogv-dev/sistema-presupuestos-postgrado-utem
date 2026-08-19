@@ -1,4 +1,5 @@
 import { programTypeParameters, resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
+import { calculateBreakEvenEquivalentEnrollments } from "../calculations/break-even";
 import type { BudgetResult, CohortBudget, InstitutionalParameters } from "../calculations/types";
 
 export type ReportRowTone = "income" | "expense" | "section" | "result" | "plain";
@@ -191,10 +192,10 @@ export function buildParameterReport(
     const section = "Parámetros anuales";
     pushCurrency(section, "Arancel anual por estudiante", String(year), annual.annualTuition, "Valor efectivo usado para calcular el arancel bruto");
     pushCurrency(section, "Matrícula anual por estudiante", String(year), annual.annualEnrollmentFee, "Informativa; sin descuentos y fuera de INGRESOS TOTAL");
-    pushCurrency(section, "Valor hora docencia presencial", String(year), annual.directTeachingHourValue);
-    if (budget.deliveryModality !== "PRESENCIAL") {
-      pushCurrency(section, "Valor hora docencia sincrónica", String(year), annual.synchronousTeachingHourValue);
-      pushCurrency(section, "Valor hora docencia asincrónica", String(year), annual.asynchronousTeachingHourValue);
+    if (budget.program.type === "MAGISTER_PROFESIONAL") {
+      pushCurrency(section, "Valor hora docencia sincrónica", String(year), annual.synchronousTeachingHourValue, "Valor hora único visible para la modalidad profesional");
+    } else {
+      pushCurrency(section, "Valor hora docencia presencial", String(year), annual.directTeachingHourValue);
     }
     pushCurrency(section, "Valor hora docencia de reemplazo", String(year), parameters.replacementHour, "Parámetro institucional general");
     pushCurrency(section, "Guía de tesis por estudiante en graduación", String(year), annual.thesisGuidancePerGraduatingStudent);
@@ -231,6 +232,17 @@ export function buildParameterReport(
     pushPercent(section, "Overhead facultad", String(year), annual.facultyOverheadRate);
     pushNumber(section, "Semestres activos en el año", String(year), flow.activeSemesters);
     pushNumber(section, "Factor de arancel anual", String(year), flow.tuitionFactor, "0,5 por semestre activo");
+  }
+
+  if (budget.program.type === "MAGISTER_PROFESIONAL") {
+    const breakEven = calculateBreakEvenEquivalentEnrollments(budget, parameters);
+    if (breakEven.minimumEquivalentEnrollments !== null) {
+      pushNumber("Punto de equilibrio", "Matrículas equivalentes mínimas", "Horizonte completo", breakEven.minimumEquivalentEnrollments, `Umbral exacto ${breakEven.minimumEquivalentEnrollmentsExact?.toLocaleString("es-CL", { maximumFractionDigits: 4 })} · flujo simulado no negativo ${breakEven.projectedFinalFlowAtMinimum?.toLocaleString("es-CL", { maximumFractionDigits: 0 }) ?? 0}`);
+      pushNumber("Punto de equilibrio", "Estudiantes a arancel completo aproximados", "Horizonte completo", breakEven.minimumWholeStudents ?? 0, "Redondeo hacia arriba del umbral equivalente");
+      pushNumber("Punto de equilibrio", "Matrículas equivalentes actuales de referencia", "Horizonte completo", breakEven.currentEquivalentEnrollments);
+    } else {
+      pushText("Punto de equilibrio", "Resultado", "Horizonte completo", "No alcanzado dentro del rango de simulación");
+    }
   }
 
   // Inputs semestrales completos.
@@ -415,6 +427,8 @@ function rowHasMeaningfulInformation(row: ParameterReportRow): boolean {
     if (row.parameter === "Estudiantes activos" || row.parameter === "Horas docentes presenciales" || row.parameter === "Horas docentes sincrónicas" || row.parameter === "Horas docentes asincrónicas") return true;
     return typeof row.value === "number" && Math.abs(row.value) > 0.000001;
   }
+
+  if (row.section === "Punto de equilibrio") return true;
 
   // Descuentos, ingresos y costos se muestran únicamente cuando existen registros reales.
   if (["Descuentos de arancel", "Ingresos extraordinarios", "Costos y gastos registrados"].includes(row.section)) {

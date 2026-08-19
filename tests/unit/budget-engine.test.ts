@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { calculateBudget, defaultAnnualOverrideForYear, hydrateAnnualOverrides, overheadApplies } from "@/lib/calculations/budget-engine";
+import { calculateBudget, defaultAnnualOverrideForYear, hydrateAnnualOverrides, overheadApplies, professionalEnrollmentFeeForYear, resolvedAnnualOverrideForYear } from "@/lib/calculations/budget-engine";
+import { calculateBreakEvenEquivalentEnrollments } from "@/lib/calculations/break-even";
 import { buildConsolidationGroups, consolidateBudgets, detectPotentialDuplicateCosts } from "@/lib/calculations/consolidation";
 import { demoBudget, institutionalParameters, secondDemoBudget } from "@/lib/demo-data";
 import { applyWorkflowAction, canDeleteBudget, canEditBudget } from "@/lib/workflow/budget-workflow";
@@ -70,7 +71,7 @@ describe("motor financiero", () => {
     budget.discounts = [{ id: "mat", name: "Convenio", percentage: 0.2, students: 5, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 2 }];
     const result = calculateBudget(budget, institutionalParameters);
     const first = result.annualFlows[0];
-    const enrollment = institutionalParameters.annualEnrollmentFee[first.year];
+    const enrollment = professionalEnrollmentFeeForYear(institutionalParameters, first.year);
     expect(first.grossEnrollmentFee).toBe(10 * enrollment);
     expect(first.enrollmentDiscounts).toBe(0);
     expect(first.netEnrollmentFee).toBe(first.grossEnrollmentFee);
@@ -85,8 +86,8 @@ describe("motor financiero", () => {
     const flows = calculateBudget(budget, institutionalParameters).annualFlows;
     const first = flows.find((flow) => flow.year === 2027)!;
     const second = flows.find((flow) => flow.year === 2028)!;
-    expect(first.grossEnrollmentFee).toBe(20 * institutionalParameters.annualEnrollmentFee[2027]);
-    expect(second.grossEnrollmentFee).toBe(18 * institutionalParameters.annualEnrollmentFee[2028]);
+    expect(first.grossEnrollmentFee).toBe(20 * professionalEnrollmentFeeForYear(institutionalParameters, 2027));
+    expect(second.grossEnrollmentFee).toBe(18 * professionalEnrollmentFeeForYear(institutionalParameters, 2028));
     expect(first.enrollmentDiscounts).toBe(0);
     expect(second.enrollmentDiscounts).toBe(0);
   });
@@ -99,8 +100,8 @@ describe("motor financiero", () => {
       { ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2028), annualEnrollmentFee: 0 },
     ];
     const hydrated = hydrateAnnualOverrides(budget, institutionalParameters);
-    expect(hydrated.annualOverrides.find((annual) => annual.year === 2027)?.annualEnrollmentFee).toBe(institutionalParameters.annualEnrollmentFee[2027]);
-    expect(hydrated.annualOverrides.find((annual) => annual.year === 2028)?.annualEnrollmentFee).toBe(institutionalParameters.annualEnrollmentFee[2028]);
+    expect(hydrated.annualOverrides.find((annual) => annual.year === 2027)?.annualEnrollmentFee).toBe(192150);
+    expect(hydrated.annualOverrides.find((annual) => annual.year === 2028)?.annualEnrollmentFee).toBe(201758);
     const flows = calculateBudget(hydrated, institutionalParameters).annualFlows;
     expect(flows.find((flow) => flow.year === 2027)?.grossEnrollmentFee).toBeGreaterThan(0);
     expect(flows.find((flow) => flow.year === 2028)?.grossEnrollmentFee).toBeGreaterThan(0);
@@ -117,16 +118,55 @@ describe("motor financiero", () => {
     ];
     budget.annualOverrides = [];
     const flows = calculateBudget(budget, institutionalParameters).annualFlows;
-    expect(flows.find((flow) => flow.year === 2027)?.grossEnrollmentFee).toBe(12 * institutionalParameters.annualEnrollmentFee[2027]);
-    expect(flows.find((flow) => flow.year === 2028)?.grossEnrollmentFee).toBe(11 * institutionalParameters.annualEnrollmentFee[2028]);
+    expect(flows.find((flow) => flow.year === 2027)?.grossEnrollmentFee).toBe(12 * professionalEnrollmentFeeForYear(institutionalParameters, 2027));
+    expect(flows.find((flow) => flow.year === 2028)?.grossEnrollmentFee).toBe(11 * professionalEnrollmentFeeForYear(institutionalParameters, 2028));
     expect(flows.find((flow) => flow.year === 2029)?.grossEnrollmentFee).toBe(0);
+  });
+
+  it("inicia matrícula profesional 2027 en $192.150 y reajusta 2028 a $201.758", () => {
+    expect(professionalEnrollmentFeeForYear(institutionalParameters, 2027)).toBe(192150);
+    expect(professionalEnrollmentFeeForYear(institutionalParameters, 2028)).toBe(201758);
+  });
+
+  it("deja la beca de manutención mensual profesional en cero y usa una sola tarifa sincrónica", () => {
+    const budget = clone(demoBudget);
+    budget.program.type = "MAGISTER_PROFESIONAL";
+    budget.annualOverrides = [{
+      ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2027),
+      directTeachingHourValue: 40000,
+      synchronousTeachingHourValue: 30000,
+      asynchronousTeachingHourValue: 50000,
+      maintenanceScholarshipMonthlyValue: 577500,
+    }];
+    const resolved = resolvedAnnualOverrideForYear(budget, institutionalParameters, 2027);
+    expect(resolved.maintenanceScholarshipMonthlyValue).toBe(0);
+    expect(resolved.synchronousTeachingHourValue).toBe(30000);
+    expect(resolved.directTeachingHourValue).toBe(30000);
+    expect(resolved.asynchronousTeachingHourValue).toBe(30000);
+  });
+
+  it("elimina los costos operacionales, software y difusión sembrados por defecto", () => {
+    const annual = defaultAnnualOverrideForYear(demoBudget, institutionalParameters, 2027);
+    expect(annual.annualOperational).toBe(0);
+    expect(annual.annualSoftware).toBe(0);
+    expect(annual.annualDiffusion).toBe(0);
+  });
+
+  it("calcula un punto de equilibrio profesional con saldo final no negativo", () => {
+    const budget = clone(demoBudget);
+    const breakEven = calculateBreakEvenEquivalentEnrollments(budget, institutionalParameters);
+    expect(breakEven.reached).toBe(true);
+    expect(breakEven.minimumEquivalentEnrollments).not.toBeNull();
+    expect(breakEven.projectedFinalFlowAtMinimum).not.toBeNull();
+    expect(breakEven.projectedFinalFlowAtMinimum!).toBeGreaterThanOrEqual(0);
   });
 
   it("permite sobrescribir por año hora directa y guía de tesis", () => {
     const budget = clone(demoBudget);
     budget.annualOverrides = [{
       ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2027),
-      directTeachingHourValue: 30000, annualEnrollmentFee: 200000, annualTuition: 5000000, thesisGuidancePerGraduatingStudent: 500000,
+      directTeachingHourValue: 30000, synchronousTeachingHourValue: 30000, asynchronousTeachingHourValue: 30000,
+      annualEnrollmentFee: 200000, annualTuition: 5000000, thesisGuidancePerGraduatingStudent: 500000,
       annualDirection: 4000000, directionProrated: false, directionAllocationRate: 1, annualAssistance: 2000000,
       assistanceProrated: false, assistanceAllocationRate: 1, centralOverheadRate: 0.2, facultyOverheadRate: 0.1,
     }];

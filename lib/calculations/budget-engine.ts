@@ -26,6 +26,15 @@ export function programTypeParameters(parameters: InstitutionalParameters, type:
   return parameters.byProgramType[type] ?? parameters.byProgramType.OTRO;
 }
 
+export const PROFESSIONAL_ENROLLMENT_BASE_YEAR = 2027;
+export const PROFESSIONAL_ENROLLMENT_BASE_VALUE = 192_150;
+
+export function professionalEnrollmentFeeForYear(parameters: InstitutionalParameters, year: number): number {
+  if (year < PROFESSIONAL_ENROLLMENT_BASE_YEAR) return parameterForYear(parameters.annualEnrollmentFee, year);
+  const rate = Math.max(0, Number.isFinite(parameters.annualAdjustmentRate) ? parameters.annualAdjustmentRate : 0);
+  return Math.round(PROFESSIONAL_ENROLLMENT_BASE_VALUE * Math.pow(1 + rate, year - PROFESSIONAL_ENROLLMENT_BASE_YEAR));
+}
+
 export function tuitionForProgramYear(budget: Pick<CohortBudget, "program">, parameters: InstitutionalParameters, year: number): number {
   const customValues = budget.program.annualTuition;
   if (customValues && Object.keys(customValues).length > 0) {
@@ -48,8 +57,8 @@ export function defaultAnnualOverrideForYear(
     directTeachingHourValue: parameterForYear(parameters.teachingHour, year),
     synchronousTeachingHourValue: parameterForYear(parameters.teachingHour, year),
     asynchronousTeachingHourValue: parameterForYear(parameters.teachingHour, year),
-    maintenanceScholarshipMonthlyValue: parameterForYear(parameters.maintenanceScholarshipMonthly, year),
-    annualEnrollmentFee: parameterForYear(parameters.annualEnrollmentFee, year),
+    maintenanceScholarshipMonthlyValue: budget.program.type === "MAGISTER_PROFESIONAL" ? 0 : parameterForYear(parameters.maintenanceScholarshipMonthly, year),
+    annualEnrollmentFee: budget.program.type === "MAGISTER_PROFESIONAL" ? professionalEnrollmentFeeForYear(parameters, year) : parameterForYear(parameters.annualEnrollmentFee, year),
     annualTuition: tuitionForProgramYear(budget, parameters, year),
     thesisGuidancePerGraduatingStudent: parameterForYear(scoped.thesisGuidancePerGraduatingStudent, year),
     annualDirection: parameterForYear(scoped.annualDirection, year),
@@ -84,6 +93,9 @@ export function resolvedAnnualOverrideForYear(
   const stored = budget.annualOverrides?.find((item) => item.year === year);
   if (!stored) return fallback;
   const storedTuition = nonNegative(stored.annualTuition);
+  const resolvedSynchronousTeachingHour = Number.isFinite(stored.synchronousTeachingHourValue) && stored.synchronousTeachingHourValue > 0
+    ? nonNegative(stored.synchronousTeachingHourValue)
+    : fallback.synchronousTeachingHourValue;
   return {
     ...fallback,
     ...stored,
@@ -96,9 +108,12 @@ export function resolvedAnnualOverrideForYear(
     // profesionales se recupera la referencia institucional/plantilla en vez de
     // interpretar ese 0 como una matrícula real.
     annualEnrollmentFee: nonNegative(stored.annualEnrollmentFee) > 0 ? nonNegative(stored.annualEnrollmentFee) : fallback.annualEnrollmentFee,
-    synchronousTeachingHourValue: Number.isFinite(stored.synchronousTeachingHourValue) && stored.synchronousTeachingHourValue > 0 ? nonNegative(stored.synchronousTeachingHourValue) : fallback.synchronousTeachingHourValue,
-    asynchronousTeachingHourValue: Number.isFinite(stored.asynchronousTeachingHourValue) && stored.asynchronousTeachingHourValue > 0 ? nonNegative(stored.asynchronousTeachingHourValue) : fallback.asynchronousTeachingHourValue,
-    maintenanceScholarshipMonthlyValue: Number.isFinite(stored.maintenanceScholarshipMonthlyValue) && stored.maintenanceScholarshipMonthlyValue > 0 ? nonNegative(stored.maintenanceScholarshipMonthlyValue) : fallback.maintenanceScholarshipMonthlyValue,
+    directTeachingHourValue: budget.program.type === "MAGISTER_PROFESIONAL" ? resolvedSynchronousTeachingHour : nonNegative(stored.directTeachingHourValue),
+    synchronousTeachingHourValue: resolvedSynchronousTeachingHour,
+    asynchronousTeachingHourValue: budget.program.type === "MAGISTER_PROFESIONAL" ? resolvedSynchronousTeachingHour : (Number.isFinite(stored.asynchronousTeachingHourValue) && stored.asynchronousTeachingHourValue > 0 ? nonNegative(stored.asynchronousTeachingHourValue) : fallback.asynchronousTeachingHourValue),
+    maintenanceScholarshipMonthlyValue: budget.program.type === "MAGISTER_PROFESIONAL"
+      ? 0
+      : (Number.isFinite(stored.maintenanceScholarshipMonthlyValue) && stored.maintenanceScholarshipMonthlyValue > 0 ? nonNegative(stored.maintenanceScholarshipMonthlyValue) : fallback.maintenanceScholarshipMonthlyValue),
     directionAllocationRate: clampRate(stored.directionAllocationRate),
     assistanceAllocationRate: clampRate(stored.assistanceAllocationRate),
     annualOtherNonAcademicHonoraria: Number.isFinite(stored.annualOtherNonAcademicHonoraria) ? nonNegative(stored.annualOtherNonAcademicHonoraria) : fallback.annualOtherNonAcademicHonoraria,

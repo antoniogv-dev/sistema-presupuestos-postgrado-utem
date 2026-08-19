@@ -1,5 +1,6 @@
 import { formatCLP, formatPercent } from "../calculations/currency";
 import { programTypeParameters, resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
+import { calculateBreakEvenEquivalentEnrollments } from "../calculations/break-even";
 import type { BudgetResult, CohortBudget, InstitutionalParameters, SemesterParameters } from "../calculations/types";
 
 export interface NarrativeSection { heading: string; paragraphs: string[]; }
@@ -106,6 +107,7 @@ export function buildFinancialNarrative(budget: CohortBudget, result: BudgetResu
   const totalBadDebt = sum(result.annualFlows.map((flow) => flow.badDebt));
   const totalEnrollment = sum(result.annualFlows.map((flow) => flow.grossEnrollmentFee));
   const scoped = programTypeParameters(parameters, budget.program.type);
+  const breakEven = budget.program.type === "MAGISTER_PROFESIONAL" ? calculateBreakEvenEquivalentEnrollments(budget, parameters) : null;
 
   const identification = `El presupuesto corresponde al programa ${budget.program.name}, versión ${budget.programVersionLabel}, cohorte ${budget.cohortName}, de carácter ${typeLabel(budget.program.type)}${budget.program.type === "MAGISTER_PROFESIONAL" ? ` y modalidad ${modalityLabel(budget.deliveryModality)}` : ""}. El horizonte presupuestado se extiende entre ${periodText}, con una duración de ${budget.durationSemesters} semestres y una matrícula inicial o proyectada de ${budget.initialStudents} estudiante(s). El documento corresponde a la revisión interna R${budget.version} y su estado registrado es ${budget.status}. La matrícula anual se presenta como antecedente informativo y no integra los ingresos presupuestarios totales del modelo.`;
 
@@ -147,7 +149,10 @@ export function buildFinancialNarrative(budget: CohortBudget, result: BudgetResu
   if (result.annualFlows.some((flow) => flow.netFlow < 0) && result.finalAccumulatedFlow >= 0) evolution = "El flujo presenta uno o más períodos deficitarios que son recuperados posteriormente dentro del horizonte presupuestado.";
   else if (result.finalAccumulatedFlow < 0) evolution = "El horizonte presupuestado finaliza con saldo acumulado negativo.";
   else evolution = "El horizonte presupuestado finaliza con saldo acumulado positivo.";
-  const resultParagraph = `La evolución financiera anual es la siguiente: ${yearlyResult}. ${evolution}`;
+  const breakEvenText = breakEven?.minimumEquivalentEnrollments !== null && breakEven?.minimumEquivalentEnrollments !== undefined
+    ? ` Para mantener un saldo final no negativo, el punto de equilibrio estimado es de ${qty(breakEven.minimumEquivalentEnrollments, 2)} matrículas equivalentes a arancel completo, equivalente aproximadamente a ${breakEven.minimumWholeStudents} estudiante(s); al redondear el umbral equivalente hacia arriba a dos decimales, el flujo final simulado es ${money(breakEven.projectedFinalFlowAtMinimum ?? 0)}.`
+    : breakEven ? " Con la estructura actual no se identifica un punto de equilibrio dentro del rango de simulación de matrículas equivalentes." : "";
+  const resultParagraph = `La evolución financiera anual es la siguiente: ${yearlyResult}. ${evolution}${breakEvenText}`;
 
   const conclusion = budget.program.type === "MAGISTER_PROFESIONAL"
     ? conclusionForProfessional(budget, result, totalIncome, totalExpenses)

@@ -205,7 +205,7 @@ for (const marker of [
   "Staff comprometido/prorrateable y overhead",
   "Matrícula anual (informativa, sin descuentos)",
   "INGRESOS TOTAL (sin matrícula)",
-  "Valor hora docente directa",
+  "Valores hora según modalidad",
   "Guía de tesis por graduando",
   "Habilitar becas",
   "otra(s) versión(es) aprobada(s)",
@@ -256,7 +256,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.21"',
+  'FUNCTIONAL_RELEASE = "v10.22"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -276,8 +276,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.21") || !appShellV110.includes("1.0.31-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.21 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.22") || !appShellV110.includes("1.0.32-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.22 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -516,7 +516,7 @@ for (const marker of ["Proyectar reajuste desde valor base", "Valor base manual"
   if (!templateManagerV1018.includes(marker)) fail(`TemplateManager v10.18: falta ${marker}.`);
 }
 const workspaceV1018 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de escala", "/api/workflow/recipients", "v10.21"]) {
+for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de escala", "/api/workflow/recipients", "v10.22"]) {
   if (!workspaceV1018.includes(marker)) fail(`BudgetWorkspace v10.18: falta ${marker}.`);
 }
 const narrativeV1018 = await readFile(path.join(root, "lib/export/financial-narrative.ts"), "utf8");
@@ -582,7 +582,7 @@ for (const marker of [
   "Presupuesto activo",
   "La edición está aislada de los demás presupuestos",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v10.21"',
+  'FUNCTIONAL_RELEASE = "v10.22"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.21: falta ${marker}.`);
 }
@@ -591,6 +591,44 @@ for (const marker of ["isolated-budget-selector", "active-budget-context", "dirt
   if (!globalsV1021.includes(marker)) fail(`UI selector aislado v10.21: falta ${marker}.`);
 }
 
+
+// v10.22: simplificación de parámetros profesionales, reajuste de staff, punto de equilibrio e importación local.
+if (budgetWorkspaceV1021.includes("<th>Valor hora docente directa</th>")) {
+  fail("BudgetWorkspace v10.22: Valores anuales del presupuesto no debe mostrar la columna Valor hora docente directa.");
+}
+for (const marker of [
+  "Valores hora según modalidad",
+  "<th>Hora sincrónica</th>",
+  "beca de manutención mensual parte en $0",
+  "Reajuste para el año siguiente (%)",
+  "Aplicar → siguiente año",
+  "Usar plantilla",
+  "setInitialStudentsForAllSemesters",
+  "Punto de equilibrio",
+  "Viabilidad mínima de dictación",
+  'FUNCTIONAL_RELEASE = "v10.22"',
+]) {
+  if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
+}
+for (const marker of ["PROFESSIONAL_ENROLLMENT_BASE_YEAR = 2027", "PROFESSIONAL_ENROLLMENT_BASE_VALUE = 192_150", 'budget.program.type === "MAGISTER_PROFESIONAL" ? 0']) {
+  if (!engineV108.includes(marker)) fail(`budget-engine.ts v10.22: falta ${marker}.`);
+}
+const breakEvenV1022 = await readFile(path.join(root, "lib/calculations/break-even.ts"), "utf8");
+for (const marker of ["calculateBreakEvenEquivalentEnrollments", "minimumEquivalentEnrollments", "projectedFinalFlowAtMinimum"]) {
+  if (!breakEvenV1022.includes(marker)) fail(`break-even.ts v10.22: falta ${marker}.`);
+}
+const importPageV1022 = await readFile(path.join(root, "app/importar-exportar/page.tsx"), "utf8");
+const importerV1022 = await readFile(path.join(root, "lib/import/budget-file-import.ts"), "utf8");
+for (const marker of ["Buscar archivo local", "Crear presupuesto importado", "analyzeBudgetFile", "vista previa"]) {
+  if (!importPageV1022.includes(marker)) fail(`Importación v10.22: falta ${marker}.`);
+}
+for (const marker of ["parseXlsx", "DecompressionStream", "parametros completos", "analyzeGenericSheet", "Formato no soportado. Use .xlsx, .xlsm, .csv o .json"]) {
+  if (!importerV1022.includes(marker)) fail(`Reconocimiento de archivos v10.22: falta ${marker}.`);
+}
+const migrationV1022 = await readFile(path.join(root, "migrations/0009_remove_seeded_operational_defaults.sql"), "utf8");
+for (const marker of ["param-operating-expenses", "param-software-licenses", "param-diffusion-admission", 'SET "amount" = 0', 'UPDATE "BudgetAnnualOverride"', 'annualEnrollmentFee', 'MAGISTER_PROFESIONAL']) {
+  if (!migrationV1022.includes(marker)) fail(`Migración 0009 v10.22: falta ${marker}.`);
+}
 
 for (const message of warnings) console.warn(`ADVERTENCIA: ${message}`);
 if (failures.length) {

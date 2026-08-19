@@ -1,0 +1,11 @@
+v10.22 / 1.0.32-d1-web
+- Simplificación de valores profesionales.
+- Matrícula profesional base 2027 = 192150.
+- Beca mensual profesional = 0.
+- Reajuste de staff al año siguiente.
+- Plantillas profesionales en Parámetros y plantillas.
+- Estudiantes iniciales replicados a semestres.
+- Defaults operacionales/software/difusión = 0.
+- Punto de equilibrio profesional.
+- Importación local inteligente XLSX/XLSM/CSV/JSON.
+- Migración D1 0009.

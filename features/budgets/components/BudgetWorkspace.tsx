@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { calculateBudget, defaultAnnualOverrideForYear, hydrateAnnualOverrides, manualItemAmountForYear, overheadApplies, programTypeParameters, resolvedAnnualOverrideForYear, tuitionForProgramYear } from "@/lib/calculations/budget-engine";
+import { calculateBreakEvenEquivalentEnrollments } from "@/lib/calculations/break-even";
 import { detectPotentialDuplicateCosts } from "@/lib/calculations/consolidation";
 import { formatCLP, formatPercent } from "@/lib/calculations/currency";
 import { getActivePeriods, getActiveYears, getAnnualEnrollmentChargePeriods } from "@/lib/calculations/periods";
@@ -30,7 +31,7 @@ import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
 import { availableWorkflowActions, canDeleteBudget, canEditBudget, type WorkflowAction } from "@/lib/workflow/budget-workflow";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.21";
+const FUNCTIONAL_RELEASE = "v10.22";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -92,7 +93,8 @@ function emptySemester(year: number, semester: 1 | 2, students: number): Semeste
 
 function freshBudget(program: Program, responsible: string, parameters: InstitutionalParameters): CohortBudget {
   const startYear = Math.min(...Object.keys(parameters.annualEnrollmentFee).map(Number).filter(Number.isFinite));
-  const year = Number.isFinite(startYear) ? startYear : new Date().getFullYear();
+  const institutionalStartYear = Number.isFinite(startYear) ? startYear : new Date().getFullYear();
+  const year = program.type === "MAGISTER_PROFESIONAL" ? Math.max(2027, institutionalStartYear) : institutionalStartYear;
   const duration = Math.min(8, Math.max(2, program.officialDurationSemesters));
   const semesters = getActivePeriods(year, 1, duration).map((period, index) => ({
     ...emptySemester(period.year, period.semester, 0),
@@ -146,6 +148,8 @@ export function BudgetWorkspace() {
   const [recipientName, setRecipientName] = useState("");
   const [recipientMode, setRecipientMode] = useState("");
   const [mailComment, setMailComment] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [staffAdjustmentPercent, setStaffAdjustmentPercent] = useState(5);
 
   async function load(preferredId?: string) {
     setLoading(true);
@@ -163,6 +167,7 @@ export function BudgetWorkspace() {
       setPrograms(mappedPrograms);
       setTemplates(templateRecords.length ? templateRecords : defaultBudgetTemplates);
       setParameters(parameterValues);
+      setStaffAdjustmentPercent(Math.max(0, parameterValues.annualAdjustmentRate * 100));
       setIdentity(me);
       const storedRole = typeof window !== "undefined" ? window.localStorage.getItem(ROLE_KEY) as AccessRole | null : null;
       const resolvedRole = storedRole && me.roles.includes(storedRole) ? storedRole : me.roles[0] ?? "LECTOR";
@@ -216,12 +221,20 @@ export function BudgetWorkspace() {
 
   const budget = draftBudget;
   const result = useMemo(() => budget ? calculateBudget(budget, parameters) : null, [budget, parameters]);
+  const breakEven = useMemo(() => budget && budget.program.type === "MAGISTER_PROFESIONAL"
+    ? calculateBreakEvenEquivalentEnrollments(budget, parameters)
+    : null, [budget, parameters]);
   const editable = budget ? canEditBudget(budget, role) && !loading : false;
   const deletable = budget ? canDeleteBudget(budget, role) && !loading : false;
   const workflowActions = budget ? availableWorkflowActions(budget.workflowStage, role) : [];
   const budgetsForChecks = budget ? budgets.map((item) => item.id === budget.id ? budget : item) : budgets;
   const duplicateAlerts = budget ? detectPotentialDuplicateCosts(budgetsForChecks, budget.id) : [];
-  const relevantTemplates = budget ? templates.filter((template) => template.programType === budget.program.type && template.active) : [];
+  const relevantTemplates = budget ? templates
+    .filter((template) => template.programType === budget.program.type && template.active)
+    .sort((a, b) => a.name.localeCompare(b.name, "es")) : [];
+  const effectiveTemplateId = relevantTemplates.some((template) => template.id === selectedTemplateId)
+    ? selectedTemplateId
+    : (relevantTemplates[0]?.id ?? "");
 
   function setActiveRole(next: AccessRole) {
     setRole(next);
@@ -254,6 +267,16 @@ export function BudgetWorkspace() {
     });
     const base = { ...budget, startYear, startSemester, durationSemesters, initialStudents, semesters };
     replaceBudget(hydrateAnnualOverrides(base, parameters));
+  }
+
+  function setInitialStudentsForAllSemesters(initialStudents: number) {
+    if (!budget) return;
+    const value = Math.max(0, Math.round(initialStudents));
+    patchBudget({
+      initialStudents: value,
+      semesters: budget.semesters.map((semester) => ({ ...semester, activeStudents: value })),
+    });
+    setMessage(`Estudiantes iniciales actualizado a ${value}. Se replicó en todos los semestres activos; puede ajustar semestres individuales después.`);
   }
 
   async function createBudget() {
@@ -380,7 +403,27 @@ export function BudgetWorkspace() {
 
   function applyTemplate(template: BudgetTemplate) {
     if (!budget) return;
-    replaceBudget(applyBudgetTemplate(budget, template, parameters));
+    let next = applyBudgetTemplate(budget, template, parameters);
+    if (next.program.type === "MAGISTER_PROFESIONAL") {
+      next = {
+        ...next,
+        scholarshipsEnabled: false,
+        annualOverrides: next.annualOverrides.map((annual) => ({
+          ...annual,
+          maintenanceScholarshipMonthlyValue: 0,
+          directTeachingHourValue: annual.synchronousTeachingHourValue,
+          asynchronousTeachingHourValue: annual.synchronousTeachingHourValue,
+        })),
+        semesters: next.semesters.map((semester) => ({
+          ...semester,
+          internalTuitionScholarshipStudents: 0,
+          maintenanceScholarshipStudents: 0,
+          maintenanceScholarshipMonths: 0,
+        })),
+      };
+    }
+    replaceBudget(next);
+    setSelectedTemplateId(template.id);
     setMessage(`${template.name} aplicada al presupuesto. Guarde para persistir los cambios.`);
   }
 
@@ -410,6 +453,25 @@ export function BudgetWorkspace() {
         { ...current, ...patch, year },
       ].sort((a, b) => a.year - b.year),
     });
+  }
+
+  function applyStaffAdjustmentToNextYear(year: number) {
+    if (!budget) return;
+    const ordered = [...budget.annualOverrides].sort((a, b) => a.year - b.year);
+    const currentIndex = ordered.findIndex((item) => item.year === year);
+    const current = ordered[currentIndex];
+    const next = ordered[currentIndex + 1];
+    if (!current || !next) {
+      setMessage(`${year}: no existe un año siguiente activo dentro de este presupuesto.`);
+      return;
+    }
+    const factor = 1 + Math.max(0, staffAdjustmentPercent) / 100;
+    updateAnnualOverride(next.year, {
+      annualDirection: Math.round(current.annualDirection * factor),
+      annualAssistance: Math.round(current.annualAssistance * factor),
+      annualOtherNonAcademicHonoraria: Math.round(current.annualOtherNonAcademicHonoraria * factor),
+    });
+    setMessage(`Staff ${next.year} proyectado desde ${year} con reajuste de ${staffAdjustmentPercent.toLocaleString("es-CL", { maximumFractionDigits: 2 })} %.`);
   }
 
   function overlappingBudgets(year: number): CohortBudget[] {
@@ -539,7 +601,20 @@ export function BudgetWorkspace() {
           if (!program || program.id === budget.program.id) return;
           if (!window.confirm(`Cambiar el programa reasignará únicamente el presupuesto activo “${budget.cohortName}” a ${program.code}. Los demás presupuestos no serán modificados. ¿Continuar?`)) return;
           const facultyOverheadRate = overheadApplies(program.type) ? programTypeParameters(parameters, program.type).facultyOverheadRate : 0;
-          const next = hydrateAnnualOverrides({ ...budget, program, facultyOverheadRate, programVersionLabel: program.versionLabel ?? "1", scholarshipsEnabled: program.type !== "MAGISTER_PROFESIONAL", annualOverrides: [] }, parameters);
+          const next = hydrateAnnualOverrides({
+            ...budget,
+            program,
+            facultyOverheadRate,
+            programVersionLabel: program.versionLabel ?? "1",
+            scholarshipsEnabled: program.type !== "MAGISTER_PROFESIONAL",
+            annualOverrides: [],
+            semesters: budget.semesters.map((semester) => program.type === "MAGISTER_PROFESIONAL" ? {
+              ...semester,
+              internalTuitionScholarshipStudents: 0,
+              maintenanceScholarshipStudents: 0,
+              maintenanceScholarshipMonths: 0,
+            } : semester),
+          }, parameters);
           replaceBudget(next);
         }}>{programs.map((program) => <option key={program.id} value={program.id}>{program.code} · {program.name}</option>)}</select><small className="field-help">Este campo reasigna únicamente el presupuesto activo. Para cambiar de presupuesto use el filtro superior.</small></label>
         <label>Cohorte<input disabled={!editable} value={budget.cohortName} onChange={(event) => patchBudget({ cohortName: event.target.value })} /></label>
@@ -548,7 +623,7 @@ export function BudgetWorkspace() {
         <label>Año inicio<input disabled={!editable} type="number" value={budget.startYear} onChange={(event) => regeneratePeriods(numberValue(event.target.value), budget.startSemester, budget.durationSemesters, budget.initialStudents)} /></label>
         <label>Semestre inicio<select disabled={!editable} value={budget.startSemester} onChange={(event) => regeneratePeriods(budget.startYear, numberValue(event.target.value) as 1 | 2, budget.durationSemesters, budget.initialStudents)}><option value="1">1S</option><option value="2">2S</option></select></label>
         <label>Duración<input disabled={!editable} type="number" min="2" max="8" value={budget.durationSemesters} onChange={(event) => regeneratePeriods(budget.startYear, budget.startSemester, Math.min(8, Math.max(2, numberValue(event.target.value))), budget.initialStudents)} /></label>
-        <label>Estudiantes iniciales<input disabled={!editable} type="number" min="0" value={budget.initialStudents} onChange={(event) => regeneratePeriods(budget.startYear, budget.startSemester, budget.durationSemesters, numberValue(event.target.value))} /></label>
+        <label>Estudiantes iniciales<input disabled={!editable} type="number" min="0" value={budget.initialStudents} onChange={(event) => setInitialStudentsForAllSemesters(numberValue(event.target.value))} /><small>Al cambiar este valor se replica automáticamente en “Estudiantes activos” de todos los semestres.</small></label>
         <label>Estado<div className="input-like"><StatusBadge status={budget.status} /></div></label>
         {budget.program.type === "MAGISTER_PROFESIONAL" ? <label>Modalidad<select disabled={!editable} value={budget.deliveryModality} onChange={(event) => patchBudget({ deliveryModality: event.target.value as DeliveryModality })}><option value="PRESENCIAL">Presencial</option><option value="SEMIPRESENCIAL">Semipresencial</option><option value="E_LEARNING">E-learning</option></select></label> : null}
       </div>
@@ -560,21 +635,29 @@ export function BudgetWorkspace() {
         <label>Fuente del arancel<select disabled={!editable} value={budget.program.tuitionSource ?? "PROPIO"} onChange={(event) => { const source = event.target.value as TuitionSource; if (source === "PROPIO") patchBudget({ program: { ...budget.program, tuitionSource: source } }); else applyTuitionTemplate(source); }}><option value="PROPIO">Arancel propio del programa</option><option value="PLANTILLA_DOCTORADO">Plantilla Doctoral</option><option value="PLANTILLA_MAGISTER_ACADEMICO">Plantilla Magíster Académico</option><option value="PLANTILLA_MAGISTER_PROFESIONAL">Plantilla Magíster Profesional</option></select></label>
         <label>Reconocimiento matrícula (%)<div className="percent-input"><input disabled={!editable} type="number" min="0" max="100" step="1" value={(budget.enrollmentRecognitionRate * 100).toFixed(0)} onChange={(event) => patchBudget({ enrollmentRecognitionRate: numberValue(event.target.value) / 100 })} /><span>%</span></div></label>
         <label>Arrastre autorizado<input disabled={!editable} type="number" value={budget.authorizedInitialCarryover} onChange={(event) => patchBudget({ authorizedInitialCarryover: numberValue(event.target.value) })} /></label>
+        <label>Usar plantilla
+          <select disabled={!editable || !relevantTemplates.length} value={effectiveTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
+            {relevantTemplates.length ? relevantTemplates.map((template) => <option key={template.id} value={template.id}>{template.name} · V{template.version}</option>) : <option value="">Sin plantillas activas</option>}
+          </select>
+          <small>{budget.program.type === "MAGISTER_PROFESIONAL" ? "Seleccione Presencial, Semipresencial o E-learning." : "Aplica la plantilla funcional al presupuesto activo."}</small>
+        </label>
+        <div className="field-action"><span>Aplicación de plantilla</span><button className="button secondary" type="button" disabled={!editable || !effectiveTemplateId} onClick={() => { const template = relevantTemplates.find((candidate) => candidate.id === effectiveTemplateId); if (template) applyTemplate(template); }}>Aplicar plantilla</button></div>
       </div>
       <div className="setting-grid"><CheckSetting label="Incluir arrastre autorizado" note="Suma el arrastre al primer año del flujo." checked={budget.includeAuthorizedCarryover} disabled={!editable} onChange={(value) => patchBudget({ includeAuthorizedCarryover: value })} /><CheckSetting label="Normalizar costos compartidos" note="Evita duplicar costos en consolidación." checked={budget.normalizeSharedCosts} disabled={!editable} onChange={(value) => patchBudget({ normalizeSharedCosts: value })} /><CheckSetting label="Alertar posibles duplicidades" note="Busca coincidencias de gastos entre cohortes." checked={budget.alertPotentialDuplicates} disabled={!editable} onChange={(value) => patchBudget({ alertPotentialDuplicates: value })} /></div>
 
       <div className="subpanel annual-parameter-panel"><h3>Valores anuales del presupuesto</h3><p>Estos valores se aplican sólo a esta versión del programa. El arancel se define para cada año activo. La matrícula se cobra una vez por cada dos semestres activos, es informativa y no recibe descuentos. Los años sin cobro de matrícula se muestran sólo como referencia y no generan ingreso.</p>
-        <div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Año</th><th>Arancel anual</th><th>Periodo de cobro matrícula</th><th>Estudiantes matrícula</th><th>Matrícula anual</th><th>Valor hora docente directa</th><th>Guía de tesis por graduando</th></tr></thead><tbody>{budget.annualOverrides.map((annual) => { const chargePeriods = getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters).filter((period) => period.year === annual.year); const chargedStudents = chargePeriods.reduce((total, period) => total + (budget.semesters.find((semester) => semester.year === period.year && semester.semester === period.semester)?.activeStudents ?? 0), 0); return <tr key={`annual-values-${annual.year}`}><th>{annual.year}</th><InputCell label={`Arancel ${annual.year}`} value={annual.annualTuition} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { annualTuition: value })} /><td>{chargePeriods.length ? chargePeriods.map((period) => `${period.year}-${period.semester}S`).join(", ") : <span className="muted">Sin cobro</span>}</td><td>{chargePeriods.length ? chargedStudents : <span className="muted">—</span>}</td><InputCell label={`Matrícula ${annual.year}`} value={annual.annualEnrollmentFee} disabled={!editable || chargePeriods.length === 0} onChange={(value) => updateAnnualOverride(annual.year, { annualEnrollmentFee: value })} /><InputCell label={`Hora directa ${annual.year}`} value={annual.directTeachingHourValue} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { directTeachingHourValue: value })} /><InputCell label={`Guía de tesis ${annual.year}`} value={annual.thesisGuidancePerGraduatingStudent} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { thesisGuidancePerGraduatingStudent: value })} /></tr>; })}</tbody></table></div>
+        <div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Año</th><th>Arancel anual</th><th>Periodo de cobro matrícula</th><th>Estudiantes matrícula</th><th>Matrícula anual</th><th>Guía de tesis por graduando</th></tr></thead><tbody>{budget.annualOverrides.map((annual) => { const chargePeriods = getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters).filter((period) => period.year === annual.year); const chargedStudents = chargePeriods.reduce((total, period) => total + (budget.semesters.find((semester) => semester.year === period.year && semester.semester === period.semester)?.activeStudents ?? 0), 0); return <tr key={`annual-values-${annual.year}`}><th>{annual.year}</th><InputCell label={`Arancel ${annual.year}`} value={annual.annualTuition} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { annualTuition: value })} /><td>{chargePeriods.length ? chargePeriods.map((period) => `${period.year}-${period.semester}S`).join(", ") : <span className="muted">Sin cobro</span>}</td><td>{chargePeriods.length ? chargedStudents : <span className="muted">—</span>}</td><InputCell label={`Matrícula ${annual.year}`} value={annual.annualEnrollmentFee} disabled={!editable || chargePeriods.length === 0} onChange={(value) => updateAnnualOverride(annual.year, { annualEnrollmentFee: value })} /><InputCell label={`Guía de tesis ${annual.year}`} value={annual.thesisGuidancePerGraduatingStudent} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { thesisGuidancePerGraduatingStudent: value })} /></tr>; })}</tbody></table></div>
       </div>
 
-      {budget.program.type === "MAGISTER_PROFESIONAL" && budget.deliveryModality !== "PRESENCIAL" ? <div className="subpanel annual-parameter-panel"><h3>Valores hora según modalidad</h3><p>La docencia sincrónica y asincrónica se valorizan de forma independiente para cada año.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Año</th><th>Hora sincrónica</th><th>Hora asincrónica</th><th>Beca manutención mensual</th></tr></thead><tbody>{budget.annualOverrides.map((annual) => <tr key={`modality-rate-${annual.year}`}><th>{annual.year}</th><InputCell label={`Hora sincrónica ${annual.year}`} value={annual.synchronousTeachingHourValue} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { synchronousTeachingHourValue: value })} /><InputCell label={`Hora asincrónica ${annual.year}`} value={annual.asynchronousTeachingHourValue} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { asynchronousTeachingHourValue: value })} /><InputCell label={`Manutención mensual ${annual.year}`} value={annual.maintenanceScholarshipMonthlyValue} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { maintenanceScholarshipMonthlyValue: value })} /></tr>)}</tbody></table></div></div> : null}
+      {budget.program.type === "MAGISTER_PROFESIONAL" ? <div className="subpanel annual-parameter-panel"><h3>Valores hora según modalidad</h3><p>Para programas profesionales se utiliza un único valor hora sincrónica visible en la formulación. Al modificarlo se sincroniza la referencia horaria interna de la modalidad para evitar valores ocultos contradictorios.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Año</th><th>Hora sincrónica</th></tr></thead><tbody>{budget.annualOverrides.map((annual) => <tr key={`modality-rate-${annual.year}`}><th>{annual.year}</th><InputCell label={`Hora sincrónica ${annual.year}`} value={annual.synchronousTeachingHourValue} disabled={!editable} onChange={(value) => updateAnnualOverride(annual.year, { synchronousTeachingHourValue: value, asynchronousTeachingHourValue: value, directTeachingHourValue: value })} /></tr>)}</tbody></table></div><div className="notice info"><p>En programas profesionales la beca de manutención mensual parte en $0 y no se activa por defecto.</p></div></div> : null}
 
       <div className="subpanel annual-parameter-panel">
         <h3>Staff comprometido/prorrateable y overhead</h3>
         <p>Dirección, asistencia de dirección y otros honorarios no académicos pueden distribuirse entre versiones/cohortes aprobadas y superpuestas del mismo programa profesional. El sistema detecta compromisos previos y propone una distribución equitativa; el porcentaje aplicado siempre queda editable. “Honorarios no académicos” se presenta en el flujo como subtotal de estas tres líneas.</p>
+        <div className="staff-adjustment-bar"><label>Reajuste para el año siguiente (%)<input disabled={!editable} type="number" min="0" step="0.1" value={staffAdjustmentPercent} onChange={(event) => setStaffAdjustmentPercent(numberValue(event.target.value))} /></label><small>El botón de cada fila proyecta Dirección, Asistencia y Otros honorarios al siguiente año activo.</small></div>
         <div className="table-wrap">
           <table className="data-table editable-list annual-cost-table">
-            <thead><tr><th>Año</th><th>Dirección base</th><th>Comprometido</th><th>Prorratear</th><th>%</th><th>Dirección aplicada</th><th>Asistencia base</th><th>Comprometido</th><th>Prorratear</th><th>%</th><th>Asistencia aplicada</th><th>Otros honorarios no académicos</th><th>Comprometido</th><th>Prorratear</th><th>%</th><th>Otros aplicados</th><th>OH central %</th><th>OH facultad %</th></tr></thead>
+            <thead><tr><th>Año</th><th>Dirección base</th><th>Comprometido</th><th>Prorratear</th><th>%</th><th>Dirección aplicada</th><th>Asistencia base</th><th>Comprometido</th><th>Prorratear</th><th>%</th><th>Asistencia aplicada</th><th>Otros honorarios no académicos</th><th>Comprometido</th><th>Prorratear</th><th>%</th><th>Otros aplicados</th><th>OH central %</th><th>OH facultad %</th><th>Reajuste</th></tr></thead>
             <tbody>{budget.annualOverrides.map((annual) => {
               const suggested = suggestedAllocationRate(annual.year);
               const overlapping = overlappingBudgetCount(annual.year);
@@ -598,13 +681,13 @@ export function BudgetWorkspace() {
                 <td className="numeric"><strong>{formatCLP(annual.annualOtherNonAcademicHonoraria * (annual.otherNonAcademicProrated ? annual.otherNonAcademicAllocationRate : 1))}</strong></td>
                 <PercentCell label={`Overhead central ${annual.year}`} value={annual.centralOverheadRate} disabled={!editable || !overhead} onChange={(value) => updateAnnualOverride(annual.year, { centralOverheadRate: value })} />
                 <PercentCell label={`Overhead facultad ${annual.year}`} value={annual.facultyOverheadRate} disabled={!editable || !overhead} onChange={(value) => updateAnnualOverride(annual.year, { facultyOverheadRate: value })} />
+                <td><button className="button compact secondary" type="button" disabled={!editable || annual.year === budget.annualOverrides.at(-1)?.year} onClick={() => applyStaffAdjustmentToNextYear(annual.year)}>Aplicar → siguiente año</button></td>
               </tr>;
             })}</tbody>
           </table>
         </div>
       </div>
 
-      <div className="template-grid">{relevantTemplates.length ? relevantTemplates.map((template) => <article className="template-card" key={template.id}><div><span>{template.name}</span><strong>V{template.version}</strong></div><p>{template.description}</p><button className="button secondary" type="button" disabled={!editable} onClick={() => applyTemplate(template)}>Usar plantilla</button></article>) : <p>No existe una plantilla funcional activa para este tipo de programa.</p>}</div>
       <div className="notice info"><strong>Referencia institucional</strong><p>Hora de reemplazo {formatCLP(parameters.replacementHour)} · Incobrabilidad {formatPercent(typeParameters.badDebtRate)}{!overhead ? " · Los programas académicos no aplican overhead en el cálculo." : ""}</p></div>
     </section>
 
@@ -636,7 +719,7 @@ export function BudgetWorkspace() {
 
     <section className="panel"><SectionHeading number="8" id="costos" title="Costos y gastos" description="Los costos Anuales se repiten desde el año de inicio hasta el término; los Semestrales se aplican a cada semestre activo desde su periodo de inicio." action={<button className="button secondary" type="button" disabled={!editable} onClick={addManualCost}>Agregar gasto o costo</button>} /><div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Nombre y descripción</th><th>Categoría</th><th>Año</th><th>Monto</th><th>Alcance</th><th>Periodicidad</th><th>Acción</th></tr></thead><tbody>{budget.manualItems.length ? budget.manualItems.map((item, index) => <tr key={item.id}><td><input disabled={!editable} value={item.name} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, name: event.target.value } : candidate) })} /><input disabled={!editable} value={item.description} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, description: event.target.value } : candidate) })} /></td><td><select disabled={!editable} value={item.category} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, category: event.target.value as BudgetItem["category"] } : candidate) })}>{COST_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></td><td><select disabled={!editable} value={item.year} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, year: numberValue(event.target.value) } : candidate) })}>{result.years.map((year) => <option key={year}>{year}</option>)}</select></td><td><input disabled={!editable} type="number" min="0" value={item.amount} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, amount: numberValue(event.target.value) } : candidate) })} /></td><td><select disabled={!editable} value={item.costType} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, costType: event.target.value as BudgetItem["costType"] } : candidate) })}><option>Único de esta versión</option><option>Compartido con otras cohortes</option></select></td><td><select disabled={!editable} value={item.periodicity} onChange={(event) => patchBudget({ manualItems: budget.manualItems.map((candidate, position) => position === index ? { ...candidate, periodicity: event.target.value as BudgetItem["periodicity"] } : candidate) })}><option>Único</option><option>Semestral</option><option>Anual</option></select></td><td><button className="text-button danger-text" type="button" disabled={!editable} onClick={() => patchBudget({ manualItems: budget.manualItems.filter((_, position) => position !== index) })}>Quitar</button></td></tr>) : <tr><td colSpan={7}>No hay costos manuales.</td></tr>}</tbody></table></div>{budget.alertPotentialDuplicates ? duplicateAlerts.length ? <div className="notice warning"><strong>Posibles duplicidades</strong><ul>{duplicateAlerts.map((alert) => <li key={alert.key}>{alert.message} {alert.allMarkedShared ? "Se normalizará si la opción está activa." : "Revise si debe marcarse como compartido."}</li>)}</ul></div> : <div className="notice success"><p>No se detectaron coincidencias evidentes.</p></div> : null}</section>
 
-    <section className="panel summary-panel"><SectionHeading number="9" id="resumen" title="Resumen financiero" description="Matrículas equivalentes, ingresos, egresos y saldo final." /><div className="summary-grid"><div><span>Ingresos</span><strong>{formatCLP(result.annualFlows.reduce((sum, flow) => sum + flow.totalIncome, 0))}</strong></div><div><span>Egresos</span><strong>{formatCLP(result.annualFlows.reduce((sum, flow) => sum + flow.totalExpenses, 0))}</strong></div><div><span>Saldo final</span><strong>{formatCLP(result.finalAccumulatedFlow)}</strong></div><div><span>Viabilidad</span><strong>{result.viable === null ? "Informativo" : result.viable ? "Viable" : "No viable"}</strong></div></div><div className="equivalent-grid">{result.annualFlows.map((flow) => <div key={flow.year}><span>{flow.year}</span><strong>{flow.equivalentEnrollments.toLocaleString("es-CL", { maximumFractionDigits: 1 })} matrículas equivalentes</strong><small>≈ {flow.roundedEquivalentStudents} estudiantes</small></div>)}</div></section>
+    <section className="panel summary-panel"><SectionHeading number="9" id="resumen" title="Resumen financiero" description="Matrículas equivalentes, ingresos, egresos, punto de equilibrio y saldo final." /><div className="summary-grid"><div><span>Ingresos</span><strong>{formatCLP(result.annualFlows.reduce((sum, flow) => sum + flow.totalIncome, 0))}</strong></div><div><span>Egresos</span><strong>{formatCLP(result.annualFlows.reduce((sum, flow) => sum + flow.totalExpenses, 0))}</strong></div><div><span>Saldo final</span><strong>{formatCLP(result.finalAccumulatedFlow)}</strong></div><div><span>Viabilidad</span><strong>{result.viable === null ? "Informativo" : result.viable ? "Viable" : "No viable"}</strong></div>{breakEven ? <div className="break-even-kpi"><span>Punto de equilibrio</span><strong>{breakEven.minimumEquivalentEnrollments === null ? "No alcanzado" : `${breakEven.minimumEquivalentEnrollments.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} matrículas equivalentes`}</strong><small>{breakEven.minimumEquivalentEnrollments === null ? "No se encontró equilibrio dentro del rango de simulación." : `≈ ${breakEven.minimumWholeStudents} estudiantes a arancel completo · flujo simulado ${formatCLP(breakEven.projectedFinalFlowAtMinimum ?? 0)}`}</small></div> : null}</div>{breakEven ? <div className={`notice ${breakEven.equivalentEnrollmentGap !== null && breakEven.equivalentEnrollmentGap <= 0 ? "success" : "warning"}`}><strong>Viabilidad mínima de dictación</strong><p>El modelo simula matrículas equivalentes a arancel completo manteniendo los costos, arrastre e ingresos extraordinarios del presupuesto. {breakEven.minimumEquivalentEnrollments !== null ? `Se requieren al menos ${breakEven.minimumEquivalentEnrollments.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} matrículas equivalentes para que el saldo final no sea negativo (≈ ${breakEven.minimumWholeStudents} estudiantes a arancel completo). La formulación actual alcanza como referencia ${breakEven.currentEquivalentEnrollments.toLocaleString("es-CL", { maximumFractionDigits: 1 })} equivalentes.` : "Con la estructura actual no se alcanza un saldo no negativo dentro del rango de búsqueda."}</p></div> : null}<div className="equivalent-grid">{result.annualFlows.map((flow) => <div key={flow.year}><span>{flow.year}</span><strong>{flow.equivalentEnrollments.toLocaleString("es-CL", { maximumFractionDigits: 1 })} matrículas equivalentes</strong><small>≈ {flow.roundedEquivalentStudents} estudiantes</small></div>)}</div></section>
 
     <section className="panel">
       <SectionHeading

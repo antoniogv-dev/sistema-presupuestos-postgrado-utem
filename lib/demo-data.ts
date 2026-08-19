@@ -10,9 +10,9 @@ function scopedParameters(type: ProgramType): ProgramTypeParameters {
   return {
     annualDirection: yearly([3954929, 4152675, 4360309, 4578324, 4807240]),
     annualAssistance: yearly([2000000, 2100000, 2205000, 2315250, 2431013]),
-    referenceOperational: yearly([1800000, 1890000, 1984500, 2083725, 2187911]),
-    softwareLicenses: yearly([750000, 787500, 826875, 868219, 911630]),
-    diffusionAdmission: yearly([1000000, 1050000, 1102500, 1157625, 1215506]),
+    referenceOperational: yearly([0, 0, 0, 0, 0]),
+    softwareLicenses: yearly([0, 0, 0, 0, 0]),
+    diffusionAdmission: yearly([0, 0, 0, 0, 0]),
     congressesInternships: doctoral ? yearly([22500000, 22500000, 22500000, 22500000, 22500000]) : yearly([0, 0, 0, 0, 0]),
     thesisGuidancePerGraduatingStudent: yearly([250000, 262500, 275625, 289406, 303876]),
     centralOverheadRate: academic ? 0 : 0.20,
