@@ -32,7 +32,7 @@ import { availableWorkflowActions, canDeleteBudget, canEditBudget, type Workflow
 import { auditBudgetIntegrity } from "@/lib/validation/budget-integrity";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.23";
+const FUNCTIONAL_RELEASE = "v10.24";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -198,7 +198,16 @@ export function BudgetWorkspace() {
     }
   }
 
-  useEffect(() => { const preferred = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("budget") ?? undefined : undefined; void load(preferred); }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const query = new URLSearchParams(window.location.search);
+    const preferredBudget = query.get("budget") ?? undefined;
+    const preferredProgram = query.get("program") ?? "";
+    void load(preferredBudget).then(() => {
+      if (preferredBudget || !preferredProgram) return;
+      setProgramFilterId((current) => current || preferredProgram);
+    });
+  }, []);
 
   useEffect(() => {
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -225,12 +234,29 @@ export function BudgetWorkspace() {
     if (!nextProgramId) return;
     const program = programs.find((item) => item.id === nextProgramId);
     if (!program) return;
-    const programBudgets = budgets.filter((item) => item.program.id === nextProgramId);
+    if (dirty && !window.confirm(`El presupuesto activo “${budget?.cohortName ?? ""}” tiene cambios sin guardar. ¿Desea descartarlos para cambiar a ${program.code}?`)) return;
+
+    setProgramFilterId(nextProgramId);
+    const programBudgets = budgets
+      .filter((item) => item.program.id === nextProgramId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
     if (!programBudgets.length) {
-      setMessage(`${program.code} · ${program.name} todavía no tiene presupuestos. Use “Nuevo presupuesto” para crear una cohorte vinculada a este programa.`);
+      setSelectedId("");
+      setSelectedTemplateId("");
+      setDraftBudget(null);
+      setDirty(false);
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("budget");
+        url.searchParams.set("program", nextProgramId);
+        window.history.replaceState({}, "", url.toString());
+      }
+      setMessage(`${program.code} · ${program.name} está disponible y todavía no tiene presupuestos. Presione “Nuevo presupuesto” para crear su primera cohorte.`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    if (dirty && !window.confirm(`El presupuesto activo “${budget?.cohortName ?? ""}” tiene cambios sin guardar. ¿Desea descartarlos y abrir el presupuesto más reciente de ${program.code}?`)) return;
+
     await load(programBudgets[0].id);
     setMessage(`Programa seleccionado: ${program.code} · ${program.name}. Se cargó su presupuesto más reciente y toda la formulación quedó sincronizada.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -591,10 +617,29 @@ export function BudgetWorkspace() {
   if (loading && !budget) return <div className="notice info"><p>Cargando presupuestos desde D1…</p></div>;
 
   if (!budget || !result) {
+    const chosenProgram = programs.find((item) => item.id === programFilterId) ?? programs[0] ?? null;
+    const roles = identity?.roles ?? [];
     return <div className="budget-workspace">
       {message ? <div className="notice info"><p>{message}</p></div> : null}
-      <section className="panel budget-selector"><div><label>Presupuesto<select disabled><option>No existen presupuestos</option></select></label><label>Rol activo<select value={role} onChange={(event) => setActiveRole(event.target.value as AccessRole)}>{identity?.roles.map((candidate) => <option key={candidate} value={candidate}>{roleLabels[candidate]}</option>)}</select></label></div><div className="workspace-actions"><button className="button primary" type="button" disabled={!canCreate(identity?.roles ?? []) || !programs.length} onClick={() => void createBudget()}>Nuevo presupuesto</button></div></section>
-      <section className="panel empty-state"><h2>No hay presupuestos registrados</h2><p>Use “Nuevo presupuesto” para crear la primera cohorte. Si aún no hay programas, créelos primero en el módulo Programas.</p></section>
+      <section className="panel budget-selector isolated-budget-selector compact-selector">
+        <div className="budget-filter-controls">
+          <label>Programa
+            <select value={chosenProgram?.id ?? ""} onChange={(event) => void selectProgram(event.target.value)}>
+              {programs.map((program) => <option key={program.id} value={program.id}>{program.code} · {program.name}</option>)}
+            </select>
+            <small>Todos los programas activos creados en el módulo Programas quedan disponibles aquí.</small>
+          </label>
+          <label>Presupuesto / cohorte<select disabled><option>Sin presupuestos para este programa</option></select></label>
+          <label>Rol activo<select value={role} onChange={(event) => setActiveRole(event.target.value as AccessRole)}>{roles.map((candidate) => <option key={candidate} value={candidate}>{roleLabels[candidate]}</option>)}</select></label>
+        </div>
+        <div className="active-budget-context empty-budget-context" aria-live="polite">
+          <span>Programa seleccionado</span>
+          <strong>{chosenProgram ? `${chosenProgram.code} · ${chosenProgram.name}` : "Sin programa seleccionado"}</strong>
+          <small>{chosenProgram ? "Todavía no existe una cohorte presupuestaria para este programa." : "Cree primero un programa en el módulo Programas."}</small>
+        </div>
+        <div className="workspace-actions"><button className="button primary" type="button" disabled={!canCreate(roles) || !chosenProgram} onClick={() => void createBudget()}>Nuevo presupuesto</button></div>
+      </section>
+      <section className="panel empty-state"><h2>{chosenProgram ? `Crear presupuesto para ${chosenProgram.code}` : "No hay programas disponibles"}</h2><p>{chosenProgram ? `El programa ${chosenProgram.name} ya está disponible en Presupuestos. Cree su primera cohorte para comenzar la formulación.` : "Agregue un programa en el módulo Programas y luego vuelva a Presupuestos."}</p></section>
     </div>;
   }
 
@@ -607,18 +652,18 @@ export function BudgetWorkspace() {
     <section className="panel budget-selector isolated-budget-selector">
       <div className="budget-filter-controls">
         <label>Programa
-          <select value={budget.program.id} onChange={(event) => void selectProgram(event.target.value)}>
-            {programs.filter((program) => budgets.some((item) => item.program.id === program.id)).map((program) => <option key={program.id} value={program.id}>{program.code} · {program.name}</option>)}
+          <select value={programFilterId || budget.program.id} onChange={(event) => void selectProgram(event.target.value)}>
+            {programs.map((program) => <option key={program.id} value={program.id}>{program.code} · {program.name}</option>)}
           </select>
           <small>Elegir un programa carga un presupuesto de ese programa; nunca reasigna el presupuesto activo.</small>
         </label>
         <label>Presupuesto / cohorte
           <select value={selectedId} onChange={(event) => void selectBudget(event.target.value)}>
-            {budgets.filter((item) => item.program.id === budget.program.id).map((item) => <option key={item.id} value={item.id}>[{item.status}] {item.cohortName} · Versión {item.programVersionLabel} · R{item.version}</option>)}
+            {budgets.filter((item) => item.program.id === (programFilterId || budget.program.id)).map((item) => <option key={item.id} value={item.id}>[{item.status}] {item.cohortName} · Versión {item.programVersionLabel} · R{item.version}</option>)}
           </select>
           <small>Al cambiar de cohorte se vuelve a leer ese presupuesto desde D1 y se reemplaza toda la página.</small>
         </label>
-        <button className="button secondary budget-filter-button" type="button" disabled={loading || !dirty} onClick={() => void selectBudget(selectedId)}>{loading ? "Cargando…" : "Descartar cambios y recargar"}</button>
+        <button className="button secondary budget-filter-button" type="button" disabled={loading || !dirty} onClick={() => void selectBudget(selectedId)}>{loading ? "Cargando…" : "Descartar cambios y recargar"}</button><button className="button secondary budget-filter-button" type="button" disabled={loading} onClick={() => void load(selectedId || undefined)}>Actualizar listas</button>
         <label>Rol activo<select value={role} onChange={(event) => setActiveRole(event.target.value as AccessRole)}>{roles.map((candidate) => <option key={candidate} value={candidate}>{roleLabels[candidate]}</option>)}</select></label>
       </div>
       <div className="active-budget-context" aria-live="polite">

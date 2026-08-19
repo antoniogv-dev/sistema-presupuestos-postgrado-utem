@@ -256,7 +256,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.23"',
+  'FUNCTIONAL_RELEASE = "v10.24"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -276,8 +276,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.23") || !appShellV110.includes("1.0.33-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.23 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.24") || !appShellV110.includes("1.0.34-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.24 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -516,7 +516,7 @@ for (const marker of ["Proyectar reajuste desde valor base", "Valor base manual"
   if (!templateManagerV1018.includes(marker)) fail(`TemplateManager v10.18: falta ${marker}.`);
 }
 const workspaceV1018 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de escala", "/api/workflow/recipients", "v10.23"]) {
+for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de escala", "/api/workflow/recipients", "v10.24"]) {
   if (!workspaceV1018.includes(marker)) fail(`BudgetWorkspace v10.18: falta ${marker}.`);
 }
 const narrativeV1018 = await readFile(path.join(root, "lib/export/financial-narrative.ts"), "utf8");
@@ -582,7 +582,7 @@ for (const marker of [
   "Toda la página quedó sincronizada con este presupuesto",
   "auditBudgetIntegrity",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v10.23"',
+  'FUNCTIONAL_RELEASE = "v10.24"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.23: falta ${marker}.`);
 }
@@ -609,7 +609,7 @@ for (const marker of [
   "setInitialStudentsForAllSemesters",
   "Punto de equilibrio",
   "Viabilidad mínima de dictación",
-  'FUNCTIONAL_RELEASE = "v10.23"',
+  'FUNCTIONAL_RELEASE = "v10.24"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
 }
@@ -646,6 +646,22 @@ for (const marker of ["auditBudgetIntegrity", "COHORT_PROGRAM_PREFIX_MISMATCH", 
 if (importPageV1022.includes('programs[0]?.id')) fail('Importación v10.23: no debe asignar silenciosamente el primer programa cuando el archivo no identifica uno.');
 for (const marker of ['!template.programId || template.programId === budget.program.id', 'fetch(`/api/budgets/${nextId}`', 'setSelectedTemplateId(nextBudget?.appliedTemplateId ?? "")']) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento v10.23: falta ${marker}.`);
+}
+
+
+// v10.24: selector de programas vivo y compactación institucional.
+for (const marker of [
+  'programs.map((program) => <option',
+  'setProgramFilterId(nextProgramId)',
+  'setDraftBudget(null)',
+  'Sin presupuestos para este programa',
+  'Actualizar listas',
+  'Todos los programas activos creados en el módulo Programas quedan disponibles aquí',
+]) {
+  if (!budgetWorkspaceV1021.includes(marker)) fail(`Selector de programas v10.24: falta ${marker}.`);
+}
+for (const marker of ['--black:#000000', '--mustard:#FFB344', '--beige:#FFF8E5', 'compact-selector']) {
+  if (!globalsV1021.includes(marker)) fail(`UI institucional v10.24: falta ${marker}.`);
 }
 
 for (const message of warnings) console.warn(`ADVERTENCIA: ${message}`);

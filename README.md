@@ -1,10 +1,13 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10.23 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.24 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
 
 
-## Mejoras funcionales v10.23
+## Mejoras funcionales v10.24
+
+- **Selector vivo de programas:** todos los programas activos quedan disponibles en Presupuestos, aunque aún no tengan cohortes.
+- **Interfaz compacta institucional:** paleta azul, negro, mostaza y beige; formularios, tablas y navegación más densos y limpios.
 
 - **Identidad programa-presupuesto inmutable:** un presupuesto existente ya no puede reasignarse desde MGIB a MDTIS, MGP u otro programa. El programa queda de sólo lectura dentro de Identificación y la API rechaza cambios de `programId`.
 - **Selección simplificada y canónica:** la cabecera usa `Programa` y `Presupuesto / cohorte`; al cambiar se vuelve a leer el presupuesto exacto por ID desde D1 y toda la página se sincroniza con él. Se elimina el estado candidato que podía diferir del presupuesto activo.
@@ -15,7 +18,7 @@ Aplicación institucional para formular, revisar, consolidar y exportar presupue
 - **Workflow consistente:** no permite enviar por correo, V°B° o aprobación mientras existan cambios locales sin guardar o errores de identidad.
 - **Auditoría transversal permanente:** `npm run integrity:audit` ejecuta 12 controles de aislamiento e identidad dentro del build de Cloudflare.
 - **Se mantienen las mejoras v10.22:** simplificación profesional, matrícula 2027 en $192.150, manutención profesional inicial en $0, reajuste de staff, autocompletado de estudiantes, punto de equilibrio e importación inteligente.
-- **Control de despliegue:** versión `v10.23 · 1.0.33-d1-web`.
+- **Control de despliegue:** versión `v10.24 · 1.0.34-d1-web`.
 
 ## Mejora funcional v10.21
 
