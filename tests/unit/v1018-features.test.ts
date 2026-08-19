@@ -8,7 +8,7 @@ import { applyBudgetTemplate } from "@/lib/templates/apply-template";
 const clone = <T,>(value: T): T => structuredClone(value);
 
 describe("v10.18 plantillas, modalidades y economía de escala", () => {
-  it("separa docencia sincrónica y asincrónica con valores hora distintos", () => {
+  it("usa un único valor hora sincrónica como referencia docente en programas profesionales", () => {
     const budget = clone(demoBudget);
     budget.deliveryModality = "SEMIPRESENCIAL";
     budget.semesters.forEach((semester) => {
@@ -20,11 +20,14 @@ describe("v10.18 plantillas, modalidades y economía de escala", () => {
     budget.annualOverrides = [2027, 2028].map((year) => ({
       ...defaultAnnualOverrideForYear(budget, institutionalParameters, year),
       synchronousTeachingHourValue: 30_000,
+      // Un valor asincrónico histórico distinto no debe alterar la regla v10.22:
+      // en Magíster Profesional la referencia visible y efectiva es la hora sincrónica.
       asynchronousTeachingHourValue: 15_000,
+      directTeachingHourValue: 12_000,
     }));
     const first = calculateBudget(budget, institutionalParameters).annualFlows[0];
     expect(first.synchronousTeachingCost).toBe(20 * 30_000);
-    expect(first.asynchronousTeachingCost).toBe(40 * 15_000);
+    expect(first.asynchronousTeachingCost).toBe(40 * 30_000);
     expect(first.directTeachingCost).toBe(first.synchronousTeachingCost + first.asynchronousTeachingCost);
   });
 
@@ -34,7 +37,10 @@ describe("v10.18 plantillas, modalidades y economía de escala", () => {
     budget.semesters.filter((semester) => semester.year === 2027).forEach((semester) => { semester.directTeachingHours = 100; });
     budget.annualOverrides = [{
       ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2027),
-      directTeachingHourValue: 20_000,
+      // En programas profesionales la tarifa efectiva es la hora sincrónica visible.
+      synchronousTeachingHourValue: 20_000,
+      asynchronousTeachingHourValue: 99_000,
+      directTeachingHourValue: 7_500,
     }];
     budget.sharedCourses = [{
       id: "shared-1", courseName: "Gestión compartida", year: 2027, semester: 1,
