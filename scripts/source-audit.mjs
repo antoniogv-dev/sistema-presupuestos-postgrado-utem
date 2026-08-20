@@ -702,6 +702,20 @@ if (!(packageJson.scripts?.["quality:cloudflare"] ?? "").includes("test:institut
   fail("package.json v10.25: quality:cloudflare debe ejecutar test:institutional-xlsx.");
 }
 
+// Ajuste menor v10.25: el punto de equilibrio no debe exponer el texto “flujo simulado”.
+const breakEvenUiV1025 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
+const reportModelV1025 = await readFile(path.join(root, "lib/export/report-model.ts"), "utf8");
+const financialNarrativeV1025 = await readFile(path.join(root, "lib/export/financial-narrative.ts"), "utf8");
+for (const [label, content] of [
+  ["BudgetWorkspace.tsx", breakEvenUiV1025],
+  ["report-model.ts", reportModelV1025],
+  ["financial-narrative.ts", financialNarrativeV1025],
+]) {
+  if (/flujo(?: final)? simulado|simulado no negativo/i.test(content)) {
+    fail(`${label}: no debe mostrarse la expresión “flujo simulado” en el punto de equilibrio.`);
+  }
+}
+
 for (const message of warnings) console.warn(`ADVERTENCIA: ${message}`);
 if (failures.length) {
   for (const message of failures) console.error(`ERROR: ${message}`);

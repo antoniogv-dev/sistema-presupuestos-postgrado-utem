@@ -11,3 +11,9 @@ La validación se realiza contra la planilla institucional entregada `2027 - Mag
 6. Valores cacheados conciliados contra `calculateBudget`.
 7. Eliminación del `calcChain` anterior y recálculo completo al abrir Excel.
 8. Fallback a exportación trazable cuando la geometría del modelo de dos años no representa el presupuesto sin pérdida de información.
+
+## Ajuste menor posterior
+
+- Se eliminó la expresión **“flujo simulado”** del indicador de matrículas equivalentes en pantalla.
+- La misma referencia se retiró de la trazabilidad de parámetros y del relato financiero del PDF, manteniendo únicamente el umbral de equilibrio y su equivalencia aproximada en estudiantes.
+- El cálculo interno del punto de equilibrio no cambia; sólo se simplifica su presentación.

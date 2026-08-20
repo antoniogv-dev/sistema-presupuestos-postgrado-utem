@@ -237,7 +237,7 @@ export function buildParameterReport(
   if (budget.program.type === "MAGISTER_PROFESIONAL") {
     const breakEven = calculateBreakEvenEquivalentEnrollments(budget, parameters);
     if (breakEven.minimumEquivalentEnrollments !== null) {
-      pushNumber("Punto de equilibrio", "Matrículas equivalentes mínimas", "Horizonte completo", breakEven.minimumEquivalentEnrollments, `Umbral exacto ${breakEven.minimumEquivalentEnrollmentsExact?.toLocaleString("es-CL", { maximumFractionDigits: 4 })} · flujo simulado no negativo ${breakEven.projectedFinalFlowAtMinimum?.toLocaleString("es-CL", { maximumFractionDigits: 0 }) ?? 0}`);
+      pushNumber("Punto de equilibrio", "Matrículas equivalentes mínimas", "Horizonte completo", breakEven.minimumEquivalentEnrollments, `Umbral exacto ${breakEven.minimumEquivalentEnrollmentsExact?.toLocaleString("es-CL", { maximumFractionDigits: 4 })}`);
       pushNumber("Punto de equilibrio", "Estudiantes a arancel completo aproximados", "Horizonte completo", breakEven.minimumWholeStudents ?? 0, "Redondeo hacia arriba del umbral equivalente");
       pushNumber("Punto de equilibrio", "Matrículas equivalentes actuales de referencia", "Horizonte completo", breakEven.currentEquivalentEnrollments);
     } else {

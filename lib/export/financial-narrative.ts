@@ -150,7 +150,7 @@ export function buildFinancialNarrative(budget: CohortBudget, result: BudgetResu
   else if (result.finalAccumulatedFlow < 0) evolution = "El horizonte presupuestado finaliza con saldo acumulado negativo.";
   else evolution = "El horizonte presupuestado finaliza con saldo acumulado positivo.";
   const breakEvenText = breakEven?.minimumEquivalentEnrollments !== null && breakEven?.minimumEquivalentEnrollments !== undefined
-    ? ` Para mantener un saldo final no negativo, el punto de equilibrio estimado es de ${qty(breakEven.minimumEquivalentEnrollments, 2)} matrículas equivalentes a arancel completo, equivalente aproximadamente a ${breakEven.minimumWholeStudents} estudiante(s); al redondear el umbral equivalente hacia arriba a dos decimales, el flujo final simulado es ${money(breakEven.projectedFinalFlowAtMinimum ?? 0)}.`
+    ? ` Para mantener un saldo final no negativo, el punto de equilibrio estimado es de ${qty(breakEven.minimumEquivalentEnrollments, 2)} matrículas equivalentes a arancel completo, equivalente aproximadamente a ${breakEven.minimumWholeStudents} estudiante(s).`
     : breakEven ? " Con la estructura actual no se identifica un punto de equilibrio dentro del rango de simulación de matrículas equivalentes." : "";
   const resultParagraph = `La evolución financiera anual es la siguiente: ${yearlyResult}. ${evolution}${breakEvenText}`;
 
