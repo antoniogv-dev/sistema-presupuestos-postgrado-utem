@@ -1,7 +1,15 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10.27 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.28 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
+
+
+## Corrección v10.28
+
+- Importador curricular compatible con encabezados multinivel de curriculistas.
+- Aplicación de malla con listado visible de asignaturas y horas aplicadas.
+- Advertencia explícita para mallas históricas que quedaron con horas en cero.
+- Versión funcional `v10.28 · 1.0.38-d1-web`.
 
 
 ## Mejoras funcionales v10.27

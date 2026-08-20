@@ -572,3 +572,9 @@ input,select,textarea{min-height:36px;padding:6px 9px;margin-top:4px;border-radi
 /* v10.27 · acciones compactas de carga curricular */
 .section-action-group{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
 @media(max-width:900px){.section-action-group{justify-content:flex-start}}
+
+/* v10.28 · trazabilidad visible de malla aplicada */
+.curriculum-applied-panel { margin-top: 12px; }
+.curriculum-applied-table { min-width: 1040px; }
+.curriculum-applied-table td, .curriculum-applied-table th { vertical-align: top; }
+.cell-note { display: block; margin-top: 3px; color: #64748b; font-size: 0.72rem; font-weight: 500; line-height: 1.25; }

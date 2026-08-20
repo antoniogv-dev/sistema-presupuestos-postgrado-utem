@@ -7,8 +7,15 @@ export function payableCurriculumCourses(program: Program): ProgramCourse[] {
 export function genericCurriculumCourses(program: Program): ProgramCourse[] {
   return (program.curriculumCourses ?? []).filter((course) => course.kind === "COMPETENCIA_GENERICA").sort((a, b) => a.position - b.position);
 }
+export function curriculumCourseWeeklyDirectHours(course: ProgramCourse): number {
+  const explicit = Math.max(0, course.directWeeklyHours);
+  if (explicit > 0) return explicit;
+  // Compatibilidad con mallas importadas antes de v10.28: si el total directo quedó en 0
+  // pero los componentes sí fueron persistidos, se reconstruye desde teoría/lab/taller.
+  return Math.max(0, course.theoryWeeklyHours) + Math.max(0, course.laboratoryWeeklyHours) + Math.max(0, course.workshopWeeklyHours);
+}
 export function curriculumCourseRawHours(course: ProgramCourse): number {
-  return Math.max(0, course.weeks) * Math.max(1, course.sections) * Math.max(0, course.directWeeklyHours);
+  return Math.max(0, course.weeks) * Math.max(1, course.sections) * curriculumCourseWeeklyDirectHours(course);
 }
 export function curriculumCourseEffectiveHours(course: ProgramCourse, _modality?: DeliveryModality): number {
   const raw = curriculumCourseRawHours(course);

@@ -117,9 +117,9 @@ const aliases: Record<string, RegExp[]> = {
   code: [/^codigo$/],
   name: [/^nombre asignatura$/, /^asignatura$/, /^nombre de la asignatura$/],
   weeks: [/duracion.*semanas/, /^semanas$/],
-  theory: [/^teoria$/],
-  lab: [/^laboratorio$/],
-  workshop: [/^taller$/],
+  theory: [/(?:^| )teoria$/],
+  lab: [/(?:^| )laboratorio$/],
+  workshop: [/(?:^| )taller$/],
   direct: [/horas.*trabajo directo/, /horas directas.*semanales/],
   autonomous: [/horas.*trabajo autonomo/, /horas autonomas.*semanales/],
   sections: [/^secciones$/, /numero.*secciones/],
@@ -131,6 +131,23 @@ const aliases: Record<string, RegExp[]> = {
 function findColumn(headers: string[], key: string): number {
   return headers.findIndex((header) => (aliases[key] ?? []).some((pattern) => pattern.test(header)));
 }
+
+function combineHeaderRows(rows: CellValue[][], startRow: number, depth: number): string[] {
+  const width = Math.max(0, ...rows.slice(startRow, startRow + depth).map((row) => row.length));
+  return Array.from({ length: width }, (_, column) => {
+    const labels: string[] = [];
+    for (let rowIndex = startRow; rowIndex < Math.min(rows.length, startRow + depth); rowIndex += 1) {
+      const label = normalize(rows[rowIndex]?.[column]);
+      if (label && !labels.includes(label)) labels.push(label);
+    }
+    return labels.join(" ").trim();
+  });
+}
+
+function recognizedHeaderKeys(headers: string[]): string[] {
+  return Object.keys(aliases).filter((key) => findColumn(headers, key) >= 0);
+}
+
 function semesterFromLevel(value: CellValue | undefined): number | null {
   const n = num(value); if (n == null) return null; const rounded = Math.round(n);
   if (rounded >= 10) return Math.max(1, Math.floor(rounded / 10));
@@ -147,19 +164,37 @@ function modeFrom(value: CellValue | undefined): TeachingMode {
   const key = normalize(value); if (key.includes("asincron")) return "ASINCRONICA"; if (key.includes("presencial")) return "PRESENCIAL"; return "SINCRONICA";
 }
 function analyzeSheet(sheet: SheetMatrix): CurriculumImportAnalysis | null {
-  let best: { row: number; score: number; headers: string[] } | null = null;
-  for (let i = 0; i < sheet.rows.length; i += 1) {
-    const headers = sheet.rows[i].map(normalize); const score = ["semester","code","name","weeks","direct","autonomous","sct","requirements"].filter((key) => findColumn(headers, key) >= 0).length;
-    if (!best || score > best.score) best = { row: i, score, headers };
+  // Los planes de estudio de curriculistas suelen usar encabezados multinivel:
+  // una primera fila con "Horas pedagógicas semanales" y una segunda con
+  // "Teoría / Laboratorio / Taller / Horas trabajo directo / ...".  La v10.27
+  // evaluaba una sola fila y por eso podía reconocer nombres/códigos, pero dejar
+  // las horas en cero.  Se prueban ventanas de 1 a 3 filas y se combinan sus
+  // etiquetas por columna antes de identificar cada campo.
+  let best: { row: number; depth: number; score: number; headers: string[]; keys: string[] } | null = null;
+  const preferredKeys = ["semester", "code", "name", "weeks", "theory", "lab", "workshop", "direct", "autonomous", "sections", "sct", "requirements"];
+  for (let start = 0; start < sheet.rows.length; start += 1) {
+    for (let depth = 1; depth <= 3 && start + depth <= sheet.rows.length; depth += 1) {
+      const headers = combineHeaderRows(sheet.rows, start, depth);
+      const keys = recognizedHeaderKeys(headers);
+      const score = preferredKeys.filter((key) => keys.includes(key)).length;
+      const hasIdentity = keys.includes("name") && (keys.includes("semester") || keys.includes("code"));
+      if (!hasIdentity) continue;
+      const candidate = { row: start, depth, score, headers, keys };
+      if (!best || candidate.score > best.score || (candidate.score === best.score && candidate.depth < best.depth)) best = candidate;
+    }
   }
   if (!best || best.score < 4 || findColumn(best.headers, "name") < 0) return null;
   const cols = Object.fromEntries(Object.keys(aliases).map((key) => [key, findColumn(best.headers, key)])) as Record<string, number>;
   const courses: Array<Omit<ProgramCourse, "id">> = []; const warnings: string[] = [];
-  for (const row of sheet.rows.slice(best.row + 1)) {
+  for (const row of sheet.rows.slice(best.row + best.depth)) {
     const name = text(row[cols.name]); if (!name) continue;
     const code = cols.code >= 0 ? text(row[cols.code]) : ""; const semester = cols.semester >= 0 ? semesterFromLevel(row[cols.semester]) : null;
     const theory = cols.theory >= 0 ? Math.max(0, num(row[cols.theory]) ?? 0) : 0; const lab = cols.lab >= 0 ? Math.max(0, num(row[cols.lab]) ?? 0) : 0; const workshop = cols.workshop >= 0 ? Math.max(0, num(row[cols.workshop]) ?? 0) : 0;
-    const directFromFile = cols.direct >= 0 ? num(row[cols.direct]) : null; const direct = Math.max(0, directFromFile ?? (theory + lab + workshop));
+    const componentDirect = theory + lab + workshop;
+    const directFromFile = cols.direct >= 0 ? num(row[cols.direct]) : null;
+    // Si el archivo deja la celda directa vacía (o en 0) pero sí informa teoría/lab/taller,
+    // se reconstruye la carga directa desde sus componentes en vez de guardar 0 horas.
+    const direct = Math.max(0, directFromFile != null && directFromFile > 0 ? directFromFile : componentDirect);
     const kind = kindFrom(name, semester, direct, code); const finalSemester = semester ?? 1;
     const mode = cols.mode >= 0 ? modeFrom(row[cols.mode]) : "SINCRONICA"; let factor = cols.factor >= 0 ? num(row[cols.factor]) : null; if (factor != null && factor > 1) factor /= 100;
     const importedSections = Math.max(1, Math.round(cols.sections >= 0 ? (num(row[cols.sections]) ?? 1) : 1));
@@ -176,7 +211,9 @@ function analyzeSheet(sheet: SheetMatrix): CurriculumImportAnalysis | null {
   }
   if (!courses.length) return null;
   const recognizedHeaders = best.headers.filter(Boolean);
+  const payable = courses.filter((course) => course.kind !== "COMPETENCIA_GENERICA");
   if (!courses.some((course) => course.kind === "COMPETENCIA_GENERICA")) warnings.push("No se identificaron competencias genéricas; puede agregarlas manualmente.");
+  if (payable.length && payable.every((course) => course.directWeeklyHours <= 0)) warnings.push("Se reconocieron asignaturas, pero todas quedaron con 0 horas directas. Revise que el archivo incluya Teoría/Laboratorio/Taller u Horas trabajo directo.");
   if (courses.some((course) => course.semester > 16)) warnings.push("Se detectaron semestres fuera del rango habitual; revíselos antes de guardar.");
   return { fileName: "", format: "xlsx", sheetName: sheet.name, courses, recognizedHeaders, warnings, confidence: Math.min(1, 0.45 + best.score * 0.07 + Math.min(courses.length, 20) * 0.01) };
 }
