@@ -52,16 +52,15 @@ describe("v10.26 malla curricular y valorización docente", () => {
     expect(result.annualFlows[0].synchronousTeachingCost).toBe(72 * 30_000);
   });
 
-  it("mantiene visible y valorizable una asignatura sincrónica aunque la modalidad global sea presencial", () => {
+  it("consolida una asignatura sincrónica de malla en horas presenciales cuando la cohorte es presencial", () => {
     const budget = structuredClone(demoBudget);
     budget.deliveryModality = "PRESENCIAL";
     budget.program.curriculumCourses = [course({ teachingMode: "SINCRONICA" })];
     setProfessionalTeachingRate(budget, 30_000);
     const applied = applyProgramCurriculumToBudget(budget);
-    expect(applied.semesters[0].directTeachingHours).toBe(0);
-    expect(applied.semesters[0].synchronousTeachingHours).toBe(72);
+    expect(applied.semesters[0].directTeachingHours).toBe(72);
+    expect(applied.semesters[0].synchronousTeachingHours).toBe(0);
     const result = calculateBudget(applied, institutionalParameters);
-    expect(result.annualFlows[0].synchronousTeachingCost).toBe(72 * 30_000);
     expect(result.annualFlows[0].directTeachingCost).toBe(72 * 30_000);
   });
 

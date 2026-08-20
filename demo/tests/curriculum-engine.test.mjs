@@ -17,16 +17,15 @@ function setRate(budget, value) {
   budget.annualOverrides = years.map((year) => ({ ...defaultAnnualOverrideForYear(budget, institutionalParameters, year), directTeachingHourValue: value, synchronousTeachingHourValue: value, asynchronousTeachingHourValue: value }));
 }
 
-test("v10.27 malla sincrónica se valoriza aunque la modalidad global sea presencial", () => {
+test("v10.29 malla sincrónica se consolida como docencia presencial cuando la cohorte es presencial", () => {
   const budget = structuredClone(demoBudget);
   budget.deliveryModality = "PRESENCIAL";
   budget.program.curriculumCourses = [course({ teachingMode: "SINCRONICA" })];
   setRate(budget, 30_000);
   const applied = applyProgramCurriculumToBudget(budget);
-  assert.equal(applied.semesters[0].directTeachingHours, 0);
-  assert.equal(applied.semesters[0].synchronousTeachingHours, 72);
+  assert.equal(applied.semesters[0].directTeachingHours, 72);
+  assert.equal(applied.semesters[0].synchronousTeachingHours, 0);
   const result = calculateBudget(applied, institutionalParameters);
-  assert.equal(result.annualFlows[0].synchronousTeachingCost, 2_160_000);
   assert.equal(result.annualFlows[0].directTeachingCost, 2_160_000);
 });
 
@@ -62,4 +61,25 @@ test("v10.26 competencias genéricas permanecen fuera del flujo financiero", () 
   assert.equal(applied.semesters[0].directTeachingHours, 0);
   assert.equal(applied.semesters[0].synchronousTeachingHours, 0);
   assert.equal(applied.semesters[0].asynchronousTeachingHours, 0);
+});
+
+
+test("v10.29 suma múltiples asignaturas por semestre en horas docentes presenciales", () => {
+  const budget = structuredClone(demoBudget);
+  budget.deliveryModality = "PRESENCIAL";
+  budget.durationSemesters = 3;
+  budget.semesters = budget.semesters.slice(0, 3);
+  const mk = (id, semester, directWeeklyHours, patch = {}) => course({ id, semester, directWeeklyHours, theoryWeeklyHours: directWeeklyHours, workshopWeeklyHours: 0, laboratoryWeeklyHours: 0, ...patch });
+  budget.program.curriculumCourses = [
+    ...Array.from({ length: 5 }, (_, index) => mk(`s1-${index}`, 1, 4, { position: index })),
+    ...Array.from({ length: 5 }, (_, index) => mk(`s2-${index}`, 2, 4, { position: 10 + index })),
+    mk("s3-a", 3, 4, { position: 20 }),
+    mk("s3-electivo", 3, 4, { kind: "ELECTIVA", sections: 2, position: 21 }),
+    mk("s3-taller", 3, 8, { position: 22 }),
+    mk("generic", 1, 4, { kind: "COMPETENCIA_GENERICA", position: 23 }),
+  ];
+  const applied = applyProgramCurriculumToBudget(budget);
+  assert.equal(applied.semesters[0].directTeachingHours, 360);
+  assert.equal(applied.semesters[1].directTeachingHours, 360);
+  assert.equal(applied.semesters[2].directTeachingHours, 360);
 });

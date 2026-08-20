@@ -25,8 +25,16 @@ export function curriculumCourseEffectiveHours(course: ProgramCourse, _modality?
   if (course.teachingMode === "ASINCRONICA") return raw * Math.max(0, Math.min(1, course.asynchronousRateFactor));
   return raw;
 }
-function effectiveMode(course: ProgramCourse, _modality?: DeliveryModality): TeachingMode {
-  return course.teachingMode;
+export function curriculumCourseAppliedMode(course: ProgramCourse, modality?: DeliveryModality): TeachingMode {
+  // En una cohorte presencial, las horas de trabajo directo de una asignatura se
+  // consolidan en la bolsa "Horas docentes presenciales", salvo que la propia
+  // asignatura esté declarada explícitamente como asincrónica. Esto permite usar
+  // mallas de curriculistas que no traen una columna de modalidad (históricamente
+  // importadas como SINCRONICA) sin perder la carga docente presencial.
+  if (course.teachingMode === "ASINCRONICA") return "ASINCRONICA";
+  if (modality === "PRESENCIAL") return "PRESENCIAL";
+  if (course.teachingMode === "PRESENCIAL") return "PRESENCIAL";
+  return "SINCRONICA";
 }
 
 export function curriculumLoadForBudget(
@@ -45,7 +53,7 @@ export function curriculumLoadForBudget(
     const index = course.semester - 1;
     const current = loads.get(index) ?? { directTeachingHours: 0, synchronousTeachingHours: 0, asynchronousTeachingHours: 0 };
     const effectiveHours = curriculumCourseEffectiveHours(course, modality);
-    const mode = effectiveMode(course, modality);
+    const mode = curriculumCourseAppliedMode(course, modality);
     if (mode === "PRESENCIAL") current.directTeachingHours = Number(current.directTeachingHours ?? 0) + effectiveHours;
     else if (mode === "ASINCRONICA") current.asynchronousTeachingHours = Number(current.asynchronousTeachingHours ?? 0) + effectiveHours;
     else current.synchronousTeachingHours = Number(current.synchronousTeachingHours ?? 0) + effectiveHours;

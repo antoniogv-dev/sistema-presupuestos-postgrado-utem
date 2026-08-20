@@ -257,7 +257,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.28"',
+  'FUNCTIONAL_RELEASE = "v10.29"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -277,8 +277,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.28") || !appShellV110.includes("1.0.38-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.28 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.29") || !appShellV110.includes("1.0.39-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.29 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -583,7 +583,7 @@ for (const marker of [
   "Toda la página quedó sincronizada con este presupuesto",
   "auditBudgetIntegrity",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v10.28"',
+  'FUNCTIONAL_RELEASE = "v10.29"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.23: falta ${marker}.`);
 }
@@ -610,7 +610,7 @@ for (const marker of [
   "setInitialStudentsForAllSemesters",
   "Punto de equilibrio",
   "Viabilidad mínima de dictación",
-  'FUNCTIONAL_RELEASE = "v10.28"',
+  'FUNCTIONAL_RELEASE = "v10.29"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
 }
@@ -767,8 +767,16 @@ for (const marker of ["curriculumCourseWeeklyDirectHours", "theoryWeeklyHours", 
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.28: falta ${marker}.`);
 }
 const budgetWorkspaceV1028 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v10.28"']) {
+for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v10.29"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.28: falta ${marker}.`);
+}
+
+// v10.29: consolidación semestral de malla en la bolsa docente efectiva.
+for (const marker of ["curriculumCourseAppliedMode", 'modality === "PRESENCIAL"', 'return "PRESENCIAL"']) {
+  if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.29: falta ${marker}.`);
+}
+for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v10.29"']) {
+  if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.29: falta ${marker}.`);
 }
 
 for (const message of warnings) console.warn(`ADVERTENCIA: ${message}`);
