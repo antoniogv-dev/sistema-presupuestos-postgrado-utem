@@ -1,4 +1,5 @@
 import { readdir, readFile, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 const root = process.cwd();
@@ -256,7 +257,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.24"',
+  'FUNCTIONAL_RELEASE = "v10.25"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -276,8 +277,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.24") || !appShellV110.includes("1.0.34-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.24 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.25") || !appShellV110.includes("1.0.35-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.25 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -516,7 +517,7 @@ for (const marker of ["Proyectar reajuste desde valor base", "Valor base manual"
   if (!templateManagerV1018.includes(marker)) fail(`TemplateManager v10.18: falta ${marker}.`);
 }
 const workspaceV1018 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de escala", "/api/workflow/recipients", "v10.24"]) {
+for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de escala", "/api/workflow/recipients", "v10.25"]) {
   if (!workspaceV1018.includes(marker)) fail(`BudgetWorkspace v10.18: falta ${marker}.`);
 }
 const narrativeV1018 = await readFile(path.join(root, "lib/export/financial-narrative.ts"), "utf8");
@@ -582,7 +583,7 @@ for (const marker of [
   "Toda la página quedó sincronizada con este presupuesto",
   "auditBudgetIntegrity",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v10.24"',
+  'FUNCTIONAL_RELEASE = "v10.25"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.23: falta ${marker}.`);
 }
@@ -609,7 +610,7 @@ for (const marker of [
   "setInitialStudentsForAllSemesters",
   "Punto de equilibrio",
   "Viabilidad mínima de dictación",
-  'FUNCTIONAL_RELEASE = "v10.24"',
+  'FUNCTIONAL_RELEASE = "v10.25"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
 }
@@ -662,6 +663,43 @@ for (const marker of [
 }
 for (const marker of ['--black:#000000', '--mustard:#FFB344', '--beige:#FFF8E5', 'compact-selector']) {
   if (!globalsV1021.includes(marker)) fail(`UI institucional v10.24: falta ${marker}.`);
+}
+
+
+// v10.25: exportación profesional con la estructura y fórmulas de la planilla institucional.
+const institutionalXlsxV1025 = await readFile(path.join(root, "lib/export/institutional-budget-xlsx.ts"), "utf8");
+for (const marker of [
+  "createInstitutionalFormulaBudgetXlsx",
+  "canUseFormulaTemplate",
+  "B6*Parámetros!$B$4",
+  "SUM(B11,B16,B19,B21,B24,B26,B28,B31,B33,B36)",
+  'calcMode="auto"',
+  'forceFullCalc="1"',
+  'files.delete("xl/calcChain.xml")',
+  "Use a function replacer",
+]) {
+  if (!institutionalXlsxV1025.includes(marker)) fail(`Exportación XLSX institucional v10.25: falta ${marker}.`);
+}
+for (const marker of [
+  "/templates/presupuesto-profesional-formula-base.xlsx",
+  "createInstitutionalFormulaBudgetXlsx",
+  "institutionalBudgetFilename",
+  "canUseFormulaTemplate",
+]) {
+  if (!downloadV112.includes(marker)) fail(`download.ts v10.25: falta integración institucional ${marker}.`);
+}
+const formulaTemplateV1025 = await readFile(path.join(root, "public/templates/presupuesto-profesional-formula-base.xlsx"));
+if (formulaTemplateV1025.byteLength < 20000) fail("Plantilla XLSX v10.25: el archivo institucional parece incompleto.");
+const formulaTemplateHashV1025 = createHash("sha256").update(formulaTemplateV1025).digest("hex");
+const expectedFormulaTemplateHashV1025 = "ab3a3c1c48421433d3fe4872dce237c3b81dc5ad6b868a9511caf567539f68ad";
+if (formulaTemplateHashV1025 !== expectedFormulaTemplateHashV1025) {
+  fail(`Plantilla XLSX v10.25: el archivo institucional cambió. SHA-256 esperado ${expectedFormulaTemplateHashV1025}; actual ${formulaTemplateHashV1025}.`);
+}
+if (!(packageJson.scripts?.["test:institutional-xlsx"] ?? "").includes("institutional-xlsx.test.mjs")) {
+  fail("package.json v10.25: falta test:institutional-xlsx.");
+}
+if (!(packageJson.scripts?.["quality:cloudflare"] ?? "").includes("test:institutional-xlsx")) {
+  fail("package.json v10.25: quality:cloudflare debe ejecutar test:institutional-xlsx.");
 }
 
 for (const message of warnings) console.warn(`ADVERTENCIA: ${message}`);

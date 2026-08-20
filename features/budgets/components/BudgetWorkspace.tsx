@@ -32,7 +32,7 @@ import { availableWorkflowActions, canDeleteBudget, canEditBudget, type Workflow
 import { auditBudgetIntegrity } from "@/lib/validation/budget-integrity";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.24";
+const FUNCTIONAL_RELEASE = "v10.25";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -606,7 +606,7 @@ export function BudgetWorkspace() {
   async function exportBudget(format: "xlsx" | "pdf") {
     if (!budget || !result) return;
     try {
-      if (format === "xlsx") downloadBudgetXlsx(budget, result, parameters);
+      if (format === "xlsx") await downloadBudgetXlsx(budget, result, parameters);
       else await downloadBudgetPdf(budget, result, parameters);
       setMessage(`Exportación ${format.toUpperCase()} generada.`);
     } catch (reason) {

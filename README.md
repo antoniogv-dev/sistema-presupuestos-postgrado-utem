@@ -1,10 +1,13 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10.24 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.25 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
 
 
-## Mejoras funcionales v10.24
+## Mejoras funcionales v10.25
+
+- **XLSX institucional formulado:** los Magísteres Profesionales compatibles exportan usando la estructura de `2027 - Magíster en Metodologias BIM.xlsx`, conservando cinco hojas, estilo, fórmulas y recálculo Excel.
+- **Prueba preventiva:** `test:institutional-xlsx` compara estructura, estilos y conciliación financiera antes del build OpenNext.
 
 - **Selector vivo de programas:** todos los programas activos quedan disponibles en Presupuestos, aunque aún no tengan cohortes.
 - **Interfaz compacta institucional:** paleta azul, negro, mostaza y beige; formularios, tablas y navegación más densos y limpios.
@@ -18,7 +21,7 @@ Aplicación institucional para formular, revisar, consolidar y exportar presupue
 - **Workflow consistente:** no permite enviar por correo, V°B° o aprobación mientras existan cambios locales sin guardar o errores de identidad.
 - **Auditoría transversal permanente:** `npm run integrity:audit` ejecuta 12 controles de aislamiento e identidad dentro del build de Cloudflare.
 - **Se mantienen las mejoras v10.22:** simplificación profesional, matrícula 2027 en $192.150, manutención profesional inicial en $0, reajuste de staff, autocompletado de estudiantes, punto de equilibrio e importación inteligente.
-- **Control de despliegue:** versión `v10.24 · 1.0.34-d1-web`.
+- **Control de despliegue:** versión `v10.25 · 1.0.35-d1-web`.
 
 ## Mejora funcional v10.21
 

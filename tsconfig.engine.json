@@ -17,6 +17,8 @@
     "lib/validation/budget-integrity.ts",
     "lib/export/report-model.ts",
     "lib/export/xlsx.ts",
-    "lib/export/pdf.ts"
+    "lib/export/pdf.ts",
+    "lib/export/institutional-budget-xlsx.ts",
+    "lib/export/download.ts"
   ]
 }

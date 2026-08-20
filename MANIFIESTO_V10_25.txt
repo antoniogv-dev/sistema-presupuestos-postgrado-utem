@@ -1,0 +1,6 @@
+v10.25 / 1.0.35-d1-web
+Exportación XLSX institucional formulada para Magísteres Profesionales compatibles.
+Plantilla: public/templates/presupuesto-profesional-formula-base.xlsx
+No agrega migraciones D1.
+No incluye wrangler.jsonc en los paquetes entregados.
+Control adicional de CI: npm run test:institutional-xlsx
