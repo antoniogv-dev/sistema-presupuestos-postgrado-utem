@@ -1,0 +1,80 @@
+import { getActivePeriods } from "../calculations/periods";
+import type { CohortBudget, DeliveryModality, Program, ProgramCourse, SemesterParameters, SharedCourseEconomyRule, TeachingMode } from "../calculations/types";
+
+export function payableCurriculumCourses(program: Program): ProgramCourse[] {
+  return (program.curriculumCourses ?? []).filter((course) => course.kind !== "COMPETENCIA_GENERICA").sort((a, b) => a.semester - b.semester || a.position - b.position);
+}
+export function genericCurriculumCourses(program: Program): ProgramCourse[] {
+  return (program.curriculumCourses ?? []).filter((course) => course.kind === "COMPETENCIA_GENERICA").sort((a, b) => a.position - b.position);
+}
+export function curriculumCourseRawHours(course: ProgramCourse): number {
+  return Math.max(0, course.weeks) * Math.max(1, course.sections) * Math.max(0, course.directWeeklyHours);
+}
+export function curriculumCourseEffectiveHours(course: ProgramCourse, _modality?: DeliveryModality): number {
+  const raw = curriculumCourseRawHours(course);
+  // El factor asincrónico pertenece a la asignatura, no a la modalidad global del programa.
+  // Así, una asignatura de 72 horas con factor 50% equivale financieramente a 36 horas
+  // pagables, incluso si la cohorte combina actividades presenciales/sincrónicas.
+  if (course.teachingMode === "ASINCRONICA") return raw * Math.max(0, Math.min(1, course.asynchronousRateFactor));
+  return raw;
+}
+function effectiveMode(course: ProgramCourse, _modality?: DeliveryModality): TeachingMode {
+  return course.teachingMode;
+}
+
+export function curriculumLoadForBudget(
+  program: Program,
+  startYear: number,
+  startSemester: 1 | 2,
+  durationSemesters: number,
+  modality: DeliveryModality,
+): { loads: Map<number, Partial<SemesterParameters>>; sharedCourses: SharedCourseEconomyRule[] } {
+  const periods = getActivePeriods(startYear, startSemester, durationSemesters);
+  const loads = new Map<number, Partial<SemesterParameters>>();
+  const sharedCourses: SharedCourseEconomyRule[] = [];
+  for (const course of payableCurriculumCourses(program)) {
+    const period = periods[course.semester - 1];
+    if (!period) continue;
+    const index = course.semester - 1;
+    const current = loads.get(index) ?? { directTeachingHours: 0, synchronousTeachingHours: 0, asynchronousTeachingHours: 0 };
+    const effectiveHours = curriculumCourseEffectiveHours(course, modality);
+    const mode = effectiveMode(course, modality);
+    if (mode === "PRESENCIAL") current.directTeachingHours = Number(current.directTeachingHours ?? 0) + effectiveHours;
+    else if (mode === "ASINCRONICA") current.asynchronousTeachingHours = Number(current.asynchronousTeachingHours ?? 0) + effectiveHours;
+    else current.synchronousTeachingHours = Number(current.synchronousTeachingHours ?? 0) + effectiveHours;
+    loads.set(index, current);
+
+    const participants = [program.id, ...course.sharedWithProgramIds.filter((id) => id !== program.id)];
+    if (participants.length >= 2) {
+      const autoRate = 1 / participants.length;
+      sharedCourses.push({
+        id: `curriculum-${course.id}-${period.year}-${period.semester}`,
+        courseName: course.name,
+        year: period.year,
+        semester: period.semester,
+        teachingMode: mode,
+        hours: effectiveHours,
+        participantProgramIds: participants,
+        allocationRate: course.allocationRate > 0 && course.allocationRate <= 1 ? course.allocationRate : autoRate,
+        note: `Economía de escala derivada de la malla curricular · ${course.code ?? course.name}`,
+      });
+    }
+  }
+  return { loads, sharedCourses };
+}
+
+export function applyProgramCurriculumToBudget(budget: CohortBudget): CohortBudget {
+  const curriculum = budget.program.curriculumCourses ?? [];
+  if (!curriculum.length) return budget;
+  const { loads, sharedCourses } = curriculumLoadForBudget(budget.program, budget.startYear, budget.startSemester, budget.durationSemesters, budget.deliveryModality);
+  return {
+    ...budget,
+    semesters: budget.semesters.map((semester, index) => ({
+      ...semester,
+      directTeachingHours: Number(loads.get(index)?.directTeachingHours ?? 0),
+      synchronousTeachingHours: Number(loads.get(index)?.synchronousTeachingHours ?? 0),
+      asynchronousTeachingHours: Number(loads.get(index)?.asynchronousTeachingHours ?? 0),
+    })),
+    sharedCourses,
+  };
+}

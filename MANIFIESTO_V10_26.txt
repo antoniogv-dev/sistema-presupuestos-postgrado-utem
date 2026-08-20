@@ -1,0 +1,4 @@
+v10.26 / 1.0.36-d1-web
+Malla curricular por programa + importación XLSX/CSV + docencia por asignatura + factor asincrónico + asignaturas compartidas + Excel institucional mejorado.
+Nueva migración D1: 0010_program_curriculum.sql.
+El paquete de entrega no debe reemplazar wrangler.jsonc ni Secrets de producción.

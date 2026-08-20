@@ -1,8 +1,22 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10.25 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.26 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
 
+
+## Mejoras funcionales v10.26
+
+- **Malla curricular como dato maestro del programa:** cada programa puede almacenar asignaturas obligatorias, electivas, especializaciones y competencias genéricas, con semestre, semanas, secciones, horas semanales, SCT y requisitos.
+- **Importación de malla curricular:** `Programas` permite importar `.xlsx`, `.xlsm` y `.csv` con estructuras equivalentes a las utilizadas por curriculistas; la malla importada permanece editable.
+- **Reglas de secciones:** asignaturas obligatorias y competencias genéricas usan una sección; electivos y especializaciones pueden usar varias secciones. La restricción obligatoria queda protegida también en D1.
+- **Docencia por asignatura:** cada curso puede ser presencial, sincrónico o asincrónico. Las asignaturas asincrónicas incorporan un factor de valorización; por ejemplo, 50 % sobre $30.000 equivale a $15.000 por hora docente efectiva.
+- **Asignaturas compartidas:** una asignatura puede compartirse con uno o más programas y definir el porcentaje imputado a la cohorte, evitando doble contabilización del ahorro.
+- **Competencias genéricas fuera del flujo:** se registran y exportan para completar la malla, pero no generan costo docente presupuestario.
+- **Carga académica desde malla:** los nuevos presupuestos obtienen automáticamente sus horas docentes desde la malla del programa; presupuestos existentes pueden sincronizarse con `Aplicar malla curricular`.
+- **XLSX institucional mejorado:** la plantilla base es exactamente el archivo mejorado de Ingeniería del Territorio entregado por el usuario, manteniendo estilos, cinco hojas y fórmulas institucionales.
+- **Pruebas preventivas:** se incorporan pruebas de importación curricular, factor asincrónico, asignaturas compartidas, competencias genéricas y conciliación del XLSX con el motor financiero.
+- **Migración D1 0010:** crea `ProgramCourse` y sus restricciones de integridad.
+- **Control de despliegue:** versión `v10.26 · 1.0.36-d1-web`.
 
 ## Mejoras funcionales v10.25
 

@@ -8,9 +8,33 @@ export type ReviewDecision = "ENVIADO" | "VISTO_BUENO" | "OBSERVADO" | "APROBADO
 export type TemplateItemKind = "DESCUENTO" | "BECA_ARANCEL" | "BECA_MANUTENCION" | "COSTO" | "INGRESO_EXTRAORDINARIO" | "PARAMETRO_ANUAL";
 export type DeliveryModality = "PRESENCIAL" | "SEMIPRESENCIAL" | "E_LEARNING";
 export type TeachingMode = "PRESENCIAL" | "SINCRONICA" | "ASINCRONICA";
+export type CurriculumCourseKind = "OBLIGATORIA" | "ELECTIVA" | "ESPECIALIZACION" | "COMPETENCIA_GENERICA";
 export type AnnualTemplateParameter = "ARANCEL" | "MATRICULA" | "BECA_MANUTENCION" | "DOCENCIA_PRESENCIAL" | "DOCENCIA_SINCRONICA" | "DOCENCIA_ASINCRONICA" | "GUIA_TESIS" | "DIRECCION" | "ASISTENCIA" | "OTROS_HONORARIOS_NO_ACADEMICOS";
 export type StudentQuantityMode = "TODOS_ACTIVOS" | "CANTIDAD";
 export type BudgetCostType = "Único de esta versión" | "Compartido con otras cohortes";
+
+
+export interface ProgramCourse {
+  id: string;
+  code?: string;
+  name: string;
+  semester: number;
+  kind: CurriculumCourseKind;
+  weeks: number;
+  sections: number;
+  theoryWeeklyHours: number;
+  laboratoryWeeklyHours: number;
+  workshopWeeklyHours: number;
+  directWeeklyHours: number;
+  autonomousWeeklyHours: number;
+  teachingMode: TeachingMode;
+  asynchronousRateFactor: number;
+  sharedWithProgramIds: string[];
+  allocationRate: number;
+  sctCredits: number;
+  prerequisites?: string;
+  position: number;
+}
 
 export interface Program {
   id: string;
@@ -25,6 +49,7 @@ export interface Program {
   annualTuition?: Record<number, number>;
   tuitionSource?: TuitionSource;
   versionLabel?: string;
+  curriculumCourses?: ProgramCourse[];
 }
 
 export interface ProgramTypeParameters {

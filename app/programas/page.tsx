@@ -5,7 +5,8 @@ import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatCLP } from "@/lib/calculations/currency";
-import type { AccessRole, InstitutionalParameters, ProgramType, TuitionSource } from "@/lib/calculations/types";
+import type { AccessRole, InstitutionalParameters, ProgramCourse, ProgramType, TuitionSource } from "@/lib/calculations/types";
+import { CurriculumEditor } from "@/features/programs/components/CurriculumEditor";
 import type { ApiIdentity, ApiProgram } from "@/lib/mappers/budget-api";
 import { numberValue, responseBody, tuitionSourceFromRecord } from "@/lib/mappers/budget-api";
 import { tuitionSourceForTemplate, tuitionSourceLabel } from "@/lib/programs/tuition-source";
@@ -38,6 +39,7 @@ type ProgramForm = {
   versionLabel: string;
   tuitionSource: TuitionSource;
   annualTuition: Record<number, number>;
+  curriculumCourses: ProgramCourse[];
 };
 
 type Filters = { search: string; type: "TODOS" | ProgramType; status: "TODOS" | ProgramStatus };
@@ -57,6 +59,7 @@ function emptyForm(years: number[]): ProgramForm {
     versionLabel: "1",
     tuitionSource: "PLANTILLA_DOCTORADO",
     annualTuition: Object.fromEntries(years.map((year) => [year, 0])),
+    curriculumCourses: [],
   };
 }
 
@@ -101,6 +104,18 @@ function formFromRecord(record: ApiProgram, years: number[]): ProgramForm {
     versionLabel: record.versionLabel ?? "1",
     tuitionSource: sourceFromApi(record),
     annualTuition: completedAnnual,
+    curriculumCourses: (record.curriculumCourses ?? []).map((item, index) => ({
+      id: String(item.id ?? `course-${index}`),
+      code: typeof item.code === "string" ? item.code : "",
+      name: String(item.name ?? "Asignatura"),
+      semester: Math.max(1, Math.round(numberValue(item.semester) || 1)),
+      kind: String(item.kind ?? "OBLIGATORIA") as ProgramCourse["kind"],
+      weeks: Math.max(1, Math.round(numberValue(item.weeks) || 18)),
+      sections: Math.max(1, Math.round(numberValue(item.sections) || 1)),
+      theoryWeeklyHours: Math.max(0, numberValue(item.theoryWeeklyHours)), laboratoryWeeklyHours: Math.max(0, numberValue(item.laboratoryWeeklyHours)), workshopWeeklyHours: Math.max(0, numberValue(item.workshopWeeklyHours)), directWeeklyHours: Math.max(0, numberValue(item.directWeeklyHours)), autonomousWeeklyHours: Math.max(0, numberValue(item.autonomousWeeklyHours)),
+      teachingMode: String(item.teachingMode ?? "SINCRONICA") as ProgramCourse["teachingMode"], asynchronousRateFactor: Math.max(0, Math.min(1, numberValue(item.asynchronousRateFactor ?? 0.5))),
+      sharedWithProgramIds: Array.isArray(item.sharedWithProgramIds) ? item.sharedWithProgramIds.map(String) : [], allocationRate: Math.max(0, Math.min(1, numberValue(item.allocationRate ?? 1))), sctCredits: Math.max(0, numberValue(item.sctCredits)), prerequisites: typeof item.prerequisites === "string" ? item.prerequisites : "", position: Math.max(0, Math.round(numberValue(item.position ?? index))),
+    })),
   };
 }
 
@@ -233,6 +248,7 @@ export default function ProgramsPage() {
         costCenter: form.costCenter || null,
         versionLabel: form.versionLabel.trim() || "1",
         annualTuitions: tuitionValues,
+        curriculumCourses: form.curriculumCourses.map((course, position) => ({ ...course, position })),
       };
       const programResponse = await fetch(form.id ? `/api/programs/${form.id}` : "/api/programs", {
         method: form.id ? "PUT" : "POST",
@@ -254,7 +270,7 @@ export default function ProgramsPage() {
     <PageHeader
       eyebrow="Maestro institucional"
       title="Programas de postgrado"
-      description="Catálogo de programas, responsables, duración, centros de costo y aranceles por programa."
+      description="Catálogo de programas, responsables, aranceles y malla curricular institucional por programa."
       actions={<button className="button primary" type="button" disabled={!canCreate(roles)} onClick={startCreate}>Agregar programa</button>}
     />
 
@@ -290,7 +306,16 @@ export default function ProgramsPage() {
           <div className="table-wrap"><table className="data-table"><thead><tr><th>Concepto</th>{years.map((year) => <th className="numeric" key={year}>{year}</th>)}</tr></thead><tbody><tr><th>Arancel</th>{years.map((year) => <td key={year}><input aria-label={`Arancel ${year}`} className="numeric-input" type="number" min="0" value={form.annualTuition[year] ?? 0} onChange={(event) => setForm({ ...form, annualTuition: { ...form.annualTuition, [year]: numberValue(event.target.value) } })} /></td>)}</tr></tbody></table></div>
         </div>
 
-        <div className="form-actions-row"><button className="button primary" type="submit">{form.id ? "Guardar modificaciones" : "Agregar programa"}</button><button className="button secondary" type="button" onClick={() => setShowEditor(false)}>Cancelar</button></div>
+        <CurriculumEditor
+          courses={form.curriculumCourses}
+          programs={records}
+          currentProgramId={form.id}
+          durationSemesters={form.officialDurationSemesters}
+          onChange={(curriculumCourses) => setForm((current) => ({ ...current, curriculumCourses }))}
+          onMessage={(value, isError) => { if (isError) { setError(value); setMessage(""); } else { setMessage(value); setError(""); } }}
+        />
+
+        <div className="form-actions-row"><button className="button primary" type="submit" disabled={!form.id && !form.curriculumCourses.length}>{form.id ? "Guardar modificaciones" : "Agregar programa"}</button><button className="button secondary" type="button" onClick={() => setShowEditor(false)}>Cancelar</button></div>
       </form>
     </section> : null}
 
@@ -306,7 +331,7 @@ export default function ProgramsPage() {
 
     <section className="panel">
       <div className="panel-title"><div><h2>Programas</h2><p>{loading ? "Cargando…" : `${filtered.length} de ${records.length} programas visibles.`}</p></div></div>
-      <div className="table-wrap"><table className="data-table"><thead><tr><th>Código</th><th>Programa</th><th>Versión</th><th>Tipo</th><th>Facultad</th><th>Director</th><th>Duración</th><th className="numeric">Arancel 2027</th><th>Fuente</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
+      <div className="table-wrap"><table className="data-table"><thead><tr><th>Código</th><th>Programa</th><th>Versión</th><th>Tipo</th><th>Facultad</th><th>Director</th><th>Duración</th><th className="numeric">Arancel 2027</th><th>Fuente</th><th>Malla</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
         {!loading && filtered.length ? filtered.map((program) => {
           const tuition2027 = program.annualTuitions?.find((item) => item.year === 2027);
           const source = tuition2027
@@ -317,10 +342,10 @@ export default function ProgramsPage() {
             <td><strong>{program.name}</strong><small>{program.costCenter ? `Centro de costo ${program.costCenter}` : "Sin centro de costo registrado"}</small></td>
             <td>{program.versionLabel ?? "1"}</td>
             <td>{typeLabels[program.type]}</td><td>{program.faculty}</td><td>{program.director}</td><td>{program.officialDurationSemesters} semestres</td>
-            <td className="numeric">{formatCLP(numberValue(tuition2027?.amount))}</td><td>{tuitionSourceLabel(source)}</td><td><StatusBadge status={statusLabels[program.status]} /></td>
+            <td className="numeric">{formatCLP(numberValue(tuition2027?.amount))}</td><td>{tuitionSourceLabel(source)}</td><td>{program.curriculumCourses?.length ?? 0} registros</td><td><StatusBadge status={statusLabels[program.status]} /></td>
             <td><button className="text-button" type="button" disabled={!canModify(roles)} onClick={() => startEdit(program)}>Modificar programa</button></td>
           </tr>;
-        }) : <tr><td colSpan={11}>{loading ? "Cargando programas…" : "No hay programas que coincidan con los filtros."}</td></tr>}
+        }) : <tr><td colSpan={12}>{loading ? "Cargando programas…" : "No hay programas que coincidan con los filtros."}</td></tr>}
       </tbody></table></div>
     </section>
   </AppShell>;

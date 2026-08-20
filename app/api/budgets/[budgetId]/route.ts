@@ -140,7 +140,7 @@ function isAcademic(type: ProgramType) {
 type D1BindValue = string | number | null;
 
 const includeAll = {
-  program: { include: { annualTuitions: { orderBy: { year: "asc" as const } } } },
+  program: { include: { annualTuitions: { orderBy: { year: "asc" as const } }, curriculumCourses: { orderBy: [{ semester: "asc" as const }, { position: "asc" as const }] } } },
   appliedTemplate: true,
   responsible: { select: { id: true, name: true, email: true } },
   semesterPeriods: { include: { parameters: true }, orderBy: { position: "asc" as const } },

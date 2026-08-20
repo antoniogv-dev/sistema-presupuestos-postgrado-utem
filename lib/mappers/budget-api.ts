@@ -5,6 +5,7 @@ import type {
   CohortBudget,
   ExternalIncome,
   Program,
+  ProgramCourse,
   ReviewDecision,
   SemesterParameters,
   TuitionSource,
@@ -37,6 +38,7 @@ export type ApiProgram = {
   costCenter?: string | null;
   versionLabel?: string | null;
   annualTuitions?: ApiTuition[];
+  curriculumCourses?: Array<Record<string, unknown>>;
 };
 
 export type ApiBudgetRecord = {
@@ -156,6 +158,28 @@ export function toProgram(record: ApiProgram): Program {
         : tuitionSources[0]
     : "PROPIO";
 
+  const curriculumCourses = (record.curriculumCourses ?? []).map((item, index) => ({
+    id: String(item.id ?? `course-${index}`),
+    code: typeof item.code === "string" && item.code.trim() ? item.code : undefined,
+    name: String(item.name ?? "Asignatura"),
+    semester: Math.max(1, Math.round(numberValue(item.semester))),
+    kind: String(item.kind ?? "OBLIGATORIA") as ProgramCourse["kind"],
+    weeks: Math.max(1, Math.round(numberValue(item.weeks) || 18)),
+    sections: Math.max(1, Math.round(numberValue(item.sections) || 1)),
+    theoryWeeklyHours: Math.max(0, numberValue(item.theoryWeeklyHours)),
+    laboratoryWeeklyHours: Math.max(0, numberValue(item.laboratoryWeeklyHours)),
+    workshopWeeklyHours: Math.max(0, numberValue(item.workshopWeeklyHours)),
+    directWeeklyHours: Math.max(0, numberValue(item.directWeeklyHours)),
+    autonomousWeeklyHours: Math.max(0, numberValue(item.autonomousWeeklyHours)),
+    teachingMode: String(item.teachingMode ?? "SINCRONICA") as "PRESENCIAL" | "SINCRONICA" | "ASINCRONICA",
+    asynchronousRateFactor: Math.max(0, Math.min(1, numberValue(item.asynchronousRateFactor ?? 0.5))),
+    sharedWithProgramIds: Array.isArray(item.sharedWithProgramIds) ? item.sharedWithProgramIds.map(String) : [],
+    allocationRate: Math.max(0, Math.min(1, numberValue(item.allocationRate ?? 1))),
+    sctCredits: Math.max(0, numberValue(item.sctCredits)),
+    prerequisites: typeof item.prerequisites === "string" && item.prerequisites.trim() ? item.prerequisites : undefined,
+    position: Math.max(0, Math.round(numberValue(item.position ?? index))),
+  }));
+
   return {
     id: record.id,
     code: record.code,
@@ -173,6 +197,7 @@ export function toProgram(record: ApiProgram): Program {
     versionLabel: record.versionLabel?.trim() || "1",
     annualTuition,
     tuitionSource,
+    curriculumCourses,
   };
 }
 

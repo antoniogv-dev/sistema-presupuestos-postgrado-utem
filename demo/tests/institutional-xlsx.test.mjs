@@ -8,8 +8,9 @@ import { createHash } from "node:crypto";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
-const { demoBudget, institutionalParameters } = await import(path.join(root, ".engine-build/lib/demo-data.js"));
+const { demoBudget, institutionalParameters, programs } = await import(path.join(root, ".engine-build/lib/demo-data.js"));
 const { calculateBudget } = await import(path.join(root, ".engine-build/lib/calculations/budget-engine.js"));
+const { applyProgramCurriculumToBudget } = await import(path.join(root, ".engine-build/lib/curriculum/budget-load.js"));
 const { createInstitutionalFormulaBudgetXlsx, canUseFormulaTemplate } = await import(path.join(root, ".engine-build/lib/export/institutional-budget-xlsx.js"));
 
 const templatePath = path.join(root, "public/templates/presupuesto-profesional-formula-base.xlsx");
@@ -61,19 +62,19 @@ function cachedNumber(sheet, ref) {
 }
 function stripSheetData(xml) { return xml.replace(/<sheetData>[\s\S]*?<\/sheetData>/, "<sheetData/>"); }
 
-const budget = structuredClone(demoBudget);
+let budget = structuredClone(demoBudget);
 budget.deliveryModality = "SEMIPRESENCIAL";
-budget.semesters = budget.semesters.map((semester) => ({
-  ...semester,
-  directTeachingHours: 0,
-  synchronousTeachingHours: semester.directTeachingHours,
-  asynchronousTeachingHours: 0,
-}));
 budget.externalIncome = [];
 budget.manualItems = [];
+budget.program.curriculumCourses = [
+  { id: "curr-sync", code: "MIT001", name: "Análisis territorial", semester: 1, kind: "OBLIGATORIA", weeks: 18, sections: 1, theoryWeeklyHours: 2, laboratoryWeeklyHours: 0, workshopWeeklyHours: 2, directWeeklyHours: 4, autonomousWeeklyHours: 4, teachingMode: "SINCRONICA", asynchronousRateFactor: 0.5, sharedWithProgramIds: [], allocationRate: 1, sctCredits: 4, position: 0 },
+  { id: "curr-async", code: "MIT002", name: "Modelamiento asincrónico", semester: 2, kind: "ELECTIVA", weeks: 18, sections: 1, theoryWeeklyHours: 2, laboratoryWeeklyHours: 0, workshopWeeklyHours: 2, directWeeklyHours: 4, autonomousWeeklyHours: 4, teachingMode: "ASINCRONICA", asynchronousRateFactor: 0.5, sharedWithProgramIds: [programs[1].id], allocationRate: 0.5, sctCredits: 4, position: 1 },
+  { id: "curr-generic", code: "HUMMX001", name: "Inglés", semester: 1, kind: "COMPETENCIA_GENERICA", weeks: 18, sections: 1, theoryWeeklyHours: 0, laboratoryWeeklyHours: 0, workshopWeeklyHours: 0, directWeeklyHours: 0, autonomousWeeklyHours: 4, teachingMode: "SINCRONICA", asynchronousRateFactor: 0.5, sharedWithProgramIds: [], allocationRate: 1, sctCredits: 2, position: 2 },
+];
+budget = applyProgramCurriculumToBudget(budget);
 const result = calculateBudget(budget, institutionalParameters);
 
-test("v10.25 genera XLSX institucional formulado, estructuralmente fiel al modelo", async () => {
+test("v10.26 genera XLSX institucional mejorado, con malla y fórmulas coherentes", async () => {
   assert.equal(canUseFormulaTemplate(budget, result), true);
   const generated = await createInstitutionalFormulaBudgetXlsx(template, budget, result, institutionalParameters);
   assert.ok(generated.byteLength > template.byteLength, "el XLSX generado debe contener fórmulas/cachés dinámicos");
@@ -97,12 +98,29 @@ test("v10.25 genera XLSX institucional formulado, estructuralmente fiel al model
   assert.match(workbook, /forceFullCalc="1"/);
   assert.equal(out.has("xl/calcChain.xml"), false, "calcChain obsoleto no debe sobrevivir");
 
+  const parameterXml = text(out, "xl/worksheets/sheet1.xml");
+  const studentXml = text(out, "xl/worksheets/sheet2.xml");
+  const teachingXml = text(out, "xl/worksheets/sheet3.xml");
+  assert.ok(parameterXml.includes("Semipresencial"), "modalidad faltante en Parámetros");
+  assert.ok(studentXml.includes("matrículas equivalentes"), "punto de equilibrio no identifica matrículas equivalentes");
+  assert.equal(/flujo(?: final)? simulado/i.test(studentXml), false, "no debe exportarse el texto flujo simulado");
+  assert.ok(teachingXml.includes("Base estudiantes"), "sección de guía de tesis mejorada faltante");
+  assert.ok(teachingXml.includes("Análisis territorial"), "la malla obligatoria no se exportó");
+  assert.ok(teachingXml.includes("Modelamiento asincrónico"), "la asignatura asincrónica no se exportó");
+  assert.ok(teachingXml.includes("asincrónica 50%"), "el factor asincrónico no quedó trazado");
+  assert.ok(teachingXml.includes("compartida 50%"), "la imputación compartida no quedó trazada");
+  assert.ok(teachingXml.includes("HUMMX001"), "la competencia genérica no se exportó");
+
   const formulas = requiredSheets.flatMap((name) => [...formulaMap(text(out, name)).values()]);
   assert.ok(formulas.length >= 120, `se esperaban fórmulas institucionales; encontradas ${formulas.length}`);
   assert.equal(formulas.some((formula) => /#REF!|#NAME\?|#DIV\/0!|#VALUE!/.test(formula)), false);
-  assert.ok(formulas.includes("B6*Parámetros!$B$4"), "referencia absoluta de matrícula dañada");
+  assert.ok(formulas.includes("B6*Parámetros!$B$5"), "referencia absoluta de matrícula dañada");
   assert.ok(formulas.includes("SUM(B11,B16,B19,B21,B24,B26,B28,B31,B33,B36)"), "subtotal de costos institucional faltante");
   assert.ok(formulas.includes("+SUM(B38:B39)"), "saldo acumulado institucional faltante");
+
+  const teachingRate = result.annualFlows[0].directTeachingCost > 0 ? result.annualFlows[0].directTeachingCost / cachedNumber(teachingXml, "G17") : 0;
+  assert.ok(teachingRate > 0, "la tarifa docente efectiva debe ser positiva");
+  assert.ok(Math.abs(cachedNumber(teachingXml, "G18") - result.annualFlows[0].directTeachingCost) < 0.01, "la malla no concilia con el costo docente 2027");
 
   const flowXml = text(out, "xl/worksheets/sheet4.xml");
   const first = result.annualFlows[0];

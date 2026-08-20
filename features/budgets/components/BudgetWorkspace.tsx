@@ -30,9 +30,10 @@ import { applyBudgetTemplate } from "@/lib/templates/apply-template";
 import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
 import { availableWorkflowActions, canDeleteBudget, canEditBudget, type WorkflowAction } from "@/lib/workflow/budget-workflow";
 import { auditBudgetIntegrity } from "@/lib/validation/budget-integrity";
+import { applyProgramCurriculumToBudget } from "@/lib/curriculum/budget-load";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.25";
+const FUNCTIONAL_RELEASE = "v10.26";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -102,7 +103,7 @@ function freshBudget(program: Program, responsible: string, parameters: Institut
     graduatingStudents: index === duration - 1 ? 0 : 0,
   }));
   const typeParameters = programTypeParameters(parameters, program.type);
-  return {
+  const base: CohortBudget = {
     id: uid("draft"), program, cohortName: `${program.code} ${year}-1S`, startYear: year, startSemester: 1,
     durationSemesters: duration, initialStudents: 0, status: "Borrador", workflowStage: "GESTION",
     facultyOverheadRate: overheadApplies(program.type) ? typeParameters.facultyOverheadRate : 0,
@@ -116,6 +117,7 @@ function freshBudget(program: Program, responsible: string, parameters: Institut
       defaultAnnualOverrideForYear({ program, facultyOverheadRate: overheadApplies(program.type) ? typeParameters.facultyOverheadRate : 0 }, parameters, activeYear)),
     createdAt: new Date().toISOString(), semesters, discounts: [], externalIncome: [], manualItems: [], sharedCourses: [], reviewHistory: [],
   };
+  return applyProgramCurriculumToBudget(base);
 }
 
 function canCreate(roles: AccessRole[]) {
@@ -757,7 +759,8 @@ export function BudgetWorkspace() {
 
     <section className="panel"><SectionHeading number="3" id="estudiantes" title="Estudiantes y graduación" description="Matrícula activa y estudiantes que se encuentran en etapa de graduación por semestre." /><div className="table-wrap"><table className="data-table semester-table"><thead><tr><th>Periodo</th><th>Estudiantes activos</th><th>Estudiantes en graduación</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Activos ${semester.year}-${semester.semester}`} value={semester.activeStudents} disabled={!editable} onChange={(value) => updateSemester(index, "activeStudents", value)} /><InputCell label={`Graduación ${semester.year}-${semester.semester}`} value={semester.graduatingStudents} disabled={!editable} onChange={(value) => updateSemester(index, "graduatingStudents", value)} /></tr>)}</tbody></table></div></section>
 
-    <section className="panel"><SectionHeading number="4" id="carga-academica" title="Carga académica" description="La modalidad define qué horas docentes se valorizan; las horas de reemplazo se mantienen separadas." />
+    <section className="panel"><SectionHeading number="4" id="carga-academica" title="Carga académica" description={budget.program.curriculumCourses?.length ? `La malla del programa contiene ${budget.program.curriculumCourses.length} registros. Puede sincronizarla para recalcular horas y economías de escala.` : "La modalidad define qué horas docentes se valorizan; las horas de reemplazo se mantienen separadas."} action={budget.program.curriculumCourses?.length ? <button className="button secondary" type="button" disabled={!editable} onClick={() => replaceBudget(applyProgramCurriculumToBudget(budget))}>Aplicar malla curricular</button> : undefined} />
+      {budget.program.curriculumCourses?.length ? <div className="notice info"><strong>Malla curricular vinculada</strong><p>Las competencias genéricas se excluyen del costo. Las asignaturas asincrónicas convierten sus horas al factor definido en el programa y las compartidas generan economía de escala según su porcentaje de imputación.</p></div> : null}
       <div className="academic-hours-grid">
         {budget.deliveryModality === "PRESENCIAL" ? <div className="subpanel"><h3>Horas docentes presenciales</h3><p>Se valorizan con el valor hora presencial.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`direct-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas presenciales ${semester.year}-${semester.semester}`} value={semester.directTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "directTeachingHours", value)} /></tr>)}</tbody></table></div></div> : <>
           <div className="subpanel"><h3>Horas sincrónicas</h3><p>Clases en tiempo real, con valor hora propio.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`sync-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas sincrónicas ${semester.year}-${semester.semester}`} value={semester.synchronousTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "synchronousTeachingHours", value)} /></tr>)}</tbody></table></div></div>

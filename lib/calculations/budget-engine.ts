@@ -289,7 +289,12 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
     const presentialTeachingCost = Math.max(0, grossPresentialTeachingCost - presentialSavings);
     const synchronousTeachingCost = Math.max(0, grossSynchronousTeachingCost - synchronousSavings);
     const asynchronousTeachingCost = Math.max(0, grossAsynchronousTeachingCost - asynchronousSavings);
-    const directTeachingCost = budget.deliveryModality === "PRESENCIAL" ? presentialTeachingCost : synchronousTeachingCost + asynchronousTeachingCost;
+    // En programas profesionales la malla puede combinar docencia presencial/sincrónica
+    // y asincrónica por asignatura. Todas las componentes valorizables forman parte del
+    // costo docente. Para programas académicos/doctorales se conserva la regla histórica.
+    const directTeachingCost = budget.program.type === "MAGISTER_PROFESIONAL"
+      ? presentialTeachingCost + synchronousTeachingCost + asynchronousTeachingCost
+      : (budget.deliveryModality === "PRESENCIAL" ? presentialTeachingCost : synchronousTeachingCost + asynchronousTeachingCost);
     const replacementTeachingCost = sum(semesters.map((semester) => nonNegative(semester.replacementTeachingHours) * parameters.replacementHour));
     const graduatingStudents = Math.max(0, ...semesters.map((semester) => {
       const explicit = semester.graduatingStudents;

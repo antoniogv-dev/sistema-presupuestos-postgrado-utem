@@ -548,3 +548,23 @@ input,select,textarea{min-height:36px;padding:6px 9px;margin-top:4px;border-radi
 .modal-card{padding:16px;border-radius:7px}
 @media(max-width:1180px){.form-grid.cols-4{grid-template-columns:repeat(2,minmax(0,1fr))}.budget-filter-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.budget-filter-button{width:100%}}
 @media(max-width:800px){.app-shell{grid-template-columns:1fr}.content{padding:12px}.form-grid.cols-4{grid-template-columns:1fr}.isolated-budget-selector{grid-template-columns:1fr}.budget-filter-controls{grid-template-columns:1fr}.panel{padding:12px}.page-header h1{font-size:22px}}
+
+/* v10.26 · maestro de malla curricular */
+.curriculum-editor{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.curriculum-title{align-items:flex-start;gap:14px}.curriculum-title h3{margin:0 0 3px;font-size:15px;color:var(--black)}
+.curriculum-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
+.curriculum-summary{margin:8px 0 10px;padding:8px 10px;background:var(--surface-subtle);border:1px solid var(--line);border-radius:5px;font-size:11.5px;color:var(--muted)}
+.curriculum-summary strong{color:var(--navy)}
+.curriculum-table-wrap{max-height:620px;overflow:auto;border:1px solid var(--line)}
+.curriculum-table{min-width:2280px;font-size:10.5px}
+.curriculum-table th,.curriculum-table td{padding:5px 6px;vertical-align:top}
+.curriculum-table thead th{position:sticky;top:0;z-index:2;background:var(--navy);color:#fff;white-space:nowrap}
+.curriculum-table input,.curriculum-table select{min-height:30px;margin-top:0;padding:4px 6px;font-size:10.5px}
+.curriculum-table select[multiple]{min-height:62px;min-width:190px}
+.curriculum-table .curriculum-name{min-width:250px}.curriculum-table .curriculum-name input{min-width:235px}
+.curriculum-table .curriculum-name small{display:block;margin-top:3px;color:var(--muted);font-size:9.5px;line-height:1.25}
+.curriculum-table .numeric{white-space:nowrap;text-align:right}
+.curriculum-generic-row{background:var(--beige)}
+.curriculum-generic-row td:first-child{box-shadow:inset 3px 0 0 var(--mustard)}
+.curriculum-table .percent-input{display:flex;align-items:center;gap:3px;min-width:72px}.curriculum-table .percent-input input{width:58px}.curriculum-table .percent-input span{font-size:10px}
+@media(max-width:900px){.curriculum-title{display:block}.curriculum-actions{justify-content:flex-start;margin-top:8px}}

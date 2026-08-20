@@ -84,6 +84,13 @@ enum TeachingMode {
   ASINCRONICA
 }
 
+enum CurriculumCourseKind {
+  OBLIGATORIA
+  ELECTIVA
+  ESPECIALIZACION
+  COMPETENCIA_GENERICA
+}
+
 enum ParameterScope {
   GENERAL
   DOCTORADO
@@ -161,8 +168,38 @@ model Program {
   sharedCostRules           SharedCostRule[]
   annualTuitions            ProgramAnnualTuition[]
   budgetTemplates           BudgetTemplate[]
+  curriculumCourses         ProgramCourse[]
 }
 
+
+model ProgramCourse {
+  id                     String               @id @default(cuid())
+  programId              String
+  code                   String?
+  name                   String
+  semester               Int
+  kind                   CurriculumCourseKind
+  weeks                  Int                  @default(18)
+  sections               Int                  @default(1)
+  theoryWeeklyHours      Decimal              @default(0)
+  laboratoryWeeklyHours  Decimal              @default(0)
+  workshopWeeklyHours    Decimal              @default(0)
+  directWeeklyHours      Decimal              @default(0)
+  autonomousWeeklyHours  Decimal              @default(0)
+  teachingMode           TeachingMode         @default(SINCRONICA)
+  asynchronousRateFactor Decimal              @default(0.5)
+  sharedWithProgramIds   Json                 @default("[]")
+  allocationRate         Decimal              @default(1)
+  sctCredits             Decimal              @default(0)
+  prerequisites          String?
+  position               Int                  @default(0)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  program                Program              @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId, semester, position])
+  @@index([programId, kind])
+}
 
 model ProgramAnnualTuition {
   id        String        @id @default(cuid())

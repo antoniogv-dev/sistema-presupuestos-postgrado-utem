@@ -104,7 +104,7 @@ export async function GET(request: Request) {
     const budgets = await getPrismaClient().cohortBudget.findMany({
       where: { deletedAt: null },
       include: {
-        program: { include: { annualTuitions: { orderBy: { year: "asc" } } } },
+        program: { include: { annualTuitions: { orderBy: { year: "asc" } }, curriculumCourses: { orderBy: [{ semester: "asc" }, { position: "asc" }] } } },
         appliedTemplate: true,
         responsible: { select: { id: true, name: true, email: true } },
         semesterPeriods: { include: { parameters: true }, orderBy: { position: "asc" } },
@@ -199,7 +199,7 @@ export async function POST(request: Request) {
     const created = await prisma.cohortBudget.findUnique({
       where: { id: budgetId },
       include: {
-        program: { include: { annualTuitions: { orderBy: { year: "asc" } } } },
+        program: { include: { annualTuitions: { orderBy: { year: "asc" } }, curriculumCourses: { orderBy: [{ semester: "asc" }, { position: "asc" }] } } },
         annualOverrides: { orderBy: { year: "asc" } },
         sharedCourses: { orderBy: [{ year: "asc" }, { semester: "asc" }] },
         versions: { orderBy: { number: "desc" }, take: 1 },

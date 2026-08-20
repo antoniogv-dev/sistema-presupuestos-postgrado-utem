@@ -17,6 +17,29 @@ const programSchema = z.object({
   versionLabel: z.string().trim().min(1).max(80).default("1"),
 });
 
+
+const curriculumCourseSchema = z.object({
+  id: z.string().optional(),
+  code: z.string().trim().max(50).optional().nullable(),
+  name: z.string().trim().min(2).max(300),
+  semester: z.number().int().min(1).max(16),
+  kind: z.enum(["OBLIGATORIA", "ELECTIVA", "ESPECIALIZACION", "COMPETENCIA_GENERICA"]),
+  weeks: z.number().int().min(1).max(30).default(18),
+  sections: z.number().int().min(1).max(20).default(1),
+  theoryWeeklyHours: z.number().min(0).max(100).default(0),
+  laboratoryWeeklyHours: z.number().min(0).max(100).default(0),
+  workshopWeeklyHours: z.number().min(0).max(100).default(0),
+  directWeeklyHours: z.number().min(0).max(100).default(0),
+  autonomousWeeklyHours: z.number().min(0).max(200).default(0),
+  teachingMode: z.enum(["PRESENCIAL", "SINCRONICA", "ASINCRONICA"]).default("SINCRONICA"),
+  asynchronousRateFactor: z.number().min(0).max(1).default(0.5),
+  sharedWithProgramIds: z.array(z.string()).max(50).default([]),
+  allocationRate: z.number().min(0).max(1).default(1),
+  sctCredits: z.number().min(0).max(100).default(0),
+  prerequisites: z.string().trim().max(500).optional().nullable(),
+  position: z.number().int().min(0).max(500).default(0),
+});
+
 const tuitionSourceSchema = z.enum([
   "PROPIO",
   "PLANTILLA_DOCTORADO",
@@ -30,6 +53,7 @@ const createProgramSchema = programSchema.extend({
     amount: z.number().int().nonnegative(),
     source: tuitionSourceSchema.default("PROPIO"),
   })).max(30).optional(),
+  curriculumCourses: z.array(curriculumCourseSchema).min(1, "Debe incorporar al menos una asignatura o competencia genérica.").max(120),
 });
 
 function json(value: unknown) {
@@ -58,7 +82,7 @@ export async function GET(request: Request) {
     const includeInactive = url.searchParams.get("includeInactive") === "1";
     const programs = await getPrismaClient().program.findMany({
       where: includeInactive ? undefined : { status: { not: "INACTIVO" } },
-      include: { annualTuitions: { orderBy: { year: "asc" } } },
+      include: { annualTuitions: { orderBy: { year: "asc" } }, curriculumCourses: { orderBy: [{ semester: "asc" }, { position: "asc" }] } },
       orderBy: [{ type: "asc" }, { name: "asc" }],
     });
     return Response.json(json(programs.map(apiProgram)));
@@ -98,6 +122,20 @@ export async function POST(request: Request) {
       ),
     ];
 
+    for (const [position, course] of input.curriculumCourses.entries()) {
+      statements.push(database.prepare(`
+        INSERT INTO "ProgramCourse" (
+          "id","programId","code","name","semester","kind","weeks","sections",
+          "theoryWeeklyHours","laboratoryWeeklyHours","workshopWeeklyHours","directWeeklyHours","autonomousWeeklyHours",
+          "teachingMode","asynchronousRateFactor","sharedWithProgramIds","allocationRate","sctCredits","prerequisites","position","createdAt","updatedAt"
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+      `).bind(
+        d1Id("course"), programId, course.code || null, course.name, course.semester, course.kind, course.weeks, (course.kind === "OBLIGATORIA" || course.kind === "COMPETENCIA_GENERICA") ? 1 : course.sections,
+        course.theoryWeeklyHours, course.laboratoryWeeklyHours, course.workshopWeeklyHours, course.directWeeklyHours, course.autonomousWeeklyHours,
+        course.teachingMode, course.asynchronousRateFactor, d1Json(course.sharedWithProgramIds), course.allocationRate, course.sctCredits, course.prerequisites || null, position,
+      ));
+    }
+
     for (const tuition of input.annualTuitions ?? []) {
       const templateType = templateTypeFromTuitionSource(tuition.source);
       const databaseSource = tuition.source === "PROPIO" ? "PROPIO" : "PLANTILLA_DOCTORADO";
@@ -125,7 +163,7 @@ export async function POST(request: Request) {
 
     const created = await prisma.program.findUnique({
       where: { id: programId },
-      include: { annualTuitions: { orderBy: { year: "asc" } } },
+      include: { annualTuitions: { orderBy: { year: "asc" } }, curriculumCourses: { orderBy: [{ semester: "asc" }, { position: "asc" }] } },
     });
     return Response.json(json(created ? apiProgram(created) : null), { status: 201 });
   } catch (error) {
