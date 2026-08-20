@@ -31,9 +31,10 @@ import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
 import { availableWorkflowActions, canDeleteBudget, canEditBudget, type WorkflowAction } from "@/lib/workflow/budget-workflow";
 import { auditBudgetIntegrity } from "@/lib/validation/budget-integrity";
 import { applyProgramCurriculumToBudget } from "@/lib/curriculum/budget-load";
+import { fullProgramDiscountRange, synchronizeInitialStudents, synchronizeLastSemesterGraduation } from "@/lib/budgets/form-defaults";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.26";
+const FUNCTIONAL_RELEASE = "v10.27";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -143,6 +144,8 @@ export function BudgetWorkspace() {
   const [dirty, setDirty] = useState(false);
   const [role, setRole] = useState<AccessRole>("LECTOR");
   const [message, setMessage] = useState("");
+  const [curriculumBreakEvenSuggestion, setCurriculumBreakEvenSuggestion] = useState<ReturnType<typeof calculateBreakEvenEquivalentEnrollments> | null>(null);
+  const [curriculumApplying, setCurriculumApplying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [mailDialog, setMailDialog] = useState<{ action?: WorkflowAction; role: string; title: string } | null>(null);
@@ -187,6 +190,7 @@ export function BudgetWorkspace() {
       setSelectedTemplateId(nextBudget?.appliedTemplateId ?? "");
       setDraftBudget(nextBudget ? structuredClone(nextBudget) : null);
       setDirty(false);
+      setCurriculumBreakEvenSuggestion(null);
       if (typeof window !== "undefined" && nextId) {
         const url = new URL(window.location.href);
         url.searchParams.set("budget", nextId);
@@ -292,6 +296,7 @@ export function BudgetWorkspace() {
     if (!draftBudget || next.id !== draftBudget.id) return;
     setDraftBudget(structuredClone(next));
     setDirty(true);
+    setCurriculumBreakEvenSuggestion(null);
   }
 
   function patchBudget(patch: Partial<CohortBudget>) {
@@ -308,11 +313,17 @@ export function BudgetWorkspace() {
     if (!budget) return;
     const current = new Map(budget.semesters.map((semester) => [`${semester.year}-${semester.semester}`, semester]));
     const periods = getActivePeriods(startYear, startSemester, durationSemesters);
-    const semesters = periods.map((period, index) => current.get(`${period.year}-${period.semester}`) ?? {
-      ...emptySemester(period.year, period.semester, initialStudents),
-      graduatingStudents: index === periods.length - 1 ? initialStudents : 0,
+    const semesters = periods.map((period, index) => {
+      const existing = current.get(`${period.year}-${period.semester}`);
+      const baseSemester = existing ?? emptySemester(period.year, period.semester, initialStudents);
+      return {
+        ...baseSemester,
+        activeStudents: existing?.activeStudents ?? initialStudents,
+        graduatingStudents: index === periods.length - 1 ? Math.max(0, Math.round(initialStudents)) : baseSemester.graduatingStudents,
+      };
     });
-    const base = { ...budget, startYear, startSemester, durationSemesters, initialStudents, semesters };
+    const synchronizedSemesters = synchronizeLastSemesterGraduation(semesters, initialStudents);
+    const base = { ...budget, startYear, startSemester, durationSemesters, initialStudents, semesters: synchronizedSemesters };
     replaceBudget(hydrateAnnualOverrides(base, parameters));
   }
 
@@ -321,9 +332,65 @@ export function BudgetWorkspace() {
     const value = Math.max(0, Math.round(initialStudents));
     patchBudget({
       initialStudents: value,
-      semesters: budget.semesters.map((semester) => ({ ...semester, activeStudents: value })),
+      semesters: synchronizeInitialStudents(budget.semesters, value),
     });
-    setMessage(`Estudiantes iniciales actualizado a ${value}. Se replicó en todos los semestres activos; puede ajustar semestres individuales después.`);
+    setMessage(`Estudiantes iniciales actualizado a ${value}. Se replicó en todos los semestres activos y en graduación del último semestre; puede ajustar cada periodo después.`);
+  }
+
+  function curriculumHourTotals(candidate: CohortBudget) {
+    return candidate.semesters.reduce((totals, semester) => ({
+      presencial: totals.presencial + Math.max(0, semester.directTeachingHours),
+      sincronica: totals.sincronica + Math.max(0, semester.synchronousTeachingHours),
+      asincronica: totals.asincronica + Math.max(0, semester.asynchronousTeachingHours),
+    }), { presencial: 0, sincronica: 0, asincronica: 0 });
+  }
+
+  async function applyCurriculumToActiveBudget(showSuggestion = false) {
+    if (!budget) return;
+    setCurriculumApplying(true);
+    try {
+      // La malla se vuelve a leer desde D1 antes de aplicarla. Así el presupuesto no usa
+      // una copia antigua del programa que haya quedado cargada antes de importar/editar la malla.
+      const latestRecord = await responseBody<ApiProgram>(await fetch(`/api/programs/${budget.program.id}`, { cache: "no-store" }));
+      const latestProgram = toProgram(latestRecord);
+      if (!latestProgram.curriculumCourses?.length) {
+        setMessage(`El programa ${latestProgram.code} no tiene una malla curricular guardada en D1. Si acaba de importarla, vuelva a Programas y presione “Guardar modificaciones” antes de aplicarla al presupuesto.`);
+        setCurriculumBreakEvenSuggestion(null);
+        return;
+      }
+      setPrograms((current) => current.map((program) => program.id === latestProgram.id ? latestProgram : program));
+      const next = applyProgramCurriculumToBudget({ ...budget, program: latestProgram });
+      const totals = curriculumHourTotals(next);
+      const totalHours = totals.presencial + totals.sincronica + totals.asincronica;
+      replaceBudget(next);
+      if (showSuggestion && next.program.type === "MAGISTER_PROFESIONAL") {
+        const suggestion = calculateBreakEvenEquivalentEnrollments(next, parameters);
+        setCurriculumBreakEvenSuggestion(suggestion);
+        setMessage(suggestion.minimumEquivalentEnrollments === null
+          ? `Malla aplicada desde D1 (${totalHours.toLocaleString("es-CL")} horas docentes equivalentes). No se encontró un punto de equilibrio dentro del rango de búsqueda.`
+          : `Malla aplicada desde D1. Punto de equilibrio sugerido: ${suggestion.minimumEquivalentEnrollments.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} matrículas equivalentes (≈ ${suggestion.minimumWholeStudents} estudiantes a arancel completo).`);
+        return;
+      }
+      setCurriculumBreakEvenSuggestion(null);
+      setMessage(totalHours > 0
+        ? `Malla curricular aplicada desde D1: ${totals.presencial.toLocaleString("es-CL")} h presenciales · ${totals.sincronica.toLocaleString("es-CL")} h sincrónicas · ${totals.asincronica.toLocaleString("es-CL")} h asincrónicas equivalentes.`
+        : `La malla guardada contiene ${latestProgram.curriculumCourses.length} registros, pero no produjo horas docentes valorizables. Revise semanas, trabajo directo y tipo de docencia de las asignaturas en Programas.`);
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "No fue posible cargar y aplicar la malla curricular desde D1.");
+    } finally {
+      setCurriculumApplying(false);
+    }
+  }
+
+  function addDiscount() {
+    if (!budget) return;
+    const range = fullProgramDiscountRange(budget.startYear, budget.startSemester, budget.durationSemesters);
+    patchBudget({
+      discounts: [...budget.discounts, {
+        id: uid("discount"), name: "Nuevo descuento", percentage: 0, students: 0,
+        ...range,
+      }],
+    });
   }
 
   async function createBudget() {
@@ -759,13 +826,15 @@ export function BudgetWorkspace() {
 
     <section className="panel"><SectionHeading number="3" id="estudiantes" title="Estudiantes y graduación" description="Matrícula activa y estudiantes que se encuentran en etapa de graduación por semestre." /><div className="table-wrap"><table className="data-table semester-table"><thead><tr><th>Periodo</th><th>Estudiantes activos</th><th>Estudiantes en graduación</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Activos ${semester.year}-${semester.semester}`} value={semester.activeStudents} disabled={!editable} onChange={(value) => updateSemester(index, "activeStudents", value)} /><InputCell label={`Graduación ${semester.year}-${semester.semester}`} value={semester.graduatingStudents} disabled={!editable} onChange={(value) => updateSemester(index, "graduatingStudents", value)} /></tr>)}</tbody></table></div></section>
 
-    <section className="panel"><SectionHeading number="4" id="carga-academica" title="Carga académica" description={budget.program.curriculumCourses?.length ? `La malla del programa contiene ${budget.program.curriculumCourses.length} registros. Puede sincronizarla para recalcular horas y economías de escala.` : "La modalidad define qué horas docentes se valorizan; las horas de reemplazo se mantienen separadas."} action={budget.program.curriculumCourses?.length ? <button className="button secondary" type="button" disabled={!editable} onClick={() => replaceBudget(applyProgramCurriculumToBudget(budget))}>Aplicar malla curricular</button> : undefined} />
-      {budget.program.curriculumCourses?.length ? <div className="notice info"><strong>Malla curricular vinculada</strong><p>Las competencias genéricas se excluyen del costo. Las asignaturas asincrónicas convierten sus horas al factor definido en el programa y las compartidas generan economía de escala según su porcentaje de imputación.</p></div> : null}
+    <section className="panel"><SectionHeading number="4" id="carga-academica" title="Carga académica" description={budget.program.curriculumCourses?.length ? `La malla del programa contiene ${budget.program.curriculumCourses.length} registros. Sincronícela para recalcular horas y economías de escala.` : "La modalidad define qué horas docentes se valorizan; las horas de reemplazo se mantienen separadas."} action={budget.program.curriculumCourses?.length ? <div className="section-action-group"><button className="button secondary" type="button" disabled={!editable || curriculumApplying} onClick={() => void applyCurriculumToActiveBudget(false)}>{curriculumApplying ? "Aplicando…" : "Aplicar malla curricular"}</button>{budget.program.type === "MAGISTER_PROFESIONAL" ? <button className="button secondary" type="button" disabled={!editable || curriculumApplying} onClick={() => void applyCurriculumToActiveBudget(true)}>Sugerir equilibrio</button> : null}</div> : undefined} />
+      {budget.program.curriculumCourses?.length ? <div className="notice info"><strong>Malla curricular vinculada</strong><p>Las competencias genéricas se excluyen del costo. Las asignaturas pueden combinar docencia presencial, sincrónica y asincrónica; por eso las tres bolsas de horas se muestran cuando existe una malla. Las asincrónicas aplican su factor y las compartidas generan economía de escala según su porcentaje de imputación.</p></div> : null}
+      {curriculumBreakEvenSuggestion ? <div className="notice success"><strong>Sugerencia de viabilidad tras aplicar la malla</strong><p>{curriculumBreakEvenSuggestion.minimumEquivalentEnrollments === null ? "No se encontró un punto de equilibrio dentro del rango de búsqueda." : `Se requieren al menos ${curriculumBreakEvenSuggestion.minimumEquivalentEnrollments.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} matrículas equivalentes (≈ ${curriculumBreakEvenSuggestion.minimumWholeStudents} estudiantes a arancel completo) para mantener saldo final no negativo.`}</p></div> : null}
       <div className="academic-hours-grid">
-        {budget.deliveryModality === "PRESENCIAL" ? <div className="subpanel"><h3>Horas docentes presenciales</h3><p>Se valorizan con el valor hora presencial.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`direct-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas presenciales ${semester.year}-${semester.semester}`} value={semester.directTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "directTeachingHours", value)} /></tr>)}</tbody></table></div></div> : <>
-          <div className="subpanel"><h3>Horas sincrónicas</h3><p>Clases en tiempo real, con valor hora propio.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`sync-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas sincrónicas ${semester.year}-${semester.semester}`} value={semester.synchronousTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "synchronousTeachingHours", value)} /></tr>)}</tbody></table></div></div>
-          <div className="subpanel"><h3>Horas asincrónicas</h3><p>Docencia y actividades no simultáneas, con valor hora propio.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`async-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas asincrónicas ${semester.year}-${semester.semester}`} value={semester.asynchronousTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "asynchronousTeachingHours", value)} /></tr>)}</tbody></table></div></div>
-        </>}
+        {(budget.deliveryModality === "PRESENCIAL" || Boolean(budget.program.curriculumCourses?.length)) ? <div className="subpanel"><h3>Horas docentes presenciales</h3><p>Asignaturas declaradas como presenciales en la malla.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`direct-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas presenciales ${semester.year}-${semester.semester}`} value={semester.directTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "directTeachingHours", value)} /></tr>)}</tbody></table></div></div> : null}
+        {(budget.deliveryModality !== "PRESENCIAL" || Boolean(budget.program.curriculumCourses?.length)) ? <>
+          <div className="subpanel"><h3>Horas sincrónicas</h3><p>Asignaturas en tiempo real; al aplicar la malla se cargan aquí aunque la modalidad global sea presencial.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`sync-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas sincrónicas ${semester.year}-${semester.semester}`} value={semester.synchronousTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "synchronousTeachingHours", value)} /></tr>)}</tbody></table></div></div>
+          <div className="subpanel"><h3>Horas asincrónicas</h3><p>Horas equivalentes después de aplicar el factor asincrónico definido por asignatura.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`async-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas asincrónicas ${semester.year}-${semester.semester}`} value={semester.asynchronousTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "asynchronousTeachingHours", value)} /></tr>)}</tbody></table></div></div>
+        </> : null}
         <div className="subpanel"><h3>Horas docentes de reemplazo</h3><p>Se valorizan con el parámetro general de reemplazo.</p><div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Horas</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`replacement-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Horas reemplazo ${semester.year}-${semester.semester}`} value={semester.replacementTeachingHours} disabled={!editable} step="0.5" onChange={(value) => updateSemester(index, "replacementTeachingHours", value)} /></tr>)}</tbody></table></div></div>
       </div>
     </section>
@@ -780,7 +849,7 @@ export function BudgetWorkspace() {
       {!budget.scholarshipsEnabled && budget.program.type === "MAGISTER_PROFESIONAL" ? <div className="notice info"><strong>Becas deshabilitadas</strong><p>Este programa profesional no incorpora beca interna de arancel ni de manutención por defecto. Puede habilitarlas expresamente si existe una autorización.</p></div> : <div className="table-wrap"><table className="data-table"><thead><tr><th>Periodo</th><th>Estudiantes beca arancel</th><th>Cobertura arancel (%)</th><th>Estudiantes manutención</th><th>Meses manutención</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`scholarship-${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label="Becarios arancel" value={semester.internalTuitionScholarshipStudents} disabled={!editable} onChange={(value) => updateSemester(index, "internalTuitionScholarshipStudents", value)} /><PercentCell label="Cobertura beca" value={semester.internalTuitionScholarshipCoverage} disabled={!editable} onChange={(value) => updateSemester(index, "internalTuitionScholarshipCoverage", value)} /><InputCell label="Becarios manutención" value={semester.maintenanceScholarshipStudents} disabled={!editable} onChange={(value) => updateSemester(index, "maintenanceScholarshipStudents", value)} /><InputCell label="Meses manutención" value={semester.maintenanceScholarshipMonths} disabled={!editable} onChange={(value) => updateSemester(index, "maintenanceScholarshipMonths", value)} /></tr>)}</tbody></table></div>}
     </section>
 
-    <section className="panel"><SectionHeading number="6" id="descuentos" title="Descuentos" description="Agregue, modifique o elimine descuentos por periodo." action={<button className="button secondary" type="button" disabled={!editable} onClick={() => patchBudget({ discounts: [...budget.discounts, { id: uid("discount"), name: "Nuevo descuento", percentage: 0, students: 0, startYear: budget.startYear, startSemester: budget.startSemester, endYear: budget.startYear, endSemester: budget.startSemester }] })}>Agregar descuento</button>} /><div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Nombre</th><th>Porcentaje</th><th>Estudiantes</th><th>Inicio</th><th>Término</th><th>Acción</th></tr></thead><tbody>{budget.discounts.length ? budget.discounts.map((discount, index) => <tr key={discount.id}><td><input disabled={!editable} value={discount.name} onChange={(event) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, name: event.target.value } : item) })} /></td><PercentCell label={`Descuento ${discount.name}`} value={discount.percentage} disabled={!editable} onChange={(value) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, percentage: value } : item) })} /><td><input disabled={!editable} type="number" min="0" value={discount.students} onChange={(event) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, students: numberValue(event.target.value) } : item) })} /></td><td><PeriodInputs disabled={!editable} years={result.years} year={discount.startYear} semester={discount.startSemester} onYear={(value) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, startYear: value } : item) })} onSemester={(value) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, startSemester: value } : item) })} /></td><td><PeriodInputs disabled={!editable} years={result.years} year={discount.endYear} semester={discount.endSemester} onYear={(value) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, endYear: value } : item) })} onSemester={(value) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, endSemester: value } : item) })} /></td><td><button className="text-button danger-text" type="button" disabled={!editable} onClick={() => patchBudget({ discounts: budget.discounts.filter((_, candidate) => candidate !== index) })}>Quitar</button></td></tr>) : <tr><td colSpan={6}>No hay descuentos.</td></tr>}</tbody></table></div></section>
+    <section className="panel"><SectionHeading number="6" id="descuentos" title="Descuentos" description="Agregue, modifique o elimine descuentos por periodo." action={<button className="button secondary" type="button" disabled={!editable} onClick={addDiscount}>Agregar descuento</button>} /><div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Nombre</th><th>Porcentaje</th><th>Estudiantes</th><th>Inicio</th><th>Término</th><th>Acción</th></tr></thead><tbody>{budget.discounts.length ? budget.discounts.map((discount, index) => <tr key={discount.id}><td><input disabled={!editable} value={discount.name} onChange={(event) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, name: event.target.value } : item) })} /></td><PercentCell label={`Descuento ${discount.name}`} value={discount.percentage} disabled={!editable} onChange={(value) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, percentage: value } : item) })} /><td><input disabled={!editable} type="number" min="0" value={discount.students} onChange={(event) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, students: numberValue(event.target.value) } : item) })} /></td><td><PeriodInputs disabled={!editable} years={result.years} year={discount.startYear} semester={discount.startSemester} onYear={(value) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, startYear: value } : item) })} onSemester={(value) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, startSemester: value } : item) })} /></td><td><PeriodInputs disabled={!editable} years={result.years} year={discount.endYear} semester={discount.endSemester} onYear={(value) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, endYear: value } : item) })} onSemester={(value) => patchBudget({ discounts: budget.discounts.map((item, candidate) => candidate === index ? { ...item, endSemester: value } : item) })} /></td><td><button className="text-button danger-text" type="button" disabled={!editable} onClick={() => patchBudget({ discounts: budget.discounts.filter((_, candidate) => candidate !== index) })}>Quitar</button></td></tr>) : <tr><td colSpan={6}>No hay descuentos.</td></tr>}</tbody></table></div></section>
 
     <section className="panel"><SectionHeading number="7" id="ingresos-extra" title="Ingresos extraordinarios" description="Becas externas, convenios, aportes y otros ingresos." action={<button className="button secondary" type="button" disabled={!editable} onClick={() => patchBudget({ externalIncome: [...budget.externalIncome, { id: uid("income"), type: "Ingreso extraordinario", description: "Nuevo ingreso", year: result.years[0] ?? budget.startYear, semester: 1, students: 1, amountPerStudent: 0, source: "" }] })}>Agregar ingreso</button>} /><div className="table-wrap"><table className="data-table editable-list"><thead><tr><th>Tipo y descripción</th><th>Periodo</th><th>Estudiantes</th><th>Monto unitario</th><th>Fuente</th><th>Acción</th></tr></thead><tbody>{budget.externalIncome.length ? budget.externalIncome.map((income, index) => <tr key={income.id}><td><select disabled={!editable} value={income.type} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, type: event.target.value as ExternalIncome["type"] } : item) })}>{INCOME_TYPES.map((type) => <option key={type}>{type}</option>)}</select><input disabled={!editable} value={income.description} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, description: event.target.value } : item) })} /></td><td><PeriodInputs disabled={!editable} years={result.years} year={income.year} semester={income.semester} onYear={(value) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, year: value } : item) })} onSemester={(value) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, semester: value } : item) })} /></td><td><input disabled={!editable} type="number" min="0" value={income.students} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, students: numberValue(event.target.value) } : item) })} /></td><td><input disabled={!editable} type="number" min="0" value={income.amountPerStudent} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, amountPerStudent: numberValue(event.target.value) } : item) })} /></td><td><input disabled={!editable} value={income.source} onChange={(event) => patchBudget({ externalIncome: budget.externalIncome.map((item, candidate) => candidate === index ? { ...item, source: event.target.value } : item) })} /></td><td><button className="text-button danger-text" type="button" disabled={!editable} onClick={() => patchBudget({ externalIncome: budget.externalIncome.filter((_, candidate) => candidate !== index) })}>Quitar</button></td></tr>) : <tr><td colSpan={6}>No hay ingresos extraordinarios.</td></tr>}</tbody></table></div></section>
 

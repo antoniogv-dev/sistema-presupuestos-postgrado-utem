@@ -1,10 +1,18 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10.26 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.27 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
 
 
-## Mejoras funcionales v10.26
+## Mejoras funcionales v10.27
+
+- **Aplicación de malla desde la fuente vigente:** `Aplicar malla curricular` vuelve a consultar el programa directamente en D1 antes de recalcular el presupuesto, evitando trabajar con una copia antigua cargada en pantalla.
+- **Carga docente visible por tipo:** cuando existe malla vinculada se muestran horas presenciales, sincrónicas y asincrónicas aunque la modalidad global del presupuesto sea Presencial; esto evita que horas correctamente aplicadas queden ocultas.
+- **Diagnóstico al aplicar:** el sistema informa cuántas horas presenciales, sincrónicas y asincrónicas equivalentes incorporó, o advierte si la malla no contiene horas valorizables.
+- **Sugerencia de equilibrio desde la malla:** los Magísteres Profesionales incorporan `Sugerir equilibrio`, que aplica la malla vigente y calcula las matrículas equivalentes mínimas sin modificar automáticamente la matrícula.
+- **Graduación autocompletada:** al modificar Estudiantes iniciales, el último semestre recibe la misma cantidad en Estudiantes en graduación; los ajustes de periodos anteriores se conservan.
+- **Descuento por toda la duración:** un descuento nuevo finaliza por defecto en el último semestre configurado de la cohorte, aunque sigue siendo editable manualmente.
+- **Importación curricular más explícita:** al importar una malla en Programas se indica claramente que debe presionarse `Guardar modificaciones` para persistirla en D1.
 
 - **Malla curricular como dato maestro del programa:** cada programa puede almacenar asignaturas obligatorias, electivas, especializaciones y competencias genéricas, con semestre, semanas, secciones, horas semanales, SCT y requisitos.
 - **Importación de malla curricular:** `Programas` permite importar `.xlsx`, `.xlsm` y `.csv` con estructuras equivalentes a las utilizadas por curriculistas; la malla importada permanece editable.
@@ -16,7 +24,7 @@ Aplicación institucional para formular, revisar, consolidar y exportar presupue
 - **XLSX institucional mejorado:** la plantilla base es exactamente el archivo mejorado de Ingeniería del Territorio entregado por el usuario, manteniendo estilos, cinco hojas y fórmulas institucionales.
 - **Pruebas preventivas:** se incorporan pruebas de importación curricular, factor asincrónico, asignaturas compartidas, competencias genéricas y conciliación del XLSX con el motor financiero.
 - **Migración D1 0010:** crea `ProgramCourse` y sus restricciones de integridad.
-- **Control de despliegue:** versión `v10.26 · 1.0.36-d1-web`.
+- **Control de despliegue:** versión `v10.27 · 1.0.37-d1-web`.
 
 ## Mejoras funcionales v10.25
 

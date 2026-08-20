@@ -568,3 +568,7 @@ input,select,textarea{min-height:36px;padding:6px 9px;margin-top:4px;border-radi
 .curriculum-generic-row td:first-child{box-shadow:inset 3px 0 0 var(--mustard)}
 .curriculum-table .percent-input{display:flex;align-items:center;gap:3px;min-width:72px}.curriculum-table .percent-input input{width:58px}.curriculum-table .percent-input span{font-size:10px}
 @media(max-width:900px){.curriculum-title{display:block}.curriculum-actions{justify-content:flex-start;margin-top:8px}}
+
+/* v10.27 · acciones compactas de carga curricular */
+.section-action-group{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
+@media(max-width:900px){.section-action-group{justify-content:flex-start}}

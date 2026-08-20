@@ -15,6 +15,7 @@
   "include": [
     "lib/calculations/**/*.ts",
     "lib/curriculum/**/*.ts",
+    "lib/budgets/**/*.ts",
     "lib/templates/**/*.ts",
     "lib/demo-data.ts",
     "lib/workflow/**/*.ts",

@@ -17,6 +17,19 @@ function setRate(budget, value) {
   budget.annualOverrides = years.map((year) => ({ ...defaultAnnualOverrideForYear(budget, institutionalParameters, year), directTeachingHourValue: value, synchronousTeachingHourValue: value, asynchronousTeachingHourValue: value }));
 }
 
+test("v10.27 malla sincrónica se valoriza aunque la modalidad global sea presencial", () => {
+  const budget = structuredClone(demoBudget);
+  budget.deliveryModality = "PRESENCIAL";
+  budget.program.curriculumCourses = [course({ teachingMode: "SINCRONICA" })];
+  setRate(budget, 30_000);
+  const applied = applyProgramCurriculumToBudget(budget);
+  assert.equal(applied.semesters[0].directTeachingHours, 0);
+  assert.equal(applied.semesters[0].synchronousTeachingHours, 72);
+  const result = calculateBudget(applied, institutionalParameters);
+  assert.equal(result.annualFlows[0].synchronousTeachingCost, 2_160_000);
+  assert.equal(result.annualFlows[0].directTeachingCost, 2_160_000);
+});
+
 test("v10.26 factor asincrónico 50% transforma $30.000 en costo equivalente $15.000/h", () => {
   const budget = structuredClone(demoBudget);
   budget.deliveryModality = "SEMIPRESENCIAL";

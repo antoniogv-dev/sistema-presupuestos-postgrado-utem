@@ -257,7 +257,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.26"',
+  'FUNCTIONAL_RELEASE = "v10.27"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -277,8 +277,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.26") || !appShellV110.includes("1.0.36-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.26 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.27") || !appShellV110.includes("1.0.37-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.27 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -517,7 +517,7 @@ for (const marker of ["Proyectar reajuste desde valor base", "Valor base manual"
   if (!templateManagerV1018.includes(marker)) fail(`TemplateManager v10.18: falta ${marker}.`);
 }
 const workspaceV1018 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de escala", "/api/workflow/recipients", "v10.26"]) {
+for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de escala", "/api/workflow/recipients", "v10.27"]) {
   if (!workspaceV1018.includes(marker)) fail(`BudgetWorkspace v10.18: falta ${marker}.`);
 }
 const narrativeV1018 = await readFile(path.join(root, "lib/export/financial-narrative.ts"), "utf8");
@@ -583,7 +583,7 @@ for (const marker of [
   "Toda la página quedó sincronizada con este presupuesto",
   "auditBudgetIntegrity",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v10.26"',
+  'FUNCTIONAL_RELEASE = "v10.27"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.23: falta ${marker}.`);
 }
@@ -610,7 +610,7 @@ for (const marker of [
   "setInitialStudentsForAllSemesters",
   "Punto de equilibrio",
   "Viabilidad mínima de dictación",
-  'FUNCTIONAL_RELEASE = "v10.26"',
+  'FUNCTIONAL_RELEASE = "v10.27"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
 }
@@ -745,3 +745,22 @@ if (failures.length) {
 console.log(`Auditoría de código correcta${warnings.length ? `, con ${warnings.length} advertencia(s)` : ""}.`);
 
 
+
+// v10.27: sincronización curricular visible, sugerencia de equilibrio y defaults de graduación/descuentos.
+const budgetWorkspaceV1027 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
+for (const marker of [
+  "applyCurriculumToActiveBudget",
+  "Sugerir equilibrio",
+  "curriculumBreakEvenSuggestion",
+  "synchronizeInitialStudents",
+  "fullProgramDiscountRange",
+  "Horas sincrónicas",
+  "Horas asincrónicas",
+]) {
+  if (!budgetWorkspaceV1027.includes(marker)) fail(`Presupuestos v10.27: falta ${marker}.`);
+}
+
+const formDefaultsV1027 = await readFile(path.join(root, "lib/budgets/form-defaults.ts"), "utf8");
+for (const marker of ["graduatingStudents: index === lastIndex ? value", "endYear: last.year", "endSemester: last.semester"]) {
+  if (!formDefaultsV1027.includes(marker)) fail(`Defaults v10.27: falta ${marker}.`);
+}

@@ -55,7 +55,7 @@ export function CurriculumEditor({
       if (courses.length && !window.confirm(`Se detectaron ${analysis.courses.length} registros en “${analysis.sheetName}”. ¿Reemplazar la malla actualmente editada?`)) return;
       const imported = analysis.courses.map((course, position) => ({ ...course, id: uid(), position }));
       onChange(imported);
-      onMessage(`Malla importada: ${imported.length} registros · confianza ${Math.round(analysis.confidence * 100)}%. ${analysis.warnings.join(" ")}`.trim());
+      onMessage(`Malla importada al formulario: ${imported.length} registros · confianza ${Math.round(analysis.confidence * 100)}%. Presione “Guardar modificaciones” para persistirla en D1 antes de aplicarla a un presupuesto. ${analysis.warnings.join(" ")}`.trim());
     } catch (reason) {
       onMessage(reason instanceof Error ? reason.message : "No fue posible importar la malla curricular.", true);
     } finally { setImporting(false); if (fileRef.current) fileRef.current.value = ""; }
