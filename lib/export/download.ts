@@ -5,7 +5,7 @@ import type { ConsolidationGroup } from "../calculations/consolidation";
 import { createFinancialReportPdf } from "./pdf";
 import { buildFinancialReport, buildParameterReport, compactParameterReportForPdf, type FinancialReport } from "./report-model";
 import { createFinancialReportXlsx } from "./xlsx";
-import { canUseFormulaTemplate, createInstitutionalFormulaBudgetXlsx } from "./institutional-budget-xlsx";
+import { createInstitutionalFormulaBudgetXlsx, institutionalTemplateCompatibilityIssue } from "./institutional-budget-xlsx";
 import { buildFinancialNarrative } from "./financial-narrative";
 
 function slug(value: string): string {
@@ -44,20 +44,38 @@ function institutionalBudgetFilename(budget: CohortBudget): string {
   return `${budget.startYear} - ${programName}.xlsx`;
 }
 
+const INSTITUTIONAL_TEMPLATE_URL = "/templates/presupuesto-profesional-formula-base-v10-30.xlsx?v=24e7b6a886161646";
+const INSTITUTIONAL_TEMPLATE_SHA256 = "24e7b6a886161646d2db9ff9015d261ecaebdb86b6548bd292baddbd5d89853e";
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  const digest = await crypto.subtle.digest("SHA-256", copy.buffer);
+  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
 async function loadInstitutionalBudgetXlsxTemplate(): Promise<Uint8Array> {
-  const response = await fetch("/templates/presupuesto-profesional-formula-base.xlsx", { cache: "force-cache" });
-  if (!response.ok) throw new Error("No fue posible cargar la plantilla institucional de Excel.");
-  return new Uint8Array(await response.arrayBuffer());
+  // URL versionada + no-store: evita reutilizar la plantilla v10.25 que no contenía B17.
+  const response = await fetch(INSTITUTIONAL_TEMPLATE_URL, { cache: "no-store" });
+  if (!response.ok) throw new Error("No fue posible cargar la plantilla institucional mejorada de Excel.");
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const digest = await sha256Hex(bytes);
+  if (digest !== INSTITUTIONAL_TEMPLATE_SHA256) {
+    throw new Error("PLANTILLA_INSTITUCIONAL_OBSOLETA: el archivo recibido no corresponde a la plantilla mejorada v10.26+. Recargue la aplicación y vuelva a exportar.");
+  }
+  return bytes;
 }
 
 export async function downloadBudgetXlsx(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters) {
-  if (canUseFormulaTemplate(budget, result)) {
+  if (budget.program.type === "MAGISTER_PROFESIONAL") {
+    const compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result);
+    if (compatibilityIssue) throw new Error(compatibilityIssue);
     const template = await loadInstitutionalBudgetXlsxTemplate();
     const bytes = await createInstitutionalFormulaBudgetXlsx(template, budget, result, parameters);
     download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
     return;
   }
-  // Presupuestos con horizontes distintos de dos años conservan la exportación trazable general.
+  // Otros tipos de programa mantienen la exportación trazable general. Un Magíster Profesional nunca cae silenciosamente al formato antiguo.
   const report = buildFinancialReport(budget, result);
   const parameterReport = buildParameterReport(budget, result, parameters);
   download(createFinancialReportXlsx(report, parameterReport), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.xlsx`);

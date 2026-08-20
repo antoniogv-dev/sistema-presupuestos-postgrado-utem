@@ -198,14 +198,19 @@ function discountNameForRate(budget: CohortBudget, rate: number, fallback: strin
   const names = [...new Set(budget.discounts.filter((discount) => Math.abs(discount.percentage - rate) < 1e-9).map((discount) => discount.name.trim()).filter(Boolean))];
   return names.length ? names.join("\n") : fallback;
 }
-function curriculumCapacityOk(budget: CohortBudget): boolean {
-  const courses = budget.program.curriculumCourses ?? [];
-  if (!courses.length) return true;
-  return payableCurriculumCourses(budget.program).length <= 12 && genericCurriculumCourses(budget.program).length <= 3;
+export function institutionalTemplateCompatibilityIssue(budget: CohortBudget, result: BudgetResult): string | null {
+  if (budget.program.type !== "MAGISTER_PROFESIONAL") return "El formato Excel institucional mejorado se utiliza para Magísteres Profesionales.";
+  if (result.years.length !== 2) return "El formato Excel institucional mejorado requiere exactamente dos años presupuestarios.";
+  if (distinctDiscountRates(budget).length > 2) return "El formato Excel institucional mejorado admite hasta dos tasas de descuento diferentes.";
+  const payable = payableCurriculumCourses(budget.program).length;
+  const generic = genericCurriculumCourses(budget.program).length;
+  if (payable > 13) return `La malla contiene ${payable} asignaturas valorizables; la plantilla institucional actual admite hasta 13. No se utilizará silenciosamente el formato antiguo.`;
+  if (generic > 3) return `La malla contiene ${generic} competencias genéricas; la plantilla institucional actual admite hasta 3. No se utilizará silenciosamente el formato antiguo.`;
+  return null;
 }
 
 export function canUseFormulaTemplate(budget: CohortBudget, result: BudgetResult): boolean {
-  return budget.program.type === "MAGISTER_PROFESIONAL" && result.years.length === 2 && distinctDiscountRates(budget).length <= 2 && curriculumCapacityOk(budget);
+  return institutionalTemplateCompatibilityIssue(budget, result) === null;
 }
 
 export async function createInstitutionalFormulaBudgetXlsx(
@@ -214,10 +219,25 @@ export async function createInstitutionalFormulaBudgetXlsx(
   result: BudgetResult,
   parameters: InstitutionalParameters,
 ): Promise<Uint8Array> {
-  if (!canUseFormulaTemplate(budget, result)) throw new Error("El formato Excel institucional mejorado requiere un Magíster Profesional con dos años presupuestarios, hasta dos tasas de descuento, máximo 12 asignaturas valorizables y 3 competencias genéricas.");
+  const compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result);
+  if (compatibilityIssue) throw new Error(compatibilityIssue);
   const files = await unzipPackage(templateBytes);
   const required = ["xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml", "xl/worksheets/sheet3.xml", "xl/worksheets/sheet4.xml", "xl/worksheets/sheet5.xml", "xl/styles.xml"];
   for (const name of required) if (!files.has(name)) throw new Error(`Plantilla XLSX incompleta: falta ${name}.`);
+  const templateChecks = [
+    { file: "xl/worksheets/sheet1.xml", refs: ["B17", "C17"] },
+    { file: "xl/worksheets/sheet3.xml", refs: ["G17", "H17", "G18", "H18"] },
+    { file: "xl/worksheets/sheet4.xml", refs: ["B40", "C40"] },
+    { file: "xl/worksheets/sheet5.xml", refs: ["F22", "F25"] },
+  ];
+  for (const check of templateChecks) {
+    const content = decoder.decode(files.get(check.file)!);
+    for (const ref of check.refs) {
+      if (!cellPattern(ref).test(content)) {
+        throw new Error(`PLANTILLA_INSTITUCIONAL_OBSOLETA: falta ${ref} en ${check.file}. Actualice la plantilla institucional y vuelva a exportar.`);
+      }
+    }
+  }
 
   const [year1, year2] = result.years;
   const flow1 = yearFlow(result, year1); const flow2 = yearFlow(result, year2);
@@ -286,7 +306,7 @@ export async function createInstitutionalFormulaBudgetXlsx(
   const activePeriods = getActivePeriods(budget.startYear, budget.startSemester, budget.durationSemesters);
   const courses = payableCurriculumCourses(budget.program);
   if (courses.length) {
-    for (let row = 4; row <= 15; row += 1) {
+    for (let row = 4; row <= 16; row += 1) {
       const course = courses[row - 4];
       if (!course) { s3 = clearCell(s3, `A${row}`); s3 = clearCell(s3, `B${row}`); s3 = setNumber(s3, `C${row}`, 18); s3 = setNumber(s3, `D${row}`, 1); s3 = setNumber(s3, `E${row}`, 0); s3 = setNumber(s3, `F${row}`, 0); s3 = setFormula(s3, `G${row}`, `+$C$${row}*$D$${row}*E${row}`, 0); s3 = setFormula(s3, `H${row}`, `+$C$${row}*$D$${row}*F${row}`, 0); continue; }
       const period = activePeriods[course.semester - 1]; const participants = 1 + course.sharedWithProgramIds.filter((id) => id !== budget.program.id).length; const allocation = participants > 1 ? Math.max(0, Math.min(1, course.allocationRate || 1 / participants)) : 1;
@@ -302,9 +322,9 @@ export async function createInstitutionalFormulaBudgetXlsx(
     const semesters = [...budget.semesters].sort((a, b) => periodOrdinal(a.year, a.semester) - periodOrdinal(b.year, b.semester));
     const effectiveAnnualHours = new Map<number, number>([[year1, teachingRate1 > 0 ? flow1.directTeachingCost / teachingRate1 : 0], [year2, teachingRate2 > 0 ? flow2.directTeachingCost / teachingRate2 : 0]]);
     const rawAnnualHours = new Map<number, number>([[year1, periodsForYear(budget, year1).reduce((t, item) => t + teachingHoursForSemester(budget, item), 0)], [year2, periodsForYear(budget, year2).reduce((t, item) => t + teachingHoursForSemester(budget, item), 0)]]);
-    for (let row = 4; row <= 15; row += 1) { const semester = semesters[row - 4]; if (!semester) { s3 = clearCell(s3, `A${row}`); s3 = clearCell(s3, `B${row}`); s3 = setNumber(s3, `C${row}`, 18); s3 = setNumber(s3, `D${row}`, 1); s3 = setNumber(s3, `E${row}`, 0); s3 = setNumber(s3, `F${row}`, 0); s3 = setFormula(s3, `G${row}`, `+$C$${row}*$D$${row}*E${row}`, 0); s3 = setFormula(s3, `H${row}`, `+$C$${row}*$D$${row}*F${row}`, 0); continue; } const raw = teachingHoursForSemester(budget, semester); const annualRaw = rawAnnualHours.get(semester.year) ?? 0; const effective = annualRaw > 0 ? raw * (effectiveAnnualHours.get(semester.year) ?? 0) / annualRaw : 0; const weekly = effective / 18; s3 = setNumber(s3, `A${row}`, semester.semester); s3 = setText(s3, `B${row}`, `Docencia ${semester.year}-${semester.semester}S`); s3 = setNumber(s3, `C${row}`, 18); s3 = setNumber(s3, `D${row}`, 1); s3 = setNumber(s3, `E${row}`, semester.year === year1 ? weekly : 0); s3 = setNumber(s3, `F${row}`, semester.year === year2 ? weekly : 0); s3 = setFormula(s3, `G${row}`, `+$C$${row}*$D$${row}*E${row}`, semester.year === year1 ? effective : 0); s3 = setFormula(s3, `H${row}`, `+$C$${row}*$D$${row}*F${row}`, semester.year === year2 ? effective : 0); }
+    for (let row = 4; row <= 16; row += 1) { const semester = semesters[row - 4]; if (!semester) { s3 = clearCell(s3, `A${row}`); s3 = clearCell(s3, `B${row}`); s3 = setNumber(s3, `C${row}`, 18); s3 = setNumber(s3, `D${row}`, 1); s3 = setNumber(s3, `E${row}`, 0); s3 = setNumber(s3, `F${row}`, 0); s3 = setFormula(s3, `G${row}`, `+$C$${row}*$D$${row}*E${row}`, 0); s3 = setFormula(s3, `H${row}`, `+$C$${row}*$D$${row}*F${row}`, 0); continue; } const raw = teachingHoursForSemester(budget, semester); const annualRaw = rawAnnualHours.get(semester.year) ?? 0; const effective = annualRaw > 0 ? raw * (effectiveAnnualHours.get(semester.year) ?? 0) / annualRaw : 0; const weekly = effective / 18; s3 = setNumber(s3, `A${row}`, semester.semester); s3 = setText(s3, `B${row}`, `Docencia ${semester.year}-${semester.semester}S`); s3 = setNumber(s3, `C${row}`, 18); s3 = setNumber(s3, `D${row}`, 1); s3 = setNumber(s3, `E${row}`, semester.year === year1 ? weekly : 0); s3 = setNumber(s3, `F${row}`, semester.year === year2 ? weekly : 0); s3 = setFormula(s3, `G${row}`, `+$C$${row}*$D$${row}*E${row}`, semester.year === year1 ? effective : 0); s3 = setFormula(s3, `H${row}`, `+$C$${row}*$D$${row}*F${row}`, semester.year === year2 ? effective : 0); }
   }
-  s3 = setFormula(s3, "G17", "SUM(G4:G15)", teachingRate1 > 0 ? flow1.directTeachingCost / teachingRate1 : 0); s3 = setFormula(s3, "H17", "SUM(H4:H15)", teachingRate2 > 0 ? flow2.directTeachingCost / teachingRate2 : 0);
+  s3 = setFormula(s3, "G17", "SUM(G4:G16)", teachingRate1 > 0 ? flow1.directTeachingCost / teachingRate1 : 0); s3 = setFormula(s3, "H17", "SUM(H4:H16)", teachingRate2 > 0 ? flow2.directTeachingCost / teachingRate2 : 0);
   s3 = setFormula(s3, "G18", "+G17*Parámetros!B6", flow1.directTeachingCost); s3 = setFormula(s3, "H18", "+H17*Parámetros!C6", flow2.directTeachingCost);
   const generic = genericCurriculumCourses(budget.program);
   for (let row = 22; row <= 24; row += 1) { const course = generic[row - 22]; if (!course) { s3 = clearCell(s3, `A${row}`); s3 = clearCell(s3, `B${row}`); s3 = setNumber(s3, `C${row}`, 0); s3 = setNumber(s3, `D${row}`, 0); } else { s3 = setText(s3, `A${row}`, course.code ?? ""); s3 = setText(s3, `B${row}`, course.name); s3 = setNumber(s3, `C${row}`, course.directWeeklyHours); s3 = setNumber(s3, `D${row}`, 0); } }

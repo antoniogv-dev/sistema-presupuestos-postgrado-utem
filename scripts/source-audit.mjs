@@ -257,7 +257,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.29"',
+  'FUNCTIONAL_RELEASE = "v10.30"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -277,8 +277,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.29") || !appShellV110.includes("1.0.39-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.29 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.30") || !appShellV110.includes("1.0.40-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.30 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -583,7 +583,7 @@ for (const marker of [
   "Toda la página quedó sincronizada con este presupuesto",
   "auditBudgetIntegrity",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v10.29"',
+  'FUNCTIONAL_RELEASE = "v10.30"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.23: falta ${marker}.`);
 }
@@ -610,7 +610,7 @@ for (const marker of [
   "setInitialStudentsForAllSemesters",
   "Punto de equilibrio",
   "Viabilidad mínima de dictación",
-  'FUNCTIONAL_RELEASE = "v10.29"',
+  'FUNCTIONAL_RELEASE = "v10.30"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
 }
@@ -681,14 +681,16 @@ for (const marker of [
   if (!institutionalXlsxV1025.includes(marker)) fail(`Exportación XLSX institucional v10.25: falta ${marker}.`);
 }
 for (const marker of [
-  "/templates/presupuesto-profesional-formula-base.xlsx",
+  "/templates/presupuesto-profesional-formula-base-v10-30.xlsx",
+  "cache: \"no-store\"",
+  "INSTITUTIONAL_TEMPLATE_SHA256",
   "createInstitutionalFormulaBudgetXlsx",
   "institutionalBudgetFilename",
-  "canUseFormulaTemplate",
+  "institutionalTemplateCompatibilityIssue",
 ]) {
   if (!downloadV112.includes(marker)) fail(`download.ts v10.25: falta integración institucional ${marker}.`);
 }
-const formulaTemplateV1025 = await readFile(path.join(root, "public/templates/presupuesto-profesional-formula-base.xlsx"));
+const formulaTemplateV1025 = await readFile(path.join(root, "public/templates/presupuesto-profesional-formula-base-v10-30.xlsx"));
 if (formulaTemplateV1025.byteLength < 20000) fail("Plantilla XLSX v10.25: el archivo institucional parece incompleto.");
 const formulaTemplateHashV1025 = createHash("sha256").update(formulaTemplateV1025).digest("hex");
 const expectedFormulaTemplateHashV1025 = "24e7b6a886161646d2db9ff9015d261ecaebdb86b6548bd292baddbd5d89853e";
@@ -700,6 +702,19 @@ if (!(packageJson.scripts?.["test:institutional-xlsx"] ?? "").includes("institut
 }
 if (!(packageJson.scripts?.["quality:cloudflare"] ?? "").includes("test:institutional-xlsx")) {
   fail("package.json v10.25: quality:cloudflare debe ejecutar test:institutional-xlsx.");
+}
+// v10.30: no reutilizar plantilla XLSX antigua en caché ni volver silenciosamente al exportador general.
+for (const marker of [
+  "presupuesto-profesional-formula-base-v10-30.xlsx",
+  'cache: "no-store"',
+  "INSTITUTIONAL_TEMPLATE_SHA256",
+  "PLANTILLA_INSTITUCIONAL_OBSOLETA",
+  "Un Magíster Profesional nunca cae silenciosamente al formato antiguo",
+]) {
+  if (!downloadV112.includes(marker) && !institutionalXlsxV1025.includes(marker)) fail(`XLSX v10.30: falta control anti-regresión ${marker}.`);
+}
+for (const marker of ["payable > 13", "row <= 16", "SUM(G4:G16)", "SUM(H4:H16)"]) {
+  if (!institutionalXlsxV1025.includes(marker)) fail(`XLSX v10.30: falta capacidad curricular ${marker}.`);
 }
 
 
@@ -767,16 +782,16 @@ for (const marker of ["curriculumCourseWeeklyDirectHours", "theoryWeeklyHours", 
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.28: falta ${marker}.`);
 }
 const budgetWorkspaceV1028 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v10.29"']) {
+for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v10.30"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.28: falta ${marker}.`);
 }
 
-// v10.29: consolidación semestral de malla en la bolsa docente efectiva.
+// v10.30: consolidación semestral de malla en la bolsa docente efectiva.
 for (const marker of ["curriculumCourseAppliedMode", 'modality === "PRESENCIAL"', 'return "PRESENCIAL"']) {
-  if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.29: falta ${marker}.`);
+  if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.30: falta ${marker}.`);
 }
-for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v10.29"']) {
-  if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.29: falta ${marker}.`);
+for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v10.30"']) {
+  if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.30: falta ${marker}.`);
 }
 
 for (const message of warnings) console.warn(`ADVERTENCIA: ${message}`);

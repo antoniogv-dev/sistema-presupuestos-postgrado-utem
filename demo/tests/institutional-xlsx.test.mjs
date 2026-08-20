@@ -13,7 +13,7 @@ const { calculateBudget } = await import(path.join(root, ".engine-build/lib/calc
 const { applyProgramCurriculumToBudget } = await import(path.join(root, ".engine-build/lib/curriculum/budget-load.js"));
 const { createInstitutionalFormulaBudgetXlsx, canUseFormulaTemplate } = await import(path.join(root, ".engine-build/lib/export/institutional-budget-xlsx.js"));
 
-const templatePath = path.join(root, "public/templates/presupuesto-profesional-formula-base.xlsx");
+const templatePath = path.join(root, "public/templates/presupuesto-profesional-formula-base-v10-30.xlsx");
 const template = new Uint8Array(readFileSync(templatePath));
 
 function u16(view, offset) { return view.getUint16(offset, true); }
@@ -62,6 +62,14 @@ function cachedNumber(sheet, ref) {
 }
 function stripSheetData(xml) { return xml.replace(/<sheetData>[\s\S]*?<\/sheetData>/, "<sheetData/>"); }
 
+test("v10.30 usa exclusivamente la plantilla institucional mejorada y versionada", () => {
+  assert.equal(sha(template), "24e7b6a886161646d2db9ff9015d261ecaebdb86b6548bd292baddbd5d89853e");
+  const files = unzip(template);
+  const parametersXml = text(files, "xl/worksheets/sheet1.xml");
+  assert.match(parametersXml, /\br="B17"/);
+  assert.match(parametersXml, /\br="C17"/);
+});
+
 let budget = structuredClone(demoBudget);
 budget.deliveryModality = "SEMIPRESENCIAL";
 budget.externalIncome = [];
@@ -74,7 +82,40 @@ budget.program.curriculumCourses = [
 budget = applyProgramCurriculumToBudget(budget);
 const result = calculateBudget(budget, institutionalParameters);
 
-test("v10.26 genera XLSX institucional mejorado, con malla y fórmulas coherentes", async () => {
+test("v10.30 mantiene el formato institucional con 13 asignaturas valorizables", async () => {
+  const extended = structuredClone(budget);
+  extended.program.curriculumCourses = Array.from({ length: 13 }, (_, index) => ({
+    id: `curr-${index + 1}`,
+    code: `CUR${String(index + 1).padStart(3, "0")}`,
+    name: `Asignatura ${index + 1}`,
+    semester: ((index % 4) + 1),
+    kind: index === 12 ? "ELECTIVA" : "OBLIGATORIA",
+    weeks: 18,
+    sections: index === 12 ? 2 : 1,
+    theoryWeeklyHours: 2,
+    laboratoryWeeklyHours: 0,
+    workshopWeeklyHours: 2,
+    directWeeklyHours: 4,
+    autonomousWeeklyHours: 4,
+    teachingMode: "SINCRONICA",
+    asynchronousRateFactor: 0.5,
+    sharedWithProgramIds: [],
+    allocationRate: 1,
+    sctCredits: 4,
+    position: index,
+  }));
+  const applied = applyProgramCurriculumToBudget(extended);
+  const extendedResult = calculateBudget(applied, institutionalParameters);
+  assert.equal(canUseFormulaTemplate(applied, extendedResult), true);
+  const generated = await createInstitutionalFormulaBudgetXlsx(template, applied, extendedResult, institutionalParameters);
+  const out = unzip(generated);
+  const teachingXml = text(out, "xl/worksheets/sheet3.xml");
+  assert.ok(teachingXml.includes("Asignatura 13"), "la fila 16 debe admitir la asignatura valorizable 13");
+  assert.match(teachingXml, /<c(?=[^>]*\br="G17")[^>]*>[\s\S]*?<f>SUM\(G4:G16\)<\/f>/);
+  assert.match(teachingXml, /<c(?=[^>]*\br="H17")[^>]*>[\s\S]*?<f>SUM\(H4:H16\)<\/f>/);
+});
+
+test("v10.30 genera XLSX institucional mejorado, con malla y fórmulas coherentes", async () => {
   assert.equal(canUseFormulaTemplate(budget, result), true);
   const generated = await createInstitutionalFormulaBudgetXlsx(template, budget, result, institutionalParameters);
   assert.ok(generated.byteLength > template.byteLength, "el XLSX generado debe contener fórmulas/cachés dinámicos");
