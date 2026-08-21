@@ -6,17 +6,33 @@ import { createFinancialReportPdf } from "./pdf";
 import { buildFinancialReport, buildParameterReport, compactParameterReportForPdf, type FinancialReport } from "./report-model";
 import { createFinancialReportXlsx } from "./xlsx";
 import { createInstitutionalFormulaBudgetXlsx, institutionalTemplateCompatibilityIssue } from "./institutional-budget-xlsx";
-import { buildFinancialNarrative } from "./financial-narrative";
+import { buildFinancialNarrative, buildHistoricalCohortSnapshots } from "./financial-narrative";
+import { createBudgetMemorandumDocx } from "./memorandum";
 
 function slug(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+export function normalizeDownloadFilename(filename: string): string {
+  let decoded = filename;
+  try { decoded = decodeURIComponent(filename); } catch { decoded = filename.replaceAll("%20", " "); }
+  return decoded
+    .replaceAll("%20", " ")
+    .replace(/[\\/:*?"<>|]+/g, " - ")
+    .replace(/\s+/g, " ")
+    .replace(/\s+-\s+-\s+/g, " - ")
+    .trim();
+}
+
+function humanBudgetFilename(budget: CohortBudget, extension: string): string {
+  return normalizeDownloadFilename(`${budget.startYear} - ${budget.program.name} - Cohorte ${budget.startYear}-${budget.startSemester}S - Versión ${budget.programVersionLabel}.${extension}`);
 }
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = filename;
+  anchor.download = normalizeDownloadFilename(filename);
   anchor.style.display = "none";
   document.body.appendChild(anchor);
   anchor.click();
@@ -78,7 +94,7 @@ export async function downloadBudgetXlsx(budget: CohortBudget, result: BudgetRes
   // Otros tipos de programa mantienen la exportación trazable general. Un Magíster Profesional nunca cae silenciosamente al formato antiguo.
   const report = buildFinancialReport(budget, result);
   const parameterReport = buildParameterReport(budget, result, parameters);
-  download(createFinancialReportXlsx(report, parameterReport), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.xlsx`);
+  download(createFinancialReportXlsx(report, parameterReport), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", humanBudgetFilename(budget, "xlsx"));
 }
 
 async function loadBudgetPdfCover() {
@@ -92,7 +108,12 @@ async function loadBudgetPdfCover() {
   };
 }
 
-export async function downloadBudgetPdf(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters) {
+export async function downloadBudgetPdf(
+  budget: CohortBudget,
+  result: BudgetResult,
+  parameters: InstitutionalParameters,
+  allBudgets: CohortBudget[] = [],
+) {
   const report = buildFinancialReport(budget, result);
   const completeParameterReport = buildParameterReport(budget, result, parameters);
   const parameterReport = compactParameterReportForPdf(completeParameterReport);
@@ -102,8 +123,23 @@ export async function downloadBudgetPdf(budget: CohortBudget, result: BudgetResu
     title: budget.program.name,
     subtitle: `Versión ${budget.programVersionLabel}\nCohorte ${budget.startYear}-${budget.startSemester}S`,
   };
-  const narrative = buildFinancialNarrative(budget, result, parameters);
-  download(createFinancialReportPdf(report, parameterReport, cover, narrative), "application/pdf", `${slug(budget.program.code)}-${budget.startYear}-${budget.startSemester}s-version-${slug(budget.programVersionLabel)}-r${budget.version}.pdf`);
+  const history = buildHistoricalCohortSnapshots(budget, allBudgets, parameters);
+  const narrative = buildFinancialNarrative(budget, result, parameters, history);
+  download(createFinancialReportPdf(report, parameterReport, cover, narrative), "application/pdf", humanBudgetFilename(budget, "pdf"));
+}
+
+const MEMORANDUM_TEMPLATE_URL = "/templates/memorandum-presupuesto-base-v10-31.docx?v=10.31";
+async function loadMemorandumTemplate(): Promise<Uint8Array> {
+  const response = await fetch(MEMORANDUM_TEMPLATE_URL, { cache: "no-store" });
+  if (!response.ok) throw new Error("No fue posible cargar la plantilla institucional de memorándum.");
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+export async function downloadBudgetMemorandum(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters) {
+  const template = await loadMemorandumTemplate();
+  const bytes = await createBudgetMemorandumDocx(template, budget, result, parameters);
+  const filename = `Memorándum - Proyección presupuestaria - ${budget.program.name} - Cohorte ${budget.startYear}-${budget.startSemester}S.docx`;
+  download(bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", filename);
 }
 
 function csvCell(value: unknown): string {

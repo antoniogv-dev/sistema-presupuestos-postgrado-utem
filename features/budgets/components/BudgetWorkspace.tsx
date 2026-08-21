@@ -22,7 +22,7 @@ import type {
   TuitionSource,
 } from "@/lib/calculations/types";
 import { institutionalParameters as fallbackParameters } from "@/lib/demo-data";
-import { downloadBudgetPdf, downloadBudgetXlsx } from "@/lib/export/download";
+import { downloadBudgetMemorandum, downloadBudgetPdf, downloadBudgetXlsx } from "@/lib/export/download";
 import type { ApiBudgetRecord, ApiIdentity, ApiProgram } from "@/lib/mappers/budget-api";
 import { numberValue, responseBody, toBudget, toProgram } from "@/lib/mappers/budget-api";
 import { tuitionSourceLabel } from "@/lib/programs/tuition-source";
@@ -34,7 +34,7 @@ import { applyProgramCurriculumToBudget, curriculumCourseAppliedMode, curriculum
 import { fullProgramDiscountRange, synchronizeInitialStudents, synchronizeLastSemesterGraduation } from "@/lib/budgets/form-defaults";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.30";
+const FUNCTIONAL_RELEASE = "v10.31";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -679,12 +679,13 @@ export function BudgetWorkspace() {
     setMessage(`Costo “${item.name}” quitado del flujo. Presione “Guardar cambios” para persistir la eliminación.`);
   }
 
-  async function exportBudget(format: "xlsx" | "pdf") {
+  async function exportBudget(format: "xlsx" | "pdf" | "memo") {
     if (!budget || !result) return;
     try {
       if (format === "xlsx") await downloadBudgetXlsx(budget, result, parameters);
-      else await downloadBudgetPdf(budget, result, parameters);
-      setMessage(`Exportación ${format.toUpperCase()} generada.`);
+      else if (format === "pdf") await downloadBudgetPdf(budget, result, parameters, budgetsForChecks);
+      else await downloadBudgetMemorandum(budget, result, parameters);
+      setMessage(format === "memo" ? "Memorándum institucional generado." : `Exportación ${format.toUpperCase()} generada.`);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "No fue posible generar la exportación.");
     }
@@ -748,7 +749,7 @@ export function BudgetWorkspace() {
         <small>{dirty ? "Cambios locales sin guardar. Sólo afectan este presupuesto hasta que presione Guardar cambios." : "Datos cargados desde D1. La edición está aislada de los demás presupuestos."}</small>
         {dirty ? <span className="badge dirty-badge">Cambios sin guardar</span> : <span className="badge approved">Presupuesto cargado</span>}
       </div>
-      <div className="workspace-actions"><button className="button secondary" type="button" onClick={() => void exportBudget("xlsx")}>Exportar XLSX</button><button className="button secondary" type="button" onClick={() => void exportBudget("pdf")}>Exportar PDF</button><button className="button secondary" type="button" disabled={dirty || blockingIntegrityIssues.length > 0} onClick={() => void openMailDialog()}>Enviar por correo</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void cloneBudget()}>Clonar presupuesto</button><button className="button primary" type="button" disabled={!editable || saving || blockingIntegrityIssues.length > 0} onClick={() => void saveBudget()}>{saving ? "Guardando…" : "Guardar cambios"}</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void createBudget()}>Nuevo presupuesto</button><button className="text-button danger-text" type="button" disabled={!deletable} onClick={() => void deleteBudget()}>Eliminar</button></div>
+      <div className="workspace-actions"><button className="button secondary" type="button" onClick={() => void exportBudget("xlsx")}>Exportar XLSX</button><button className="button secondary" type="button" onClick={() => void exportBudget("pdf")}>Exportar PDF</button><button className="button secondary" type="button" onClick={() => void exportBudget("memo")}>Generar memorándum</button><button className="button secondary" type="button" disabled={dirty || blockingIntegrityIssues.length > 0} onClick={() => void openMailDialog()}>Enviar por correo</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void cloneBudget()}>Clonar presupuesto</button><button className="button primary" type="button" disabled={!editable || saving || blockingIntegrityIssues.length > 0} onClick={() => void saveBudget()}>{saving ? "Guardando…" : "Guardar cambios"}</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void createBudget()}>Nuevo presupuesto</button><button className="text-button danger-text" type="button" disabled={!deletable} onClick={() => void deleteBudget()}>Eliminar</button></div>
     </section>
 
     {integrityIssues.length ? <section className="panel integrity-panel"><div className="notice warning"><strong>Auditoría de integridad del presupuesto</strong><ul>{integrityIssues.map((issue) => <li key={issue.code}>{issue.message}{issue.suggestedCohortName && editable ? <> <button className="text-button" type="button" onClick={() => patchBudget({ cohortName: issue.suggestedCohortName })}>Usar “{issue.suggestedCohortName}”</button></> : null}</li>)}</ul>{blockingIntegrityIssues.length ? <p><strong>Guardar queda bloqueado hasta resolver las inconsistencias de identidad.</strong></p> : null}</div></section> : null}

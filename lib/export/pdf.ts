@@ -1,5 +1,5 @@
 import type { FinancialReport, FinancialReportRow, ParameterReport, ParameterReportRow } from "./report-model";
-import type { FinancialNarrative, NarrativeSection } from "./financial-narrative";
+import type { FinancialNarrative, NarrativeSection, NarrativeTable } from "./financial-narrative";
 
 const PAGE_WIDTH = 595;
 const PAGE_HEIGHT = 842;
@@ -304,7 +304,7 @@ function createNarrativePages(narrative: FinancialNarrative): string[][] {
 function createNarrativePageContent(narrative: FinancialNarrative, lines: string[], page: number, totalPages: number): string {
   let content = "";
   content += drawText(narrative.title, MARGIN, PAGE_HEIGHT - MARGIN - 10, 16, true);
-  content += drawText("Relato técnico-financiero construido exclusivamente desde el presupuesto y sus parámetros", MARGIN, PAGE_HEIGHT - MARGIN - 28, 8, false);
+  content += drawText("Relato descriptivo construido desde el presupuesto y las cohortes aprobadas disponibles en D1", MARGIN, PAGE_HEIGHT - MARGIN - 28, 8, false);
   let y = PAGE_HEIGHT - MARGIN - 55;
   for (const encoded of lines) {
     const bold = encoded.startsWith("B|");
@@ -312,6 +312,44 @@ function createNarrativePageContent(narrative: FinancialNarrative, lines: string
     if (!text) { y -= 5; continue; }
     content += drawText(text, MARGIN, y, bold ? 10 : 8.5, bold);
     y -= 12;
+  }
+  content += drawRightText(`Página ${page} de ${totalPages}`, PAGE_WIDTH - MARGIN, 14, 7, false);
+  return content;
+}
+
+function createNarrativeTablePageContent(table: NarrativeTable, page: number, totalPages: number): string {
+  const tableWidth = PAGE_WIDTH - MARGIN * 2;
+  const firstWidth = 132;
+  const otherWidth = (tableWidth - firstWidth) / Math.max(1, table.headers.length - 1);
+  const widths = table.headers.map((_, index) => index === 0 ? firstWidth : otherWidth);
+  const headerHeight = 28;
+  const rowHeight = 31;
+  let y = PAGE_HEIGHT - MARGIN - 28;
+  let content = "";
+  content += drawText(table.title, MARGIN, y, 16, true);
+  content += drawText("Serie histórica de cohortes aprobadas del mismo programa", MARGIN, y - 18, 8, false);
+  y -= 50;
+  let x = MARGIN;
+  table.headers.forEach((header, index) => {
+    const width = widths[index];
+    content += rect(x, y, width, headerHeight, COLORS.navy, COLORS.navy);
+    const lines = wrapText(header, width - 8, 7);
+    lines.slice(0, 2).forEach((line, lineIndex) => { content += `1 1 1 rg\n${drawText(line, x + 4, y + headerHeight - 10 - lineIndex * 9, 7, true)}`; });
+    x += width;
+  });
+  for (const row of table.rows) {
+    y -= rowHeight;
+    x = MARGIN;
+    row.forEach((value, index) => {
+      const width = widths[index] ?? otherWidth;
+      const fill = index === 0 ? COLORS.section : COLORS.white;
+      content += rect(x, y, width, rowHeight, fill);
+      const lines = wrapText(value, width - 8, index === 0 ? 7 : 6.5);
+      lines.slice(0, 3).forEach((line, lineIndex) => {
+        content += `0 0 0 rg\n${drawText(line, x + 4, y + rowHeight - 10 - lineIndex * 8, index === 0 ? 7 : 6.5, index === 0)}`;
+      });
+      x += width;
+    });
   }
   content += drawRightText(`Página ${page} de ${totalPages}`, PAGE_WIDTH - MARGIN, 14, 7, false);
   return content;
@@ -381,9 +419,11 @@ export function createFinancialReportPdf(report: FinancialReport, parameterRepor
   }
 
   const narrativePages = narrative ? createNarrativePages(narrative) : [];
+  const comparisonTable = narrative?.comparisonTable;
+  const comparisonTablePages = comparisonTable ? 1 : 0;
   const parameterPages = parameterReport ? paginateParameterRows(parameterReport.rows) : [];
   const hasCover = Boolean(cover?.jpegBytes.length);
-  const totalPages = financialPageSpecs.length + narrativePages.length + parameterPages.length + (hasCover ? 1 : 0);
+  const totalPages = financialPageSpecs.length + narrativePages.length + comparisonTablePages + parameterPages.length + (hasCover ? 1 : 0);
 
   const regularPageContents: string[] = [];
   const pageOffset = hasCover ? 1 : 0;
@@ -393,8 +433,11 @@ export function createFinancialReportPdf(report: FinancialReport, parameterRepor
   narrativePages.forEach((lines, index) => {
     regularPageContents.push(createNarrativePageContent(narrative!, lines, pageOffset + financialPageSpecs.length + index + 1, totalPages));
   });
+  if (comparisonTable) {
+    regularPageContents.push(createNarrativeTablePageContent(comparisonTable, pageOffset + financialPageSpecs.length + narrativePages.length + 1, totalPages));
+  }
   parameterPages.forEach((rows, index) => {
-    regularPageContents.push(createParameterPageContent(parameterReport!, rows, pageOffset + financialPageSpecs.length + narrativePages.length + index + 1, totalPages));
+    regularPageContents.push(createParameterPageContent(parameterReport!, rows, pageOffset + financialPageSpecs.length + narrativePages.length + comparisonTablePages + index + 1, totalPages));
   });
 
   const regularStartId = hasCover ? 8 : 5;

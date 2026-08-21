@@ -257,7 +257,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.30"',
+  'FUNCTIONAL_RELEASE = "v10.31"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -277,8 +277,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.30") || !appShellV110.includes("1.0.40-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.30 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.31") || !appShellV110.includes("1.0.41-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.31 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -521,7 +521,7 @@ for (const marker of ["Clonar presupuesto", "Enviar por correo", "Economías de 
   if (!workspaceV1018.includes(marker)) fail(`BudgetWorkspace v10.18: falta ${marker}.`);
 }
 const narrativeV1018 = await readFile(path.join(root, "lib/export/financial-narrative.ts"), "utf8");
-for (const marker of ["Análisis financiero y principales consideraciones", "arancel bruto", "Conclusión financiera", "equilibrio financiero de bajo margen"]) {
+for (const marker of ["Análisis económico-financiero de la cohorte", "arancel", "Resultado económico", "Variaciones entre cohortes"]) {
   if (!narrativeV1018.includes(marker)) fail(`Relato financiero v10.18: falta ${marker}.`);
 }
 const migrationV1018 = await readFile(path.join(root, "migrations/0008_templates_modalities_scale_notifications.sql"), "utf8");
@@ -583,7 +583,7 @@ for (const marker of [
   "Toda la página quedó sincronizada con este presupuesto",
   "auditBudgetIntegrity",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v10.30"',
+  'FUNCTIONAL_RELEASE = "v10.31"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.23: falta ${marker}.`);
 }
@@ -610,7 +610,7 @@ for (const marker of [
   "setInitialStudentsForAllSemesters",
   "Punto de equilibrio",
   "Viabilidad mínima de dictación",
-  'FUNCTIONAL_RELEASE = "v10.30"',
+  'FUNCTIONAL_RELEASE = "v10.31"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
 }
@@ -782,7 +782,7 @@ for (const marker of ["curriculumCourseWeeklyDirectHours", "theoryWeeklyHours", 
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.28: falta ${marker}.`);
 }
 const budgetWorkspaceV1028 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v10.30"']) {
+for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v10.31"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.28: falta ${marker}.`);
 }
 
@@ -790,9 +790,40 @@ for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla recon
 for (const marker of ["curriculumCourseAppliedMode", 'modality === "PRESENCIAL"', 'return "PRESENCIAL"']) {
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.30: falta ${marker}.`);
 }
-for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v10.30"']) {
+for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v10.31"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.30: falta ${marker}.`);
 }
+
+// v10.31: memorándum institucional, relato económico-financiero histórico y nombres de archivo limpios.
+const memorandumV1031 = await readFile(path.join(root, "lib/export/memorandum.ts"), "utf8");
+const memorandumTemplateV1031 = await readFile(path.join(root, "public/templates/memorandum-presupuesto-base-v10-31.docx"));
+const pdfV1031 = await readFile(path.join(root, "lib/export/pdf.ts"), "utf8");
+const importExportV1031 = await readFile(path.join(root, "app/importar-exportar/page.tsx"), "utf8");
+for (const marker of ["createBudgetMemorandumDocx", "MEMORÁNDUM N.º", "Flujo de estudiantes e ingresos", "Costos académicos y docencia", "DR. JORGE RODRÍGUEZ BECERRA"]) {
+  if (!memorandumV1031.includes(marker)) fail(`Memorándum v10.31: falta ${marker}.`);
+}
+if (memorandumTemplateV1031.byteLength < 20000) fail("Memorándum v10.31: la plantilla DOCX institucional parece incompleta.");
+for (const marker of ["downloadBudgetMemorandum", "normalizeDownloadFilename", "memorandum-presupuesto-base-v10-31.docx", 'cache: "no-store"']) {
+  if (!downloadV112.includes(marker)) fail(`Descargas v10.31: falta ${marker}.`);
+}
+for (const marker of ["Generar memorándum", 'exportBudget("memo")']) {
+  if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.31: falta ${marker}.`);
+}
+if (!importExportV1031.includes("Memorándum presupuestario") || !importExportV1031.includes("downloadBudgetMemorandum")) fail("Importar/exportar v10.31: falta acceso al memorándum.");
+for (const marker of ["buildHistoricalCohortSnapshots", 'candidate.status === "Aprobado"', "1. Antecedentes de la cohorte", "7. Variaciones entre cohortes", "comparisonTable"]) {
+  if (!financialNarrativeV1025.includes(marker)) fail(`Relato financiero v10.31: falta ${marker}.`);
+}
+for (const forbidden of ["Conclusión financiera", "esta Vicerrectoría aprueba", "se rechaza"]) {
+  if (financialNarrativeV1025.includes(forbidden)) fail(`Relato financiero v10.31: no debe contener ${forbidden}.`);
+}
+for (const marker of ["createNarrativeTablePageContent", "Serie histórica de cohortes aprobadas del mismo programa", "comparisonTablePages"]) {
+  if (!pdfV1031.includes(marker)) fail(`PDF v10.31: falta ${marker}.`);
+}
+for (const marker of ["Supuestos económicos esenciales utilizados en la formulación", 'if (row.section === "Parámetros institucionales generales") return false', 'if (row.section === "Descuentos de arancel")']) {
+  if (!reportModelV1025.includes(marker)) fail(`Parámetros PDF v10.31: falta control ${marker}.`);
+}
+if (!(packageJson.scripts?.["test:documents"] ?? "").includes("memorandum-export.test.mjs")) fail("package.json v10.31: falta test:documents.");
+if (!(packageJson.scripts?.["quality:cloudflare"] ?? "").includes("test:documents")) fail("package.json v10.31: quality:cloudflare debe ejecutar test:documents.");
 
 for (const message of warnings) console.warn(`ADVERTENCIA: ${message}`);
 if (failures.length) {

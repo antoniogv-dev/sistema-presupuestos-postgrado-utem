@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { calculateBudget } from "@/lib/calculations/budget-engine";
-import { demoBudget, institutionalParameters } from "@/lib/demo-data";
+import { demoBudget, institutionalParameters, secondDemoBudget } from "@/lib/demo-data";
 import { createFinancialReportPdf } from "@/lib/export/pdf";
-import { buildFinancialNarrative } from "@/lib/export/financial-narrative";
+import { buildFinancialNarrative, buildHistoricalCohortSnapshots } from "@/lib/export/financial-narrative";
 import { buildFinancialReport, buildParameterReport, compactParameterReportForPdf } from "@/lib/export/report-model";
 import { createFinancialReportXlsx } from "@/lib/export/xlsx";
 
@@ -83,6 +83,9 @@ describe("exportación trazable de parámetros", () => {
     expect(compact.rows.some((row) => row.parameter === "Programa")).toBe(true);
     expect(compact.rows.some((row) => row.parameter === "Arancel anual por estudiante")).toBe(true);
     expect(compact.rows.some((row) => row.parameter === "Alimentos y bebidas" && row.value === 0)).toBe(false);
+    expect(compact.rows.some((row) => row.section === "Parámetros semestrales")).toBe(false);
+    expect(compact.rows.some((row) => row.section === "Punto de equilibrio")).toBe(false);
+    expect(compact.rows.some((row) => row.section === "Costos y gastos registrados")).toBe(false);
   });
 
   it("genera PDF con portada, flujo y anexo compacto", () => {
@@ -90,7 +93,8 @@ describe("exportación trazable de parámetros", () => {
     const result = calculateBudget(budget, institutionalParameters);
     const financial = buildFinancialReport(budget, result);
     const parameters = compactParameterReportForPdf(buildParameterReport(budget, result, institutionalParameters));
-    const narrative = buildFinancialNarrative(budget, result, institutionalParameters);
+    const history = buildHistoricalCohortSnapshots(budget, [budget, secondDemoBudget], institutionalParameters);
+    const narrative = buildFinancialNarrative(budget, result, institutionalParameters, history);
     const bytes = createFinancialReportPdf(financial, parameters, {
       jpegBytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
       imageWidth: 10,
@@ -103,7 +107,8 @@ describe("exportación trazable de parámetros", () => {
     expect(text).toContain("/Subtype /Image");
     expect(text).toContain("/DCTDecode");
     expect(text).toContain(budget.program.name);
-    expect(text).toContain("Análisis financiero y principales consideraciones");
+    expect(text).toContain("Análisis económico-financiero de la cohorte");
+    expect(text).toContain("Evolución de los principales indicadores");
     expect(text).toContain("Parámetros principales utilizados");
     expect(text).toContain("/MediaBox [0 0 595 842]");
   });
