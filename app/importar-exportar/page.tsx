@@ -9,7 +9,7 @@ import { getActivePeriods, getActiveYears } from "@/lib/calculations/periods";
 import type { BudgetAnnualOverride, CohortBudget, InstitutionalParameters, Program, SemesterParameters } from "@/lib/calculations/types";
 import { institutionalParameters as fallbackParameters } from "@/lib/demo-data";
 import { downloadAuditCsv, downloadBudgetMemorandum, downloadBudgetPdf, downloadBudgetXlsx, downloadConsolidationCsv, downloadConsolidationXlsx } from "@/lib/export/download";
-import { analyzeBudgetFile, type ImportedBudgetAnalysis } from "@/lib/import/budget-file-import";
+import { analyzeBudgetFile, pendingImportedBudgetFields, type ImportedBudgetAnalysis } from "@/lib/import/budget-file-import";
 import type { ApiBudgetRecord, ApiIdentity, ApiProgram } from "@/lib/mappers/budget-api";
 import { responseBody, toBudget, toProgram } from "@/lib/mappers/budget-api";
 
@@ -49,14 +49,40 @@ function cleanAnnualPatch(value: ImportedBudgetAnalysis["annualValues"][number] 
   return Object.fromEntries(Object.entries(value).filter(([key, item]) => key !== "year" && typeof item === "number" && Number.isFinite(item))) as Partial<BudgetAnnualOverride>;
 }
 
+const roundClp = (value: number) => Math.max(0, Math.round(Number.isFinite(value) ? value : 0));
+
+function normalizeAnnualOverrideForImport(value: BudgetAnnualOverride): BudgetAnnualOverride {
+  return {
+    ...value,
+    maintenanceScholarshipMonthlyValue: roundClp(value.maintenanceScholarshipMonthlyValue),
+    annualEnrollmentFee: roundClp(value.annualEnrollmentFee),
+    annualTuition: roundClp(value.annualTuition),
+    thesisGuidancePerGraduatingStudent: roundClp(value.thesisGuidancePerGraduatingStudent),
+    annualDirection: roundClp(value.annualDirection),
+    annualAssistance: roundClp(value.annualAssistance),
+    annualOtherNonAcademicHonoraria: roundClp(value.annualOtherNonAcademicHonoraria),
+    annualOperational: roundClp(value.annualOperational),
+    annualSoftware: roundClp(value.annualSoftware),
+    annualDiffusion: roundClp(value.annualDiffusion),
+    annualCongressesInternships: roundClp(value.annualCongressesInternships),
+    annualBooksPublications: roundClp(value.annualBooksPublications),
+    annualTravelFreight: roundClp(value.annualTravelFreight),
+    annualPerDiem: roundClp(value.annualPerDiem),
+    annualFoodBeverages: roundClp(value.annualFoodBeverages),
+    annualOtherCosts: roundClp(value.annualOtherCosts),
+  };
+}
+
 function prepareImportedBudget(
   analysis: ImportedBudgetAnalysis,
   program: Program,
   parameters: InstitutionalParameters,
 ) {
   const parameterYears = Object.keys(parameters.annualEnrollmentFee).map(Number).filter(Number.isFinite);
-  const fallbackYear = program.type === "MAGISTER_PROFESIONAL" ? 2027 : Math.min(...parameterYears);
-  const startYear = analysis.startYear ?? (Number.isFinite(fallbackYear) ? fallbackYear : new Date().getFullYear());
+  const importedYears = analysis.annualValues.map((item) => item.year).filter(Number.isFinite).sort((a, b) => a - b);
+  const parameterFallbackYear = program.type === "MAGISTER_PROFESIONAL" ? 2027 : Math.min(...parameterYears);
+  const fallbackYear = importedYears[0] ?? (Number.isFinite(parameterFallbackYear) ? parameterFallbackYear : new Date().getFullYear() + 1);
+  const startYear = analysis.startYear ?? fallbackYear;
   const startSemester = analysis.startSemester ?? 1;
   const durationSemesters = Math.min(8, Math.max(2, Math.round(analysis.durationSemesters ?? program.officialDurationSemesters)));
   const initialStudents = Math.max(0, Math.round(analysis.initialStudents ?? 0));
@@ -78,9 +104,8 @@ function prepareImportedBudget(
           : {}),
       };
     }
-    if (resolved.annualTuition <= 0) throw new Error(`${year}: no existe un arancel positivo en el archivo ni en el programa seleccionado.`);
-    return resolved;
-  });
+    return normalizeAnnualOverrideForImport(resolved);
+  }).filter((item) => Number.isFinite(item.annualTuition) && item.annualTuition > 0);
 
   const semesters = periods.map((period) => completeSemester(
     period.year,
@@ -89,9 +114,16 @@ function prepareImportedBudget(
     analysis.semesters.find((item) => item.year === period.year && item.semester === period.semester),
   ));
 
+  const detectedCohortName = analysis.cohortName?.trim() ?? "";
+  const normalizedDetectedCohort = normalizeProgramMatch(detectedCohortName);
+  const normalizedProgramCode = normalizeProgramMatch(program.code);
+  const cohortName = detectedCohortName && normalizedDetectedCohort.startsWith(normalizedProgramCode)
+    ? detectedCohortName
+    : `${program.code} ${startYear}-${startSemester}S`;
+
   return {
     program,
-    cohortName: analysis.cohortName?.trim() || `${program.code} ${startYear}-${startSemester}S · importado`,
+    cohortName,
     startYear,
     startSemester,
     durationSemesters,
@@ -103,9 +135,9 @@ function prepareImportedBudget(
     deliveryModality: analysis.deliveryModality ?? "PRESENCIAL",
     annualOverrides,
     semesters: program.type === "MAGISTER_PROFESIONAL" ? semesters.map((semester) => ({ ...semester, internalTuitionScholarshipStudents: 0, maintenanceScholarshipStudents: 0, maintenanceScholarshipMonths: 0 })) : semesters,
-    discounts: analysis.discounts,
-    externalIncome: analysis.externalIncome,
-    items: analysis.costs,
+    discounts: analysis.discounts.map((item) => ({ ...item, students: Math.max(0, Math.round(item.students)) })),
+    externalIncome: analysis.externalIncome.map((item) => ({ ...item, students: Math.max(0, Math.round(item.students)), amountPerStudent: roundClp(item.amountPerStudent) })),
+    items: analysis.costs.map((item) => ({ ...item, amount: roundClp(item.amount) })),
   };
 }
 
@@ -150,6 +182,8 @@ export default function ImportExportPage() {
   const selected = budgets.find((budget) => budget.id === selectedId);
   const result = useMemo(() => selected ? calculateBudget(selected, parameters) : null, [selected, parameters]);
   const institutional = useMemo(() => buildConsolidationGroups(budgets, parameters).find((group) => group.id === "institutional-approved"), [budgets, parameters]);
+  const selectedImportProgram = programs.find((program) => program.id === importProgramId);
+  const importWarnings = analysis?.warnings.filter((warning) => !(importProgramId && warning.includes("programa; deberá seleccionarlo manualmente"))) ?? [];
 
   async function runExport(action: () => void | Promise<void>, success: string) {
     try {
@@ -193,7 +227,11 @@ export default function ImportExportPage() {
     if (!window.confirm(`Se creará un nuevo presupuesto en estado Borrador para ${program.code}. El archivo original no se modifica. ¿Continuar?`)) return;
     setImporting(true);
     try {
+      const pendingFields = pendingImportedBudgetFields(analysis);
       const prepared = prepareImportedBudget(analysis, program, parameters);
+      const pendingNote = pendingFields.length
+        ? ` Campos pendientes de completar: ${pendingFields.join(", ")}.`
+        : "";
       const created = await responseBody<{ id: string }>(await fetch("/api/budgets", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -216,42 +254,74 @@ export default function ImportExportPage() {
           alertPotentialDuplicates: true,
           appliedTemplateId: null,
           appliedTemplateVersion: null,
-          notes: `Importado desde archivo local: ${analysis.fileName}. Confianza de reconocimiento: ${analysis.confidence} %.`,
+          notes: `Importado desde archivo local: ${analysis.fileName}. Confianza de reconocimiento: ${analysis.confidence} %.${pendingNote}`,
           responsibleId: identity.userId,
         }),
       }));
 
-      await responseBody(await fetch(`/api/budgets/${created.id}`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          cohortName: prepared.cohortName,
-          startYear: prepared.startYear,
-          startSemester: prepared.startSemester,
-          durationSemesters: prepared.durationSemesters,
-          initialStudents: prepared.initialStudents,
-          facultyOverheadRate: prepared.facultyOverheadRate,
-          enrollmentRecognitionRate: 0,
-          programVersionLabel: prepared.programVersionLabel,
-          scholarshipsEnabled: prepared.scholarshipsEnabled,
-          deliveryModality: prepared.deliveryModality,
-          annualOverrides: prepared.annualOverrides,
-          authorizedInitialCarryover: 0,
-          includeAuthorizedCarryover: true,
-          normalizeSharedCosts: true,
-          alertPotentialDuplicates: true,
-          notes: `Importado desde ${analysis.fileName}. Revise los parámetros antes de enviar a V°B°.`,
-          changeNote: `Importación controlada desde ${analysis.fileName}`,
-          semesters: prepared.semesters.map((semester, position) => ({ ...semester, position })),
-          discounts: prepared.discounts,
-          externalIncome: prepared.externalIncome,
-          items: prepared.items,
-          sharedCourses: [],
-        }),
-      }));
+      const detailPayload = {
+        cohortName: prepared.cohortName,
+        startYear: prepared.startYear,
+        startSemester: prepared.startSemester,
+        durationSemesters: prepared.durationSemesters,
+        initialStudents: prepared.initialStudents,
+        facultyOverheadRate: prepared.facultyOverheadRate,
+        enrollmentRecognitionRate: 0,
+        programVersionLabel: prepared.programVersionLabel,
+        scholarshipsEnabled: prepared.scholarshipsEnabled,
+        deliveryModality: prepared.deliveryModality,
+        annualOverrides: prepared.annualOverrides,
+        authorizedInitialCarryover: 0,
+        includeAuthorizedCarryover: true,
+        normalizeSharedCosts: true,
+        alertPotentialDuplicates: true,
+        notes: `Importado desde ${analysis.fileName}. Revise los parámetros antes de enviar a V°B°.${pendingNote}`,
+        changeNote: `Importación controlada desde ${analysis.fileName}`,
+        semesters: prepared.semesters.map((semester, position) => ({ ...semester, position })),
+        discounts: prepared.discounts,
+        externalIncome: prepared.externalIncome,
+        items: prepared.items,
+        sharedCourses: [],
+      };
+
+      let detailIssue = "";
+      try {
+        await responseBody(await fetch(`/api/budgets/${created.id}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(detailPayload),
+        }));
+      } catch (reason) {
+        detailIssue = reason instanceof Error ? reason.message : "parte del detalle del archivo no pudo persistirse";
+        // El presupuesto ya existe. Se conserva el Borrador y se intenta guardar sólo la estructura mínima segura.
+        try {
+          await responseBody(await fetch(`/api/budgets/${created.id}`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              cohortName: prepared.cohortName,
+              startYear: prepared.startYear,
+              startSemester: prepared.startSemester,
+              durationSemesters: prepared.durationSemesters,
+              initialStudents: prepared.initialStudents,
+              notes: `Importación parcial desde ${analysis.fileName}.${pendingNote} Parte del detalle no pudo incorporarse automáticamente: ${detailIssue}.`,
+              changeNote: `Importación parcial con revisión requerida desde ${analysis.fileName}`,
+              semesters: prepared.semesters.map((semester, position) => ({ ...semester, position })),
+            }),
+          }));
+        } catch {
+          // El POST inicial ya dejó un Borrador válido; no se elimina ni se informa falsamente que la importación completa falló.
+        }
+      }
+
       await load();
       setSelectedId(created.id);
-      setMessage(`Presupuesto importado como Borrador. Se reconocieron ${analysis.recognized.length} variables; revise el nuevo presupuesto antes de guardarlo o enviarlo a flujo de aprobación.`);
+      const baseMessage = pendingFields.length
+        ? `Presupuesto importado como Borrador con información parcial. Se reconocieron ${analysis.recognized.length} variables. Pendiente de completar: ${pendingFields.join(", ")}.`
+        : `Presupuesto importado como Borrador. Se reconocieron ${analysis.recognized.length} variables; revise el nuevo presupuesto antes de guardarlo o enviarlo a flujo de aprobación.`;
+      setMessage(detailIssue
+        ? `${baseMessage} El Borrador fue creado correctamente, aunque parte del detalle automático requiere revisión: ${detailIssue}.`
+        : baseMessage);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "No fue posible crear el presupuesto importado.");
     } finally {
@@ -280,14 +350,16 @@ export default function ImportExportPage() {
             <div><span>Hojas leídas</span><strong>{analysis.sheetNames.length}</strong></div>
           </div>
           <div className="form-grid cols-3">
-            <label>Programa destino<select value={importProgramId} onChange={(event) => setImportProgramId(event.target.value)}><option value="">Seleccione</option>{programs.map((program) => <option key={program.id} value={program.id}>{program.code} · {program.name}</option>)}</select><small>{analysis.programCode || analysis.programName ? `Detectado: ${analysis.programCode ?? ""} ${analysis.programName ?? ""}` : "No identificado automáticamente; seleccione manualmente."}</small></label>
-            <label>Cohorte detectada<div className="input-like">{analysis.cohortName || `${analysis.startYear ?? "?"}-${analysis.startSemester ?? "?"}S`}</div></label>
+            <label>Programa destino<select value={importProgramId} onChange={(event) => setImportProgramId(event.target.value)}><option value="">Seleccione</option>{programs.map((program) => <option key={program.id} value={program.id}>{program.code} · {program.name}</option>)}</select><small>{analysis.programCode || analysis.programName ? `Detectado: ${analysis.programCode ?? ""} ${analysis.programName ?? ""}` : selectedImportProgram ? `Resuelto manualmente: ${selectedImportProgram.code} · ${selectedImportProgram.name}` : "No identificado automáticamente; seleccione manualmente."}</small></label>
+            <label>Cohorte detectada<div className="input-like">{analysis.cohortName && !analysis.cohortName.includes("?") ? analysis.cohortName : `${analysis.startYear ?? "?"}-${analysis.startSemester ?? "?"}S`}</div></label>
             <label>Estudiantes iniciales<div className="input-like">{analysis.initialStudents ?? "No identificado"}</div></label>
           </div>
-          {analysis.warnings.length ? <div className="notice warning"><strong>Revisión requerida</strong><ul>{analysis.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div> : <div className="notice success"><p>Los campos esenciales fueron identificados. De todas maneras, el presupuesto se crea como Borrador para revisión humana.</p></div>}
+          {analysis.inferences.length ? <div className="notice info"><strong>Datos inferidos automáticamente</strong><ul>{analysis.inferences.map((inference) => <li key={inference}>{inference}</li>)}</ul></div> : null}
+          {importWarnings.length ? <div className="notice warning"><strong>Revisión requerida, pero la importación no se bloquea</strong><ul>{importWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul><p>Puede crear el presupuesto igualmente. Se guardará como <strong>Borrador</strong> y los datos no identificados quedarán señalados para completarlos posteriormente.</p></div> : <div className="notice success"><p>Los campos esenciales o resolubles fueron identificados. El presupuesto se crea como Borrador para revisión humana.</p></div>}
+          {pendingImportedBudgetFields(analysis).length ? <div className="notice info"><strong>Pendientes que quedarán marcados en el Borrador</strong><p>{pendingImportedBudgetFields(analysis).join(" · ")}</p><small>Si no fueron detectados, el sistema utiliza valores provisionales técnicamente válidos para permitir la importación: 0 estudiantes, duración oficial del programa y 1S cuando corresponda.</small></div> : null}
           <div className="table-wrap import-preview-table"><table className="data-table"><thead><tr><th>Variable reconocida</th><th>Periodo</th><th>Valor</th><th>Origen</th></tr></thead><tbody>{analysis.recognized.slice(0, 120).map((item, index) => <tr key={`${item.field}-${item.period}-${index}`}><td>{item.field}</td><td>{item.period}</td><td>{item.value}</td><td>{item.source}</td></tr>)}</tbody></table></div>
           {analysis.recognized.length > 120 ? <p className="muted">Se muestran las primeras 120 variables de {analysis.recognized.length} reconocidas.</p> : null}
-          <div className="workspace-actions"><button className="button primary" type="button" disabled={importing || !importProgramId || !identity} onClick={() => void persistImportedBudget()}>{importing ? "Creando borrador…" : "Crear presupuesto importado"}</button><button className="button secondary" type="button" disabled={importing} onClick={() => { setAnalysis(null); setImportProgramId(""); }}>Descartar análisis</button></div>
+          <div className="workspace-actions"><button className="button primary" type="button" disabled={importing || !importProgramId || !identity} onClick={() => void persistImportedBudget()}>{importing ? "Creando borrador…" : pendingImportedBudgetFields(analysis).length ? "Importar como borrador con pendientes" : "Crear presupuesto importado"}</button><button className="button secondary" type="button" disabled={importing} onClick={() => { setAnalysis(null); setImportProgramId(""); }}>Descartar análisis</button></div>
         </div> : null}
 
         <div className="notice info"><strong>Reconocimiento adaptable</strong><p>El motor usa nombres y estructura de las hojas, no una única posición fija de celdas. El presupuesto de ejemplo que usted suba servirá para ampliar los alias y reglas específicas sin cambiar este flujo de importación.</p></div>

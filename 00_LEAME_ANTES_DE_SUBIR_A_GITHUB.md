@@ -1,10 +1,15 @@
-# LEA ANTES DE SUBIR — v10.10 acumulativa
+# Sistema de Presupuestos de Postgrado UTEM — v10.32
 
-Este paquete vuelve a incluir las correcciones de v10.9 y agrega v10.10.
+Actualización recomendada desde v10.31:
 
-- Reemplace todos los archivos incluidos en su repositorio actual.
-- No elimine archivos no incluidos.
-- Este paquete **NO contiene `wrangler.jsonc`** para proteger el binding D1 y los Secrets productivos.
-- Después del deploy revise `/api/version`: debe indicar `1.0.20-d1-web` / `v10.10`.
-- La barra lateral debe mostrar `Versión Cloudflare D1 · v10.10`.
-- Si sigue viendo `Descuentos matrícula` o `Matrícula neta`, el deployment aún no está usando v10.10.
+`actualizacion-acumulativa-v10-32-importacion-parcial-github-web.zip`
+
+La mejora hace tolerante la importación de presupuestos incompletos: los datos no reconocidos ya no bloquean la creación del Borrador y quedan señalados para revisión posterior.
+
+Versión esperada después del despliegue:
+
+- aplicación: `1.0.42-d1-web`
+- release: `v10.32`
+- migraciones D1: 10 (sin migración nueva)
+
+No reemplace su `wrangler.jsonc` productivo. El paquete incremental no debe incluir ese archivo.

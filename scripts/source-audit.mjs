@@ -257,7 +257,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v10.31"',
+  'FUNCTIONAL_RELEASE = "v10.32"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -277,8 +277,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v10.31") || !appShellV110.includes("1.0.41-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v10.31 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v10.32") || !appShellV110.includes("1.0.42-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v10.32 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -583,7 +583,7 @@ for (const marker of [
   "Toda la página quedó sincronizada con este presupuesto",
   "auditBudgetIntegrity",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v10.31"',
+  'FUNCTIONAL_RELEASE = "v10.32"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.23: falta ${marker}.`);
 }
@@ -610,7 +610,7 @@ for (const marker of [
   "setInitialStudentsForAllSemesters",
   "Punto de equilibrio",
   "Viabilidad mínima de dictación",
-  'FUNCTIONAL_RELEASE = "v10.31"',
+  'FUNCTIONAL_RELEASE = "v10.32"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
 }
@@ -782,7 +782,7 @@ for (const marker of ["curriculumCourseWeeklyDirectHours", "theoryWeeklyHours", 
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.28: falta ${marker}.`);
 }
 const budgetWorkspaceV1028 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v10.31"']) {
+for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v10.32"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.28: falta ${marker}.`);
 }
 
@@ -790,7 +790,7 @@ for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla recon
 for (const marker of ["curriculumCourseAppliedMode", 'modality === "PRESENCIAL"', 'return "PRESENCIAL"']) {
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.30: falta ${marker}.`);
 }
-for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v10.31"']) {
+for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v10.32"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.30: falta ${marker}.`);
 }
 
@@ -824,6 +824,18 @@ for (const marker of ["Supuestos económicos esenciales utilizados en la formula
 }
 if (!(packageJson.scripts?.["test:documents"] ?? "").includes("memorandum-export.test.mjs")) fail("package.json v10.31: falta test:documents.");
 if (!(packageJson.scripts?.["quality:cloudflare"] ?? "").includes("test:documents")) fail("package.json v10.31: quality:cloudflare debe ejecutar test:documents.");
+
+// v10.32: importación parcial no bloqueante con trazabilidad de pendientes.
+const budgetImportV1032 = await readFile(path.join(root, "lib/import/budget-file-import.ts"), "utf8");
+for (const marker of ["pendingImportedBudgetFields", "inferences: string[]", "la importación parcial seguirá habilitada", "firstAnnualYear"]) {
+  if (!budgetImportV1032.includes(marker)) fail(`Importación v10.32: falta ${marker}.`);
+}
+for (const marker of ["Importar como borrador con pendientes", "Revisión requerida, pero la importación no se bloquea", "Pendientes que quedarán marcados en el Borrador", "pendingNote", "detailIssue"]) {
+  if (!importExportV1031.includes(marker)) fail(`Importar/exportar v10.32: falta ${marker}.`);
+}
+for (const marker of ["importPendingFields", "Presupuesto importado con datos pendientes de completar", "Marcar pendientes como revisados"]) {
+  if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.32: falta ${marker}.`);
+}
 
 for (const message of warnings) console.warn(`ADVERTENCIA: ${message}`);
 if (failures.length) {

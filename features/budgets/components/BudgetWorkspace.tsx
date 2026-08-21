@@ -34,7 +34,7 @@ import { applyProgramCurriculumToBudget, curriculumCourseAppliedMode, curriculum
 import { fullProgramDiscountRange, synchronizeInitialStudents, synchronizeLastSemesterGraduation } from "@/lib/budgets/form-defaults";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v10.31";
+const FUNCTIONAL_RELEASE = "v10.32";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -289,6 +289,7 @@ export function BudgetWorkspace() {
   const curriculumCourses = budget ? [...(budget.program.curriculumCourses ?? [])].sort((a, b) => a.semester - b.semester || a.position - b.position) : [];
   const payableCurriculum = budget ? payableCurriculumCourses(budget.program) : [];
   const curriculumHasPayableHours = payableCurriculum.some((course) => curriculumCourseRawHours(course) > 0);
+  const importPendingFields = budget?.notes?.match(/Campos pendientes de completar:\s*([^.]*)\./i)?.[1]?.trim() ?? "";
 
   function setActiveRole(next: AccessRole) {
     setRole(next);
@@ -305,6 +306,16 @@ export function BudgetWorkspace() {
   function patchBudget(patch: Partial<CohortBudget>) {
     if (!budget) return;
     replaceBudget({ ...budget, ...patch, updatedAt: new Date().toISOString() });
+  }
+
+  function markImportedPendingFieldsReviewed() {
+    if (!budget || !importPendingFields) return;
+    const nextNotes = (budget.notes ?? "")
+      .replace(/\s*Campos pendientes de completar:\s*[^.]*\./i, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    patchBudget({ notes: nextNotes || undefined });
+    setMessage("Pendientes de importación marcados como revisados. Presione “Guardar cambios” para persistir esta confirmación.");
   }
 
   function updateSemester(index: number, field: keyof SemesterParameters, value: number | string) {
@@ -751,6 +762,8 @@ export function BudgetWorkspace() {
       </div>
       <div className="workspace-actions"><button className="button secondary" type="button" onClick={() => void exportBudget("xlsx")}>Exportar XLSX</button><button className="button secondary" type="button" onClick={() => void exportBudget("pdf")}>Exportar PDF</button><button className="button secondary" type="button" onClick={() => void exportBudget("memo")}>Generar memorándum</button><button className="button secondary" type="button" disabled={dirty || blockingIntegrityIssues.length > 0} onClick={() => void openMailDialog()}>Enviar por correo</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void cloneBudget()}>Clonar presupuesto</button><button className="button primary" type="button" disabled={!editable || saving || blockingIntegrityIssues.length > 0} onClick={() => void saveBudget()}>{saving ? "Guardando…" : "Guardar cambios"}</button><button className="button secondary" type="button" disabled={!canCreate(roles)} onClick={() => void createBudget()}>Nuevo presupuesto</button><button className="text-button danger-text" type="button" disabled={!deletable} onClick={() => void deleteBudget()}>Eliminar</button></div>
     </section>
+
+    {importPendingFields ? <section className="panel import-pending-panel"><div className="notice warning"><strong>Presupuesto importado con datos pendientes de completar</strong><p>{importPendingFields}.</p><small>La importación se conservó como Borrador para no perder la información reconocida. Complete o valide estos campos antes de continuar con el flujo de V°B°.</small>{editable ? <div className="workspace-actions"><button className="button secondary" type="button" onClick={markImportedPendingFieldsReviewed}>Marcar pendientes como revisados</button></div> : null}</div></section> : null}
 
     {integrityIssues.length ? <section className="panel integrity-panel"><div className="notice warning"><strong>Auditoría de integridad del presupuesto</strong><ul>{integrityIssues.map((issue) => <li key={issue.code}>{issue.message}{issue.suggestedCohortName && editable ? <> <button className="text-button" type="button" onClick={() => patchBudget({ cohortName: issue.suggestedCohortName })}>Usar “{issue.suggestedCohortName}”</button></> : null}</li>)}</ul>{blockingIntegrityIssues.length ? <p><strong>Guardar queda bloqueado hasta resolver las inconsistencias de identidad.</strong></p> : null}</div></section> : null}
 

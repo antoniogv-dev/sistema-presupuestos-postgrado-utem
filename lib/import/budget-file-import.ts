@@ -42,6 +42,7 @@ export interface ImportedBudgetAnalysis {
   externalIncome: ImportedExternalIncome[];
   costs: Array<Omit<BudgetItem, "id">>;
   recognized: Array<{ field: string; period: string; value: string; source: string }>;
+  inferences: string[];
   warnings: string[];
 }
 
@@ -414,7 +415,7 @@ function analyzeGenericIncomeTable(analysis: ImportedBudgetAnalysis, sheet: Shee
 }
 
 function makeAnalysis(fileName: string, format: ImportedBudgetAnalysis["format"], sheetNames: string[]): ImportedBudgetAnalysis {
-  return { fileName, format, sheetNames, confidence: 0, annualValues: [], semesters: [], discounts: [], externalIncome: [], costs: [], recognized: [], warnings: [] };
+  return { fileName, format, sheetNames, confidence: 0, annualValues: [], semesters: [], discounts: [], externalIncome: [], costs: [], recognized: [], inferences: [], warnings: [] };
 }
 
 function getAnnual(analysis: ImportedBudgetAnalysis, year: number) {
@@ -439,7 +440,15 @@ function applyIdentification(analysis: ImportedBudgetAnalysis, parameter: string
   const numeric = intValue(value);
   if (key === "programa") { analysis.programName = text; recognize(analysis, "Programa", "General", text, source); }
   else if (key === "codigo del programa" || key === "codigo programa") { analysis.programCode = text; recognize(analysis, "Código programa", "General", text, source); }
-  else if (key === "cohorte") { analysis.cohortName = text; recognize(analysis, "Cohorte", "General", text, source); }
+  else if (key === "cohorte") {
+    analysis.cohortName = text;
+    recognize(analysis, "Cohorte", "General", text, source);
+    const parsed = periodFromText(text);
+    if (parsed) {
+      analysis.startYear ??= parsed.year;
+      analysis.startSemester ??= parsed.semester;
+    }
+  }
   else if (key.includes("version del programa") || key === "version") { analysis.programVersionLabel = text; recognize(analysis, "Versión programa", "General", text, source); }
   else if (key === "ano de inicio" && numeric) { analysis.startYear = numeric; recognize(analysis, "Año inicio", "General", numeric, source); }
   else if (key === "semestre de inicio" && (numeric === 1 || numeric === 2)) { analysis.startSemester = numeric; recognize(analysis, "Semestre inicio", "General", numeric, source); }
@@ -613,17 +622,53 @@ function finalizeAnalysis(analysis: ImportedBudgetAnalysis) {
   analysis.discounts = [...new Map(analysis.discounts.map((item) => [`${normalize(item.name)}|${item.percentage}|${item.students}|${item.startYear}-${item.startSemester}|${item.endYear}-${item.endSemester}`, item])).values()];
   analysis.externalIncome = [...new Map(analysis.externalIncome.map((item) => [`${normalize(item.description)}|${item.year}-${item.semester}|${item.amountPerStudent}|${item.source}`, item])).values()];
   analysis.costs = [...new Map(analysis.costs.map((item) => [`${normalize(item.name)}|${item.year}|${item.amount}|${item.category}`, item])).values()];
-  if (!analysis.startYear && analysis.semesters.length) analysis.startYear = analysis.semesters[0].year;
-  if (!analysis.startSemester && analysis.semesters.length) analysis.startSemester = analysis.semesters[0].semester;
-  if (!analysis.durationSemesters && analysis.semesters.length) analysis.durationSemesters = analysis.semesters.length;
-  if (analysis.initialStudents == null && analysis.semesters.length) analysis.initialStudents = Number(analysis.semesters[0].activeStudents ?? 0);
-  const core = [analysis.programCode || analysis.programName, analysis.startYear, analysis.startSemester, analysis.durationSemesters, analysis.initialStudents].filter(Boolean).length;
+
+  const cohortPeriod = periodFromText(analysis.cohortName);
+  const filePeriod = periodFromText(analysis.fileName);
+  const firstSemester = analysis.semesters[0];
+  const firstAnnualYear = analysis.annualValues.map((item) => item.year).filter(Number.isFinite).sort((a, b) => a - b)[0];
+
+  if (!analysis.startYear) {
+    const inferredYear = cohortPeriod?.year ?? filePeriod?.year ?? firstSemester?.year ?? firstAnnualYear;
+    if (inferredYear) {
+      analysis.startYear = inferredYear;
+      analysis.inferences.push(`Año de inicio inferido automáticamente desde los periodos disponibles: ${inferredYear}.`);
+    }
+  }
+  if (!analysis.startSemester) {
+    const inferredSemester = cohortPeriod?.semester ?? filePeriod?.semester ?? firstSemester?.semester;
+    if (inferredSemester) {
+      analysis.startSemester = inferredSemester;
+      analysis.inferences.push(`Semestre de inicio inferido automáticamente: ${inferredSemester}S.`);
+    }
+  }
+  if (!analysis.durationSemesters && analysis.semesters.length) {
+    analysis.durationSemesters = analysis.semesters.length;
+    analysis.inferences.push(`Duración inferida desde ${analysis.semesters.length} periodos semestrales reconocidos.`);
+  }
+  if (analysis.initialStudents == null && firstSemester?.activeStudents != null) {
+    analysis.initialStudents = Number(firstSemester.activeStudents);
+    analysis.inferences.push(`Estudiantes iniciales inferidos desde el primer semestre reconocido: ${analysis.initialStudents}.`);
+  }
+
+  const core = [analysis.programCode || analysis.programName, analysis.startYear, analysis.startSemester, analysis.durationSemesters, analysis.initialStudents].filter((value) => value !== undefined && value !== null && value !== "").length;
   analysis.confidence = Math.min(100, Math.round(core * 10 + Math.min(50, analysis.recognized.length * 2)));
-  if (!analysis.startYear) analysis.warnings.push("No se pudo identificar el año de inicio.");
-  if (!analysis.initialStudents && analysis.initialStudents !== 0) analysis.warnings.push("No se pudo identificar la cantidad inicial de estudiantes.");
+  if (!analysis.startYear) analysis.warnings.push("No se pudo identificar el año de inicio; la importación parcial seguirá habilitada y se usará un valor provisional.");
+  if (!analysis.startSemester) analysis.warnings.push("No se pudo identificar el semestre de inicio; la importación parcial seguirá habilitada y se usará 1S provisionalmente.");
+  if (!analysis.durationSemesters) analysis.warnings.push("No se pudo identificar la duración; se utilizará provisionalmente la duración oficial del programa seleccionado.");
+  if (analysis.initialStudents == null) analysis.warnings.push("No se pudo identificar la cantidad inicial de estudiantes; se importará provisionalmente con 0 y deberá completarse en el Borrador.");
   if (!analysis.programCode && !analysis.programName) analysis.warnings.push("No se pudo identificar automáticamente el programa; deberá seleccionarlo manualmente.");
-  if (!analysis.annualValues.some((item) => Number(item.annualTuition) > 0)) analysis.warnings.push("No se identificó un arancel anual; se utilizará el arancel vigente del programa seleccionado.");
+  if (!analysis.annualValues.some((item) => Number(item.annualTuition) > 0)) analysis.warnings.push("No se identificó un arancel anual; se utilizará el arancel vigente del programa seleccionado cuando esté disponible.");
   return analysis;
+}
+
+export function pendingImportedBudgetFields(analysis: ImportedBudgetAnalysis): string[] {
+  const pending: string[] = [];
+  if (!analysis.startYear) pending.push("Año de inicio");
+  if (!analysis.startSemester) pending.push("Semestre de inicio");
+  if (!analysis.durationSemesters) pending.push("Duración del programa");
+  if (analysis.initialStudents == null) pending.push("Estudiantes iniciales");
+  return pending;
 }
 
 function analyzeSheets(fileName: string, format: ImportedBudgetAnalysis["format"], sheets: SheetMatrix[]): ImportedBudgetAnalysis {
