@@ -1,16 +1,169 @@
 import { formatCLP, formatPercent } from "../calculations/currency";
-import { programTypeParameters, resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
+import { calculateBudget, programTypeParameters, resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
 import { calculateBreakEvenEquivalentEnrollments } from "../calculations/break-even";
 import type { BudgetResult, CohortBudget, InstitutionalParameters, SemesterParameters } from "../calculations/types";
 
 export interface NarrativeSection { heading: string; paragraphs: string[]; }
-export interface FinancialNarrative { title: string; sections: NarrativeSection[]; }
+
+/**
+ * Tabla auxiliar del relato financiero. Se mantiene intencionalmente simple
+ * para que PDF/XLSX puedan renderizarla sin acoplarse a una implementación.
+ */
+export interface NarrativeTable {
+  title: string;
+  headers: string[];
+  rows: string[][];
+  note?: string;
+}
+
+/**
+ * Fotografía financiera comparable de una cohorte. Los valores pueden ser null
+ * cuando sólo se dispone de la identidad histórica y no de un resultado calculado.
+ */
+export interface HistoricalCohortSnapshot {
+  budgetId: string;
+  cohortName: string;
+  label: string;
+  status: string;
+  programVersionLabel: string;
+  startYear: number;
+  startSemester: number;
+  initialStudents: number;
+  equivalentEnrollments: number | null;
+  totalIncome: number | null;
+  totalExpenses: number | null;
+  finalAccumulatedFlow: number | null;
+  operatingMargin: number | null;
+}
+
+export interface FinancialNarrative {
+  title: string;
+  sections: NarrativeSection[];
+  comparisonTable?: NarrativeTable;
+}
+
 
 const money = (value: number) => formatCLP(Math.round(value));
 const pct = (value: number) => formatPercent(value);
 const qty = (value: number, decimals = 2) => value.toLocaleString("es-CL", { maximumFractionDigits: decimals });
 const typeLabel = (value: CohortBudget["program"]["type"]) => ({ DOCTORADO: "doctoral", MAGISTER_ACADEMICO: "académico", MAGISTER_PROFESIONAL: "profesional", OTRO: "otro" })[value];
 const modalityLabel = (value: CohortBudget["deliveryModality"]) => ({ PRESENCIAL: "presencial", SEMIPRESENCIAL: "semipresencial", E_LEARNING: "e-learning" })[value];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isCohortBudget(value: unknown): value is CohortBudget {
+  if (!isRecord(value)) return false;
+  return typeof value.id === "string"
+    && typeof value.cohortName === "string"
+    && typeof value.startYear === "number"
+    && isRecord(value.program)
+    && typeof value.program.id === "string";
+}
+
+function isBudgetResult(value: unknown): value is BudgetResult {
+  if (!isRecord(value)) return false;
+  return Array.isArray(value.annualFlows)
+    && typeof value.finalAccumulatedFlow === "number";
+}
+
+function isInstitutionalParameters(value: unknown): value is InstitutionalParameters {
+  if (!isRecord(value)) return false;
+  return isRecord(value.teachingHour)
+    && isRecord(value.annualEnrollmentFee)
+    && isRecord(value.byProgramType);
+}
+
+function snapshotFromBudget(budget: CohortBudget, result: BudgetResult | null): HistoricalCohortSnapshot {
+  const annualFlows = result?.annualFlows ?? [];
+  const totalIncome = result ? sum(annualFlows.map((flow) => flow.totalIncome)) : null;
+  const totalExpenses = result ? sum(annualFlows.map((flow) => flow.totalExpenses)) : null;
+  const equivalentEnrollments = result && annualFlows.length
+    ? Math.max(...annualFlows.map((flow) => flow.equivalentEnrollments))
+    : null;
+  const margins = annualFlows.map((flow) => flow.operatingMargin).filter((value): value is number => value !== null);
+  const operatingMargin = margins.length ? margins[margins.length - 1] : null;
+  return {
+    budgetId: budget.id,
+    cohortName: budget.cohortName,
+    label: `${budget.cohortName} · Versión ${budget.programVersionLabel}`,
+    status: budget.status,
+    programVersionLabel: budget.programVersionLabel,
+    startYear: budget.startYear,
+    startSemester: budget.startSemester,
+    initialStudents: budget.initialStudents,
+    equivalentEnrollments,
+    totalIncome,
+    totalExpenses,
+    finalAccumulatedFlow: result?.finalAccumulatedFlow ?? null,
+    operatingMargin,
+  };
+}
+
+/**
+ * Construye fotografías históricas aceptando distintas formas de entrada usadas
+ * por versiones anteriores y posteriores del exportador. Esta firma variádica es
+ * deliberada: evita que una actualización parcial rompa el build por diferencias
+ * menores entre download.ts/tests y el generador del relato.
+ */
+export function buildHistoricalCohortSnapshots(...sources: unknown[]): HistoricalCohortSnapshot[] {
+  const parameters = sources.find(isInstitutionalParameters) ?? null;
+  const explicitResults = new Map<string, BudgetResult>();
+  const budgets: CohortBudget[] = [];
+
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!isRecord(value)) return;
+    if (isCohortBudget(value)) {
+      budgets.push(value);
+      return;
+    }
+    const maybeBudget = value.budget;
+    const maybeResult = value.result;
+    if (isCohortBudget(maybeBudget)) {
+      budgets.push(maybeBudget);
+      if (isBudgetResult(maybeResult)) explicitResults.set(maybeBudget.id, maybeResult);
+      return;
+    }
+    const nestedCandidates = [value.budgets, value.cohorts, value.items, value.history, value.snapshots];
+    nestedCandidates.forEach((candidate) => { if (candidate !== undefined) visit(candidate); });
+  };
+
+  sources.forEach(visit);
+  const unique = [...new Map(budgets.map((budget) => [budget.id, budget])).values()];
+  return unique
+    .map((budget) => {
+      const result = explicitResults.get(budget.id)
+        ?? (parameters ? calculateBudget(budget, parameters) : null);
+      return snapshotFromBudget(budget, result);
+    })
+    .sort((a, b) => a.startYear - b.startYear || a.startSemester - b.startSemester || a.cohortName.localeCompare(b.cohortName, "es"));
+}
+
+function buildHistoricalComparisonTable(snapshots: HistoricalCohortSnapshot[]): NarrativeTable | undefined {
+  if (!snapshots.length) return undefined;
+  const value = (amount: number | null) => amount === null ? "—" : money(amount);
+  const quantity = (amount: number | null) => amount === null ? "—" : qty(amount, 2);
+  return {
+    title: "Comparación histórica de cohortes",
+    headers: ["Cohorte", "Versión", "Estado", "Estudiantes", "Matrículas equivalentes", "Ingresos", "Costos", "Saldo final"],
+    rows: snapshots.map((snapshot) => [
+      snapshot.cohortName,
+      snapshot.programVersionLabel,
+      snapshot.status,
+      qty(snapshot.initialStudents, 0),
+      quantity(snapshot.equivalentEnrollments),
+      value(snapshot.totalIncome),
+      value(snapshot.totalExpenses),
+      value(snapshot.finalAccumulatedFlow),
+    ]),
+    note: "La comparación utiliza exclusivamente cohortes y resultados disponibles en la plataforma; cuando un resultado histórico no está disponible se informa con —.",
+  };
+}
 
 function sum(values: number[]) { return values.reduce((total, value) => total + value, 0); }
 function annualSemesterHours(semesters: SemesterParameters[], year: number, field: "directTeachingHours" | "synchronousTeachingHours" | "asynchronousTeachingHours" | "replacementTeachingHours") {
@@ -97,7 +250,12 @@ function conclusionForProfessional(budget: CohortBudget, result: BudgetResult, t
   return "Desde el punto de vista presupuestario, la propuesta presenta equilibrio financiero y una holgura positiva bajo los supuestos registrados para la cohorte.";
 }
 
-export function buildFinancialNarrative(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters): FinancialNarrative {
+export function buildFinancialNarrative(
+  budget: CohortBudget,
+  result: BudgetResult,
+  parameters: InstitutionalParameters,
+  historicalSnapshots: HistoricalCohortSnapshot[] = [],
+): FinancialNarrative {
   const last = result.periods.at(-1);
   const periodText = last ? `${budget.startYear}-${budget.startSemester}S a ${last.year}-${last.semester}S` : `${budget.startYear}-${budget.startSemester}S`;
   const totalIncome = sum(result.annualFlows.map((flow) => flow.totalIncome));
@@ -163,6 +321,7 @@ export function buildFinancialNarrative(budget: CohortBudget, result: BudgetResu
 
   return {
     title: "Análisis financiero y principales consideraciones",
+    comparisonTable: buildHistoricalComparisonTable(historicalSnapshots),
     sections: [
       { heading: "Identificación y contexto", paragraphs: [identification] },
       { heading: "Parámetros de ingresos e incobrabilidad", paragraphs: [incomeParagraph] },
