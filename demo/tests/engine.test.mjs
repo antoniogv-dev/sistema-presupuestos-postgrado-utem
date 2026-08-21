@@ -19,11 +19,11 @@ test('periodos activos no incluyen años previos', () => {
   assert.deepEqual(e.activePeriods(2028, 2, 4).map((p) => `${p.year}-${p.semester}`), ['2028-2','2029-1','2029-2','2030-1']);
 });
 
-test('arancel semestral y matrícula equivalente', () => {
+test('arancel anual y matrícula equivalente', () => {
   const b = budget();
   b.discounts = [{ id:'d', name:'Convenio', percentage:.2, students:10, startYear:2027, startSemester:2, endYear:2029, endSemester:1 }];
   const first = e.calculateBudget(b).annualFlows[0];
-  assert.equal(first.tuitionFactor, .5);
+  assert.equal(first.tuitionFactor, 1);
   assert.ok(first.equivalentEnrollments > 0);
   assert.equal(first.roundedEquivalentStudents, Math.ceil(first.equivalentEnrollments));
 });

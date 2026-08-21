@@ -20,6 +20,41 @@ describe("motor financiero", () => {
     expect(result.annualFlows[0].discounts).toBe(expected2027);
   });
 
+  it("cobra arancel anual con estudiantes completos aunque el segundo año tenga un solo semestre", () => {
+    const budget = clone(demoBudget);
+    budget.durationSemesters = 3;
+    budget.initialStudents = 11;
+    budget.program.annualTuition = { 2027: 3_937_500, 2028: 3_937_500 };
+    budget.semesters = budget.semesters.slice(0, 3).map((semester) => ({
+      ...semester,
+      activeStudents: 11,
+      graduatingStudents: semester.year === 2028 ? 11 : 0,
+    }));
+    budget.annualOverrides = [
+      { ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2027), annualTuition: 3_937_500 },
+      { ...defaultAnnualOverrideForYear(budget, institutionalParameters, 2028), annualTuition: 3_937_500 },
+    ];
+    budget.discounts = [
+      { id: "d20", name: "Descuento 20%", percentage: 0.20, students: 5, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 1 },
+      { id: "d30", name: "Descuento 30%", percentage: 0.30, students: 5, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 1 },
+    ];
+
+    const result = calculateBudget(budget, institutionalParameters);
+    const first = result.annualFlows.find((flow) => flow.year === 2027)!;
+    const second = result.annualFlows.find((flow) => flow.year === 2028)!;
+    const expectedGross = 11 * 3_937_500;
+    const expectedDiscounts = 5 * 3_937_500 * 0.20 + 5 * 3_937_500 * 0.30;
+    const expectedEquivalent = 1 + 5 * 0.80 + 5 * 0.70;
+
+    expect(first.grossTuition).toBe(expectedGross);
+    expect(second.grossTuition).toBe(expectedGross);
+    expect(first.discounts).toBe(expectedDiscounts);
+    expect(second.discounts).toBe(expectedDiscounts);
+    expect(first.equivalentEnrollments).toBeCloseTo(expectedEquivalent, 8);
+    expect(second.equivalentEnrollments).toBeCloseTo(expectedEquivalent, 8);
+    expect(second.tuitionFactor).toBe(1);
+  });
+
   it("aplica incobrabilidad después de descuentos y no a matrícula", () => {
     const result = calculateBudget(demoBudget, institutionalParameters);
     const first = result.annualFlows[0];

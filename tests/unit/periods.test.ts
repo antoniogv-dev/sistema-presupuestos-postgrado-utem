@@ -8,10 +8,10 @@ describe("periodos activos", () => {
     expect(getActiveYears(periods)).not.toContain(2027);
   });
 
-  it("prorratea 0,5; 1,0; 0,5", () => {
+  it("cobra un arancel anual completo en cada año calendario activo", () => {
     const periods = getActivePeriods(2027, 2, 4);
-    expect(getTuitionFactorForYear(periods, 2027)).toBe(0.5);
+    expect(getTuitionFactorForYear(periods, 2027)).toBe(1);
     expect(getTuitionFactorForYear(periods, 2028)).toBe(1);
-    expect(getTuitionFactorForYear(periods, 2029)).toBe(0.5);
+    expect(getTuitionFactorForYear(periods, 2029)).toBe(1);
   });
 });

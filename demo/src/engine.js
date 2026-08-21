@@ -196,12 +196,13 @@ function calculateBudget(budget) {
   const annualFlows = years.map((year, yearIndex) => {
     const semesters = periods.filter((p) => p.year === year).map((p) => map.get(periodKey(p.year, p.semester))).filter(Boolean);
     const annualTuition = tuitionFor(budget, year);
-    const tuitionFactor = semesters.length * 0.5;
-    const grossTuition = sum(semesters.map((semester) => safe(semester.activeStudents) * annualTuition * 0.5));
-    const discounts = sum(semesters.flatMap((semester) => (budget.discounts || []).filter((d) => within(semester.year, semester.semester, d.startYear, d.startSemester, d.endYear, d.endSemester)).map((d) => Math.min(safe(d.students), safe(semester.activeStudents)) * annualTuition * 0.5 * Math.min(1, safe(d.percentage)))));
-    const tuitionScholarships = sum(semesters.map((semester) => Math.min(safe(semester.scholarshipStudents), safe(semester.activeStudents)) * annualTuition * 0.5 * Math.min(1, safe(semester.scholarshipCoverage))));
+    const tuitionFactor = semesters.length ? 1 : 0;
+    const tuitionSemester = semesters[0];
+    const grossTuition = tuitionSemester ? safe(tuitionSemester.activeStudents) * annualTuition : 0;
+    const discounts = tuitionSemester ? sum((budget.discounts || []).filter((d) => within(tuitionSemester.year, tuitionSemester.semester, d.startYear, d.startSemester, d.endYear, d.endSemester)).map((d) => Math.min(safe(d.students), safe(tuitionSemester.activeStudents)) * annualTuition * Math.min(1, safe(d.percentage)))) : 0;
+    const tuitionScholarships = tuitionSemester ? Math.min(safe(tuitionSemester.scholarshipStudents), safe(tuitionSemester.activeStudents)) * annualTuition * Math.min(1, safe(tuitionSemester.scholarshipCoverage)) : 0;
     const tuitionAfterBenefits = Math.max(0, grossTuition - discounts - tuitionScholarships);
-    const equivalentEnrollments = annualTuition * tuitionFactor > 0 ? tuitionAfterBenefits / (annualTuition * tuitionFactor) : 0;
+    const equivalentEnrollments = annualTuition > 0 ? tuitionAfterBenefits / annualTuition : 0;
     const roundedEquivalentStudents = Math.ceil(equivalentEnrollments);
     const badDebt = tuitionAfterBenefits * typeParameters.badDebtRate;
     const netTuitionIncome = tuitionAfterBenefits - badDebt;

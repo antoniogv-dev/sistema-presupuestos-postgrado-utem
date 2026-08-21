@@ -1,43 +1,10 @@
-# Verificación técnica v10.31
+# Verificación v10.31
 
-## Pruebas funcionales
-
-- Compilación estricta del motor TypeScript (`tsc -p tsconfig.engine.json`): OK.
-- Pruebas standalone completas: 29/29 OK.
-- Generación estructural de memorándum DOCX: OK.
-- Relato económico-financiero con cohorte anterior aprobada: OK.
-- Anexo PDF sin parámetros semestrales ni punto de equilibrio: OK.
-- Normalización de nombres `%20` y caracteres URL: OK.
-- XLSX institucional v10.30 y sus pruebas de regresión: OK.
-- Auditoría transversal de identidad/aislamiento: 12/12 OK.
-- `preflight`: OK con configuración temporal de prueba.
-- `source:audit`: OK con configuración temporal de prueba.
-
-## Verificación visual DOCX
-
-Se generaron y renderizaron memorándums de prueba para:
-
-- Magíster Profesional de 2 años;
-- Doctorado de 4 años.
-
-Ambos conservaron encabezado y pie institucional, metadatos, cuerpo, viñetas, cierre y firma sin solapamientos, recortes ni páginas residuales.
-
-## Verificación visual PDF
-
-Se generó un PDF de cinco páginas y se revisaron todas las páginas renderizadas:
-
-1. portada institucional;
-2. flujo presupuestario;
-3. relato económico-financiero;
-4. tabla de evolución histórica;
-5. parámetros principales.
-
-No se observaron cortes, solapamientos ni problemas de legibilidad.
-
-## Alcance de la historia
-
-La comparación histórica utiliza exclusivamente presupuestos `Aprobado` del mismo programa que anteceden a la cohorte actual. No se utilizan borradores, observados o revisiones intermedias como base histórica.
-
-## Cloudflare
-
-El build productivo seguirá ejecutando `typecheck`, `lint`, Vitest, pruebas standalone y OpenNext. La versión esperada después del despliegue es `v10.31 / 1.0.41-d1-web`.
+- Compilación estricta del motor TypeScript: OK.
+- Pruebas Node del motor/currículum/XLSX/defaults: 26/26 OK.
+- Pruebas standalone históricas: 12/12 OK con la nueva regla anual.
+- Auditoría de código: OK usando configuración sintética equivalente para los controles de fuente.
+- Auditoría transversal de aislamiento e identidad: 12/12 OK.
+- Regresión exacta 11 estudiantes / 5 descuento 20 % / 5 descuento 30 % / segundo año de un semestre: OK.
+- XLSX institucional: C3=1, C4=5, C5=5, C6=11, C7=8,5 y C13=$33.468.750 en 2028.
+- No se ejecutó `npm install` completo en este entorno porque agotó el tiempo; Cloudflare ejecutará `typecheck`, `lint`, `vitest` y OpenNext en el pipeline final.

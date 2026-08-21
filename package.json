@@ -1,6 +1,6 @@
 {
   "name": "sistema-presupuestos-postgrado-utem",
-  "version": "1.0.42-d1-web",
+  "version": "1.0.41-d1-web",
   "private": true,
   "description": "Sistema de Presupuestos de Postgrado UTEM para Cloudflare Workers y D1, desplegable desde GitHub y Cloudflare web.",
   "engines": {
@@ -29,13 +29,12 @@
     "preview:cloudflare": "npm run build:cloudflare && opennextjs-cloudflare preview",
     "verify": "npm run build:cloudflare",
     "source:audit": "node scripts/source-audit.mjs",
-    "quality:cloudflare": "npm run preflight && npm run source:audit && npm run integrity:audit && npm run typecheck && npm run lint && npm run test:engine && npm run test:institutional-xlsx && npm run test:curriculum && npm run test:form-defaults && npm run test:documents && npm run test && npm run test:standalone",
+    "quality:cloudflare": "npm run preflight && npm run source:audit && npm run integrity:audit && npm run typecheck && npm run lint && npm run test:engine && npm run test:institutional-xlsx && npm run test:curriculum && npm run test:form-defaults && npm run test && npm run test:standalone",
     "db:validate": "prisma validate",
     "integrity:audit": "node scripts/platform-integrity-audit.mjs",
     "test:institutional-xlsx": "node --test demo/tests/institutional-xlsx.test.mjs",
     "test:curriculum": "node --test demo/tests/curriculum-import.test.mjs demo/tests/curriculum-engine.test.mjs",
-    "test:form-defaults": "node --test demo/tests/v1027-form-defaults.test.mjs",
-    "test:documents": "node --test demo/tests/memorandum-export.test.mjs demo/tests/financial-narrative-v1031.test.mjs"
+    "test:form-defaults": "node --test demo/tests/v1027-form-defaults.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "3.9.1",

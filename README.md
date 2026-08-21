@@ -1,28 +1,18 @@
-# Sistema de Presupuestos de Postgrado UTEM — v10.32 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v10.31 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
 
 
-## Mejora funcional v10.32
+## Corrección v10.31 — arancel anual por estudiantes completos
 
-- **Importación no bloqueante:** los archivos con datos incompletos pueden crearse igualmente como Borrador.
-- **Pendientes trazables:** año, semestre, duración o estudiantes no reconocidos quedan señalados en la importación y dentro del presupuesto.
-- **Inferencia mejorada:** el año de inicio puede obtenerse desde la primera anualidad reconocida, además de cohorte, nombre de archivo o periodos semestrales.
-- **Recuperación ante fallos parciales:** si el Borrador ya fue creado y falla una parte del detalle, el sistema conserva el presupuesto y explicita qué requiere revisión.
-- **Programa resuelto manualmente:** una selección manual válida deja de mostrarse como error de identificación.
-- **Control de despliegue:** versión `v10.32 · 1.0.42-d1-web`.
-
-## Mejora funcional v10.31
-
-- **Generación de memorándum:** nuevo botón `Generar memorándum` en Presupuestos y en Importar/Exportar. Produce un DOCX institucional basado en el memorándum de proyección presupuestaria de la Escuela de Postgrado.
-- **Relato PDF descriptivo:** el informe adopta una estructura continua de antecedentes, ingresos, costos, resultado, comparación histórica, evolución de indicadores y variaciones, sin recomendaciones ni juicios administrativos.
-- **Historia comparable:** la comparación usa únicamente cohortes anteriores `Aprobado` del mismo programa y una sola revisión por cohorte; si no existe historia aprobada se omite la tabla y se declara la ausencia de base comparable.
-- **Tabla histórica:** el PDF puede incorporar hasta cinco cohortes con matriculados, ingresos netos, ingreso por alumno, costos, costo por alumno, resultado, margen y becas/descuentos.
-- **Parámetros PDF acotados:** el anexo se limita a identificación esencial, parámetros económicos principales y descuentos efectivos; el XLSX mantiene la trazabilidad completa.
-- **Nombres de archivos:** las descargas normalizan nombres URL y eliminan `%20`, preservando espacios y caracteres legibles.
-- **Control de despliegue:** versión `v10.31 · 1.0.41-d1-web`.
-
+- El arancel se cobra una sola vez por cada año calendario activo de la cohorte.
+- Un año con un solo semestre ya no transforma 11 estudiantes en 5,5 estudiantes-año ni reduce el arancel a 50 %.
+- Los descuentos se aplican una sola vez sobre los estudiantes completos del período anual de cobro.
+- Las matrículas equivalentes siguen admitiendo decimales, porque son una medida financiera; los estudiantes físicos no se fraccionan.
+- El XLSX institucional muestra estudiantes enteros en `Flujo estudiantes` y mantiene fórmulas coherentes con el motor.
+- Caso regresión validado: 11 estudiantes, 5 con 20 %, 5 con 30 % => 8,5 matrículas equivalentes tanto en 2027 como en 2028, aun cuando 2028 tenga un solo semestre.
+- Versión funcional `v10.31 · 1.0.41-d1-web`.
 
 
 ## Corrección v10.29

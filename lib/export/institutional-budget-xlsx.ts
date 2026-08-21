@@ -156,14 +156,22 @@ function distinctDiscountRates(budget: CohortBudget): number[] {
   }
   return rates;
 }
-function weightedDiscountStudents(budget: CohortBudget, year: number, rate: number): number {
-  const semesters = periodsForYear(budget, year);
-  return semesters.reduce((total, semester) => total + budget.discounts
-    .filter((discount) => Math.abs(discount.percentage - rate) < 1e-9 && discountApplies(discount, semester))
-    .reduce((subtotal, discount) => subtotal + Math.max(0, discount.students) * 0.5, 0), 0);
+function tuitionChargeSemesterForYear(budget: CohortBudget, year: number): SemesterParameters | undefined {
+  return periodsForYear(budget, year)[0];
 }
-function weightedStudents(budget: CohortBudget, year: number): number {
-  return periodsForYear(budget, year).reduce((total, semester) => total + Math.max(0, semester.activeStudents) * 0.5, 0);
+function annualDiscountStudents(budget: CohortBudget, year: number, rate: number): number {
+  const semester = tuitionChargeSemesterForYear(budget, year);
+  if (!semester) return 0;
+  // Los descuentos se expresan en personas completas y se aplican una sola vez al
+  // arancel anual del año. Nunca se transforman 5 estudiantes en 2,5 por tener un
+  // solo semestre activo en ese año calendario.
+  return budget.discounts
+    .filter((discount) => Math.abs(discount.percentage - rate) < 1e-9 && discountApplies(discount, semester))
+    .reduce((subtotal, discount) => subtotal + Math.max(0, Math.round(discount.students)), 0);
+}
+function annualStudents(budget: CohortBudget, year: number): number {
+  const semester = tuitionChargeSemesterForYear(budget, year);
+  return semester ? Math.max(0, Math.round(semester.activeStudents)) : 0;
 }
 function annualEnrollmentStudents(budget: CohortBudget, year: number, grossFee: number, annualFee: number): number {
   if (annualFee > 0) return grossFee / annualFee;
@@ -276,9 +284,9 @@ export async function createInstitutionalFormulaBudgetXlsx(
   // 2. Flujo estudiantes: incorpora matrículas equivalentes y punto de equilibrio sin el texto "flujo simulado".
   let s2 = decoder.decode(files.get("xl/worksheets/sheet2.xml")!);
   s2 = setText(s2, "B2", `año ${year1}`); s2 = setText(s2, "C2", `año ${year2}`);
-  const d11 = weightedDiscountStudents(budget, year1, rate1); const d12 = weightedDiscountStudents(budget, year2, rate1);
-  const d21 = weightedDiscountStudents(budget, year1, rate2); const d22 = weightedDiscountStudents(budget, year2, rate2);
-  const no1 = Math.max(0, weightedStudents(budget, year1) - d11 - d21); const no2 = Math.max(0, weightedStudents(budget, year2) - d12 - d22);
+  const d11 = annualDiscountStudents(budget, year1, rate1); const d12 = annualDiscountStudents(budget, year2, rate1);
+  const d21 = annualDiscountStudents(budget, year1, rate2); const d22 = annualDiscountStudents(budget, year2, rate2);
+  const no1 = Math.max(0, annualStudents(budget, year1) - d11 - d21); const no2 = Math.max(0, annualStudents(budget, year2) - d12 - d22);
   const continuationFormula = (baseRef: string, base: number, next: number) => { const delta = next - base; if (Math.abs(delta) < 1e-9) return `+${baseRef}`; return delta > 0 ? `${baseRef}+${delta}` : `${baseRef}-${Math.abs(delta)}`; };
   s2 = setNumber(s2, "B3", no1); s2 = setFormula(s2, "C3", continuationFormula("B3", no1, no2), no2);
   s2 = setNumber(s2, "B4", d11); s2 = setFormula(s2, "C4", continuationFormula("B4", d11, d12), d12);

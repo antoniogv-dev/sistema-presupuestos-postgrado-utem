@@ -82,6 +82,37 @@ budget.program.curriculumCourses = [
 budget = applyProgramCurriculumToBudget(budget);
 const result = calculateBudget(budget, institutionalParameters);
 
+test("v10.31 no fracciona estudiantes ni arancel en un segundo año de un solo semestre", async () => {
+  const partial = structuredClone(demoBudget);
+  partial.durationSemesters = 3;
+  partial.initialStudents = 11;
+  partial.semesters = partial.semesters.slice(0, 3).map((semester) => ({ ...semester, activeStudents: 11, graduatingStudents: semester.year === 2028 ? 11 : 0 }));
+  partial.program.annualTuition = { 2027: 3_937_500, 2028: 3_937_500 };
+  partial.annualOverrides = [];
+  partial.discounts = [
+    { id: "d20", name: "Descuento 20%", percentage: 0.20, students: 5, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 1 },
+    { id: "d30", name: "Descuento 30%", percentage: 0.30, students: 5, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 1 },
+  ];
+  partial.externalIncome = [];
+  partial.manualItems = [];
+  const partialResult = calculateBudget(partial, institutionalParameters);
+  const second = partialResult.annualFlows.find((flow) => flow.year === 2028);
+  assert.ok(second);
+  assert.equal(second.grossTuition, 11 * 3_937_500);
+  assert.equal(second.discounts, 5 * 3_937_500 * 0.20 + 5 * 3_937_500 * 0.30);
+  assert.equal(second.equivalentEnrollments, 8.5);
+
+  const generated = await createInstitutionalFormulaBudgetXlsx(template, partial, partialResult, institutionalParameters);
+  const out = unzip(generated);
+  const studentXml = text(out, "xl/worksheets/sheet2.xml");
+  assert.equal(cachedNumber(studentXml, "C3"), 1);
+  assert.equal(cachedNumber(studentXml, "C4"), 5);
+  assert.equal(cachedNumber(studentXml, "C5"), 5);
+  assert.equal(cachedNumber(studentXml, "C6"), 11);
+  assert.equal(cachedNumber(studentXml, "C7"), 8.5);
+  assert.equal(cachedNumber(studentXml, "C13"), 33_468_750);
+});
+
 test("v10.30 mantiene el formato institucional con 13 asignaturas valorizables", async () => {
   const extended = structuredClone(budget);
   extended.program.curriculumCourses = Array.from({ length: 13 }, (_, index) => ({

@@ -38,8 +38,21 @@ export function getActiveYears(periods: ActivePeriod[]): number[] {
   return [...new Set(periods.map((period) => period.year))].sort((a, b) => a - b);
 }
 
+export function getAnnualTuitionChargePeriods(periods: ActivePeriod[]): ActivePeriod[] {
+  // El arancel es anual: se cobra una sola vez por cada año calendario en que la cohorte
+  // se encuentra activa, usando el primer semestre activo de ese año como período de cargo.
+  // Esto evita representar personas como 0,5 estudiantes cuando un año sólo contiene un semestre.
+  const byYear = new Map<number, ActivePeriod>();
+  for (const period of periods) {
+    if (!byYear.has(period.year)) byYear.set(period.year, period);
+  }
+  return [...byYear.values()].sort((a, b) => a.year - b.year || a.semester - b.semester);
+}
+
 export function getTuitionFactorForYear(periods: ActivePeriod[], year: number): number {
-  return periods.filter((period) => period.year === year).length * 0.5;
+  // Un año activo representa un cargo anual completo de arancel. El número de semestres
+  // del año no fracciona estudiantes ni el arancel anual.
+  return periods.some((period) => period.year === year) ? 1 : 0;
 }
 
 export function periodKey(year: number, semester: SemesterNumber): string {
