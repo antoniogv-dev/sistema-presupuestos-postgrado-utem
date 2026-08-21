@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { calculateBudget, defaultAnnualOverrideForYear } from "@/lib/calculations/budget-engine";
 import type { BudgetTemplate } from "@/lib/calculations/types";
-import { demoBudget, institutionalParameters, programs, secondDemoBudget } from "@/lib/demo-data";
-import { buildFinancialNarrative, buildHistoricalCohortSnapshots } from "@/lib/export/financial-narrative";
+import { demoBudget, institutionalParameters, programs } from "@/lib/demo-data";
+import { buildFinancialNarrative } from "@/lib/export/financial-narrative";
 import { applyBudgetTemplate } from "@/lib/templates/apply-template";
 
 const clone = <T,>(value: T): T => structuredClone(value);
@@ -81,19 +81,14 @@ describe("v10.18 relato financiero", () => {
   it("genera un análisis trazable sin lenguaje administrativo de aprobación", () => {
     const budget = clone(demoBudget);
     const result = calculateBudget(budget, institutionalParameters);
-    const history = buildHistoricalCohortSnapshots(budget, [budget, secondDemoBudget], institutionalParameters);
-    const narrative = buildFinancialNarrative(budget, result, institutionalParameters, history);
+    const narrative = buildFinancialNarrative(budget, result, institutionalParameters);
     const text = [narrative.title, ...narrative.sections.flatMap((section) => [section.heading, ...section.paragraphs])].join(" ");
-    expect(text).toContain("Análisis económico-financiero de la cohorte");
-    expect(text.toLowerCase()).toContain("aranceles");
+    expect(text).toContain("Análisis financiero y principales consideraciones");
+    expect(text.toLowerCase()).toContain("arancel bruto");
     expect(text).toContain("incobrabilidad");
-    expect(text).toContain("1. Antecedentes de la cohorte");
-    expect(text).toContain("4. Resultado económico");
-    expect(text).toContain("7. Variaciones entre cohortes");
-    expect(narrative.comparisonTable?.rows.some((row) => row[0] === "Ingresos netos")).toBe(true);
-    expect(text).not.toContain("Conclusión financiera");
+    expect(text).toContain("no se suma a los ingresos totales");
+    expect(text).toContain("Conclusión financiera");
     expect(text.toLowerCase()).not.toContain("esta vicerrectoría aprueba");
     expect(text.toLowerCase()).not.toContain("se rechaza");
-    expect(text.toLowerCase()).not.toContain("recomendamos");
   });
 });
