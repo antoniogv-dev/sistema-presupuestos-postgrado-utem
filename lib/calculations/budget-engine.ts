@@ -1,4 +1,4 @@
-import { getActivePeriods, getActiveYears, getAnnualEnrollmentChargePeriods, getAnnualTuitionChargePeriods, isPeriodWithinRange, periodKey } from "./periods";
+import { getActivePeriods, getActiveYears, getAnnualEnrollmentChargePeriods, isPeriodWithinRange, periodKey } from "./periods";
 import type {
   AnnualFlow,
   BudgetAnnualOverride,
@@ -234,34 +234,32 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
     getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
       .map((period) => periodKey(period.year, period.semester)),
   );
-  const tuitionChargePeriods = new Map(
-    getAnnualTuitionChargePeriods(periods).map((period) => [period.year, period] as const),
-  );
 
   const annualFlows: AnnualFlow[] = years.map((year, yearIndex) => {
     const yearPeriods = periods.filter((period) => period.year === year);
     const semesters = yearPeriods.map((period) => semesterMap.get(periodKey(period.year, period.semester))).filter(Boolean) as SemesterParameters[];
     const override = resolvedAnnualOverrideForYear(budget, parameters, year);
     const annualTuition = nonNegative(override.annualTuition);
-    const tuitionFactor = yearPeriods.length > 0 ? 1 : 0;
-    const tuitionChargePeriod = tuitionChargePeriods.get(year);
-    const tuitionSemester = tuitionChargePeriod
-      ? semesterMap.get(periodKey(tuitionChargePeriod.year, tuitionChargePeriod.semester))
-      : undefined;
+    // v11.0: arancel anual por ciclo académico de la cohorte. Se cobra en el primer semestre
+    // de cada ciclo de hasta dos semestres, evitando fracciones de estudiantes y cobros extra
+    // para cohortes que comienzan en 2S.
+    const tuitionChargePeriods = new Set(
+      getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
+        .map((period) => periodKey(period.year, period.semester)),
+    );
+    const tuitionSemesters = semesters.filter((semester) => tuitionChargePeriods.has(periodKey(semester.year, semester.semester)));
+    const tuitionFactor = tuitionSemesters.length;
 
-    // El arancel es anual y se cobra una vez por cada año activo. Los estudiantes se
-    // mantienen como personas completas; un año con un solo semestre no los transforma
-    // en 0,5 estudiantes ni reduce el arancel anual a la mitad.
-    const grossTuition = nonNegative(tuitionSemester?.activeStudents) * annualTuition;
-    const discounts = tuitionSemester ? sum(budget.discounts
-      .filter((discount) => isPeriodWithinRange(tuitionSemester.year, tuitionSemester.semester, discount.startYear, discount.startSemester, discount.endYear, discount.endSemester))
-      .map((discount) => nonNegative(discount.students) * annualTuition * clampRate(discount.percentage))) : 0;
-    const internalTuitionScholarships = budget.scholarshipsEnabled && tuitionSemester
-      ? nonNegative(tuitionSemester.internalTuitionScholarshipStudents) * annualTuition * clampRate(tuitionSemester.internalTuitionScholarshipCoverage)
-      : 0;
+    const grossTuition = sum(tuitionSemesters.map((semester) => nonNegative(semester.activeStudents) * annualTuition));
+    const discounts = sum(tuitionSemesters.flatMap((semester) => budget.discounts
+      .filter((discount) => isPeriodWithinRange(semester.year, semester.semester, discount.startYear, discount.startSemester, discount.endYear, discount.endSemester))
+      .map((discount) => nonNegative(discount.students) * annualTuition * clampRate(discount.percentage))));
+    const internalTuitionScholarships = budget.scholarshipsEnabled ? sum(tuitionSemesters.map((semester) =>
+      nonNegative(semester.internalTuitionScholarshipStudents) * annualTuition * clampRate(semester.internalTuitionScholarshipCoverage),
+    )) : 0;
 
     const tuitionAfterBenefits = Math.max(0, grossTuition - discounts - internalTuitionScholarships);
-    const equivalentDenominator = annualTuition;
+    const equivalentDenominator = annualTuition * tuitionFactor;
     const equivalentEnrollments = equivalentDenominator > 0 ? tuitionAfterBenefits / equivalentDenominator : 0;
     const roundedEquivalentStudents = Math.ceil(equivalentEnrollments);
     const badDebt = tuitionAfterBenefits * scoped.badDebtRate;

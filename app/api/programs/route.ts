@@ -82,7 +82,7 @@ export async function GET(request: Request) {
     const includeInactive = url.searchParams.get("includeInactive") === "1";
     const programs = await getPrismaClient().program.findMany({
       where: includeInactive ? undefined : { status: { not: "INACTIVO" } },
-      include: { annualTuitions: { orderBy: { year: "asc" } }, curriculumCourses: { orderBy: [{ semester: "asc" }, { position: "asc" }] } },
+      include: { annualTuitions: { orderBy: { year: "asc" } }, curriculumCourses: { orderBy: [{ semester: "asc" }, { position: "asc" }] }, intakeWindows: { orderBy: { displayOrder: "asc" } } },
       orderBy: [{ type: "asc" }, { name: "asc" }],
     });
     return Response.json(json(programs.map(apiProgram)));
@@ -163,7 +163,7 @@ export async function POST(request: Request) {
 
     const created = await prisma.program.findUnique({
       where: { id: programId },
-      include: { annualTuitions: { orderBy: { year: "asc" } }, curriculumCourses: { orderBy: [{ semester: "asc" }, { position: "asc" }] } },
+      include: { annualTuitions: { orderBy: { year: "asc" } }, curriculumCourses: { orderBy: [{ semester: "asc" }, { position: "asc" }] }, intakeWindows: { orderBy: { displayOrder: "asc" } } },
     });
     return Response.json(json(created ? apiProgram(created) : null), { status: 201 });
   } catch (error) {

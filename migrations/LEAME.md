@@ -25,3 +25,5 @@ wrangler d1 migrations apply DB --remote
 Cloudflare aplica únicamente las migraciones pendientes y mantiene el historial de las ya ejecutadas.
 
 No copie estos SQL a `prisma/migrations` y no ejecute manualmente una migración que Wrangler ya haya aplicado.
+
+- `0011_professional_annual_offering_plans.sql`: v11.0, planificación anual flexible para Magísteres Profesionales.

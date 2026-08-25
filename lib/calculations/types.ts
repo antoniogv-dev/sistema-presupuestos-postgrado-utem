@@ -36,6 +36,17 @@ export interface ProgramCourse {
   position: number;
 }
 
+export interface ProgramIntakeWindow {
+  id: string;
+  code: string;
+  name: string;
+  academicSemester: SemesterNumber;
+  month: number;
+  day?: number;
+  active: boolean;
+  displayOrder: number;
+}
+
 export interface Program {
   id: string;
   code: string;
@@ -50,6 +61,9 @@ export interface Program {
   tuitionSource?: TuitionSource;
   versionLabel?: string;
   curriculumCourses?: ProgramCourse[];
+  annualPlanningEnabled?: boolean;
+  maxAnnualIntakes?: number;
+  intakeWindows?: ProgramIntakeWindow[];
 }
 
 export interface ProgramTypeParameters {

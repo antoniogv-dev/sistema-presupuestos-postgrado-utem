@@ -99,6 +99,75 @@ enum ParameterScope {
   OTRO
 }
 
+model ProgramIntakeWindow {
+  id               String   @id @default(cuid())
+  programId        String
+  code             String
+  name             String
+  academicSemester Int
+  month            Int
+  day              Int?
+  active           Boolean  @default(true)
+  displayOrder     Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  program          Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  planIntakes      AnnualOfferingPlanIntake[]
+  @@unique([programId, code])
+  @@index([programId, active, displayOrder])
+}
+
+model AnnualOfferingPlan {
+  id                 String       @id @default(cuid())
+  programId          String
+  year               Int
+  name               String
+  status             BudgetStatus @default(BORRADOR)
+  revision           Int          @default(1)
+  normalizeStaff     Boolean      @default(true)
+  allocationMethod   String       @default("EQUIVALENT_ENROLLMENTS")
+  notes              String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  program            Program      @relation(fields: [programId], references: [id], onDelete: Cascade)
+  intakes            AnnualOfferingPlanIntake[]
+  sharedCosts        AnnualOfferingPlanSharedCost[]
+  @@unique([programId, year, revision])
+  @@index([programId, year])
+}
+
+model AnnualOfferingPlanIntake {
+  id             String               @id @default(cuid())
+  planId         String
+  budgetId       String
+  windowId       String?
+  label          String
+  position       Int                  @default(0)
+  allocationRate Decimal              @default(0)
+  createdAt      DateTime             @default(now())
+  plan           AnnualOfferingPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  budget         CohortBudget         @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  window         ProgramIntakeWindow? @relation(fields: [windowId], references: [id], onDelete: SetNull)
+  @@unique([planId, budgetId])
+  @@index([planId, position])
+  @@index([budgetId])
+}
+
+model AnnualOfferingPlanSharedCost {
+  id               String             @id @default(cuid())
+  planId           String
+  year             Int
+  category         String
+  name             String
+  amount           BigInt
+  allocationMethod String             @default("INHERIT")
+  note             String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  plan             AnnualOfferingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  @@index([planId, year])
+}
+
 model User {
   id          String      @id @default(cuid())
   email       String      @unique
@@ -169,6 +238,10 @@ model Program {
   annualTuitions            ProgramAnnualTuition[]
   budgetTemplates           BudgetTemplate[]
   curriculumCourses         ProgramCourse[]
+  annualPlanningEnabled     Boolean              @default(false)
+  maxAnnualIntakes          Int                  @default(2)
+  intakeWindows             ProgramIntakeWindow[]
+  annualOfferingPlans       AnnualOfferingPlan[]
 }
 
 
@@ -298,6 +371,7 @@ model CohortBudget {
   workflowEvents             BudgetWorkflowEvent[]
   sharedCourses              SharedCourseEconomy[]
   notifications              BudgetNotification[]
+  annualPlanIntakes          AnnualOfferingPlanIntake[]
 
   @@index([programId, cohortName])
   @@index([programId, startYear, startSemester])

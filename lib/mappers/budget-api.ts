@@ -39,6 +39,9 @@ export type ApiProgram = {
   versionLabel?: string | null;
   annualTuitions?: ApiTuition[];
   curriculumCourses?: Array<Record<string, unknown>>;
+  annualPlanningEnabled?: boolean;
+  maxAnnualIntakes?: number;
+  intakeWindows?: Array<Record<string, unknown>>;
 };
 
 export type ApiBudgetRecord = {
@@ -198,6 +201,14 @@ export function toProgram(record: ApiProgram): Program {
     annualTuition,
     tuitionSource,
     curriculumCourses,
+    annualPlanningEnabled: Boolean(record.annualPlanningEnabled),
+    maxAnnualIntakes: Math.max(1, Math.round(numberValue(record.maxAnnualIntakes ?? 2))),
+    intakeWindows: (record.intakeWindows ?? []).map((item, index) => ({
+      id: String(item.id ?? `window-${index}`), code: String(item.code ?? `I${index + 1}`), name: String(item.name ?? `Inicio ${index + 1}`),
+      academicSemester: (numberValue(item.academicSemester) === 2 ? 2 : 1) as 1 | 2, month: Math.min(12, Math.max(1, Math.round(numberValue(item.month) || 3))),
+      day: numberValue(item.day) > 0 ? Math.round(numberValue(item.day)) : undefined, active: item.active === undefined ? true : Boolean(item.active),
+      displayOrder: Math.max(0, Math.round(numberValue(item.displayOrder ?? index))),
+    })),
   };
 }
 

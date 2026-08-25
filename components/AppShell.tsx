@@ -9,6 +9,7 @@ const items = [
   ["/", "Panel general"],
   ["/programas", "Programas"],
   ["/presupuestos", "Presupuestos"],
+  ["/planes-anuales", "Planes anuales"],
   ["/consolidado", "Consolidado"],
   ["/parametros", "Parámetros generales"],
   ["/versiones", "Versiones y aprobaciones"],
@@ -72,7 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             return <Link key={href} href={href} className={active ? "nav-link active" : "nav-link"} onClick={() => setOpen(false)}><span aria-hidden="true" className="nav-dot" />{label}</Link>;
           })}
         </nav>
-        <div className="sidebar-footer"><span>Versión Cloudflare D1 · v10.31</span><small>Motor financiero trazable · 1.0.41-d1-web</small></div>
+        <div className="sidebar-footer"><span>Versión Cloudflare D1 · v11.0</span><small>Motor financiero trazable · 1.1.0-d1-web</small></div>
       </aside>
       {open ? <button className="backdrop" onClick={() => setOpen(false)} aria-label="Cerrar menú" /> : null}
       <div className="main-area">

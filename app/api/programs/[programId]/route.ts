@@ -68,7 +68,7 @@ export async function GET(request: Request, context: RouteContext) {
     const { programId } = await context.params;
     const program = await getPrismaClient().program.findUnique({
       where: { id: programId },
-      include: { annualTuitions: { orderBy: { year: "asc" } }, curriculumCourses: { orderBy: [{ semester: "asc" }, { position: "asc" }] } },
+      include: { annualTuitions: { orderBy: { year: "asc" } }, curriculumCourses: { orderBy: [{ semester: "asc" }, { position: "asc" }] }, intakeWindows: { orderBy: { displayOrder: "asc" } } },
     });
     if (!program) throw new Error("NOT_FOUND");
     return Response.json(json({
@@ -165,7 +165,7 @@ export async function PUT(request: Request, context: RouteContext) {
 
     const updated = await prisma.program.findUnique({
       where: { id: programId },
-      include: { annualTuitions: { orderBy: { year: "asc" } }, curriculumCourses: { orderBy: [{ semester: "asc" }, { position: "asc" }] } },
+      include: { annualTuitions: { orderBy: { year: "asc" } }, curriculumCourses: { orderBy: [{ semester: "asc" }, { position: "asc" }] }, intakeWindows: { orderBy: { displayOrder: "asc" } } },
     });
     return Response.json(json(updated ? {
       ...updated,
