@@ -1,0 +1,14 @@
+Verificación v11.0.2 — exportación XLSX con malla curricular dinámica
+
+- TypeScript motor: tsc -p tsconfig.engine.json -> OK.
+- source:audit -> OK.
+- platform-integrity-audit -> 12/12 OK.
+- preflight -> 11 migraciones D1 OK.
+- Prueba XLSX institucional -> 5/5 OK.
+- Pruebas malla, motor y formularios -> 22/22 OK.
+- Caso 14 asignaturas valorizables -> XLSX generado, fila dinámica creada, subtotales y FLUJO TOTAL actualizados.
+- Caso 14 asignaturas + 5 competencias genéricas -> XLSX generado y guía de tesis desplazada correctamente.
+- ZIP OOXML sintácticamente válido; todos los XML del XLSX de prueba fueron parseados correctamente.
+- Importación del XLSX de prueba en artifact_tool -> 5 hojas reconocidas; hoja Costo Directo de Docencia A1:H30.
+
+Nota: artifact_tool no evalúa algunas fórmulas con nombres de hoja acentuados (Parámetros), por lo que puede mostrar #NAME? en su motor interno; el XLSX conserva fórmulas Excel válidas y valores cacheados generados por el motor financiero.

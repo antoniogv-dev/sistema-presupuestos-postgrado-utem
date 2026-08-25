@@ -1,0 +1,8 @@
+lib/export/institutional-budget-xlsx.ts
+demo/tests/institutional-xlsx.test.mjs
+scripts/source-audit.mjs
+package.json
+app/api/version/route.ts
+components/AppShell.tsx
+README.md
+HOTFIX_V11_0_2_XLSX_MALLA_DINAMICA.md

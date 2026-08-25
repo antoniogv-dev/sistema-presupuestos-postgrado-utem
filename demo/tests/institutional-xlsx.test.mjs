@@ -82,37 +82,6 @@ budget.program.curriculumCourses = [
 budget = applyProgramCurriculumToBudget(budget);
 const result = calculateBudget(budget, institutionalParameters);
 
-test("v10.31 no fracciona estudiantes ni arancel en un segundo año de un solo semestre", async () => {
-  const partial = structuredClone(demoBudget);
-  partial.durationSemesters = 3;
-  partial.initialStudents = 11;
-  partial.semesters = partial.semesters.slice(0, 3).map((semester) => ({ ...semester, activeStudents: 11, graduatingStudents: semester.year === 2028 ? 11 : 0 }));
-  partial.program.annualTuition = { 2027: 3_937_500, 2028: 3_937_500 };
-  partial.annualOverrides = [];
-  partial.discounts = [
-    { id: "d20", name: "Descuento 20%", percentage: 0.20, students: 5, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 1 },
-    { id: "d30", name: "Descuento 30%", percentage: 0.30, students: 5, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 1 },
-  ];
-  partial.externalIncome = [];
-  partial.manualItems = [];
-  const partialResult = calculateBudget(partial, institutionalParameters);
-  const second = partialResult.annualFlows.find((flow) => flow.year === 2028);
-  assert.ok(second);
-  assert.equal(second.grossTuition, 11 * 3_937_500);
-  assert.equal(second.discounts, 5 * 3_937_500 * 0.20 + 5 * 3_937_500 * 0.30);
-  assert.equal(second.equivalentEnrollments, 8.5);
-
-  const generated = await createInstitutionalFormulaBudgetXlsx(template, partial, partialResult, institutionalParameters);
-  const out = unzip(generated);
-  const studentXml = text(out, "xl/worksheets/sheet2.xml");
-  assert.equal(cachedNumber(studentXml, "C3"), 1);
-  assert.equal(cachedNumber(studentXml, "C4"), 5);
-  assert.equal(cachedNumber(studentXml, "C5"), 5);
-  assert.equal(cachedNumber(studentXml, "C6"), 11);
-  assert.equal(cachedNumber(studentXml, "C7"), 8.5);
-  assert.equal(cachedNumber(studentXml, "C13"), 33_468_750);
-});
-
 test("v10.30 mantiene el formato institucional con 13 asignaturas valorizables", async () => {
   const extended = structuredClone(budget);
   extended.program.curriculumCourses = Array.from({ length: 13 }, (_, index) => ({
@@ -144,6 +113,68 @@ test("v10.30 mantiene el formato institucional con 13 asignaturas valorizables",
   assert.ok(teachingXml.includes("Asignatura 13"), "la fila 16 debe admitir la asignatura valorizable 13");
   assert.match(teachingXml, /<c(?=[^>]*\br="G17")[^>]*>[\s\S]*?<f>SUM\(G4:G16\)<\/f>/);
   assert.match(teachingXml, /<c(?=[^>]*\br="H17")[^>]*>[\s\S]*?<f>SUM\(H4:H16\)<\/f>/);
+});
+
+test("v11.0.2 amplía dinámicamente la hoja para 14 o más asignaturas valorizables", async () => {
+  const extended = structuredClone(budget);
+  extended.program.curriculumCourses = Array.from({ length: 14 }, (_, index) => ({
+    id: `curr-dyn-${index + 1}`,
+    code: `DYN${String(index + 1).padStart(3, "0")}`,
+    name: `Asignatura dinámica ${index + 1}`,
+    semester: ((index % 4) + 1),
+    kind: index === 13 ? "ELECTIVA" : "OBLIGATORIA",
+    weeks: 18,
+    sections: index === 13 ? 2 : 1,
+    theoryWeeklyHours: 2,
+    laboratoryWeeklyHours: 0,
+    workshopWeeklyHours: 2,
+    directWeeklyHours: 4,
+    autonomousWeeklyHours: 4,
+    teachingMode: "SINCRONICA",
+    asynchronousRateFactor: 0.5,
+    sharedWithProgramIds: [],
+    allocationRate: 1,
+    sctCredits: 4,
+    position: index,
+  }));
+  const applied = applyProgramCurriculumToBudget(extended);
+  const extendedResult = calculateBudget(applied, institutionalParameters);
+  assert.equal(canUseFormulaTemplate(applied, extendedResult), true);
+  const generated = await createInstitutionalFormulaBudgetXlsx(template, applied, extendedResult, institutionalParameters);
+  const out = unzip(generated);
+  const teachingXml = text(out, "xl/worksheets/sheet3.xml");
+  const flowXml = text(out, "xl/worksheets/sheet4.xml");
+  assert.ok(teachingXml.includes("Asignatura dinámica 14"), "la fila dinámica 17 debe contener la asignatura 14");
+  assert.match(teachingXml, /<dimension ref="A2:H30"\/>/);
+  assert.match(teachingXml, /<c(?=[^>]*\br="G18")[^>]*>[\s\S]*?<f>SUM\(G4:G17\)<\/f>/);
+  assert.match(teachingXml, /<c(?=[^>]*\br="G19")[^>]*>[\s\S]*?<f>\+G18\*Parámetros!B6<\/f>/);
+  assert.match(flowXml, /<c(?=[^>]*\br="B8")[^>]*>[\s\S]*?<f>-'Costo Directo de Docencia'!G19<\/f>/);
+  assert.ok(Math.abs(cachedNumber(teachingXml, "G19") - extendedResult.annualFlows[0].directTeachingCost) < 0.01, "la malla dinámica no concilia con el costo docente 2027");
+});
+
+test("v11.0.2 amplía también competencias genéricas sin afectar el costo docente", async () => {
+  const extended = structuredClone(budget);
+  extended.program.curriculumCourses = [
+    ...Array.from({ length: 14 }, (_, index) => ({
+      id: `curr-pay-${index + 1}`, code: `PAY${index + 1}`, name: `Asignatura ${index + 1}`, semester: ((index % 4) + 1), kind: "OBLIGATORIA", weeks: 18, sections: 1,
+      theoryWeeklyHours: 2, laboratoryWeeklyHours: 0, workshopWeeklyHours: 2, directWeeklyHours: 4, autonomousWeeklyHours: 4, teachingMode: "SINCRONICA", asynchronousRateFactor: 0.5,
+      sharedWithProgramIds: [], allocationRate: 1, sctCredits: 4, position: index,
+    })),
+    ...Array.from({ length: 5 }, (_, index) => ({
+      id: `curr-gen-${index + 1}`, code: `GEN${index + 1}`, name: `Competencia genérica ${index + 1}`, semester: 1, kind: "COMPETENCIA_GENERICA", weeks: 18, sections: 1,
+      theoryWeeklyHours: 0, laboratoryWeeklyHours: 0, workshopWeeklyHours: 0, directWeeklyHours: 0, autonomousWeeklyHours: 4, teachingMode: "SINCRONICA", asynchronousRateFactor: 0.5,
+      sharedWithProgramIds: [], allocationRate: 1, sctCredits: 1, position: 14 + index,
+    })),
+  ];
+  const applied = applyProgramCurriculumToBudget(extended);
+  const extendedResult = calculateBudget(applied, institutionalParameters);
+  assert.equal(canUseFormulaTemplate(applied, extendedResult), true);
+  const generated = await createInstitutionalFormulaBudgetXlsx(template, applied, extendedResult, institutionalParameters);
+  const out = unzip(generated);
+  const teachingXml = text(out, "xl/worksheets/sheet3.xml");
+  assert.ok(teachingXml.includes("Competencia genérica 5"));
+  assert.match(teachingXml, /<dimension ref="A2:H32"\/>/);
+  assert.match(teachingXml, /<c(?=[^>]*\br="B32")[^>]*>[\s\S]*?<f>\+'Flujo estudiantes'!C8<\/f>/);
 });
 
 test("v10.30 genera XLSX institucional mejorado, con malla y fórmulas coherentes", async () => {

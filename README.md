@@ -1,4 +1,4 @@
-# Sistema de Presupuestos de Postgrado UTEM — v11.0 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v11.0.2 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
@@ -11,7 +11,7 @@ Aplicación institucional para formular, revisar, consolidar y exportar presupue
 - **Inferencia mejorada:** el año de inicio puede obtenerse desde la primera anualidad reconocida, además de cohorte, nombre de archivo o periodos semestrales.
 - **Recuperación ante fallos parciales:** si el Borrador ya fue creado y falla una parte del detalle, el sistema conserva el presupuesto y explicita qué requiere revisión.
 - **Programa resuelto manualmente:** una selección manual válida deja de mostrarse como error de identificación.
-- **Control de despliegue:** versión `v11.0 · 1.1.0-d1-web`.
+- **Control de despliegue:** versión `v11.0.2 · 1.1.2-d1-web`.
 
 ## Mejora funcional v10.31
 
