@@ -231,7 +231,7 @@ export function buildParameterReport(
     pushPercent(section, "Overhead central", String(year), annual.centralOverheadRate);
     pushPercent(section, "Overhead facultad", String(year), annual.facultyOverheadRate);
     pushNumber(section, "Semestres activos en el año", String(year), flow.activeSemesters);
-    pushNumber(section, "Factor de arancel anual", String(year), flow.tuitionFactor, "1 cargo anual por año calendario activo");
+    pushNumber(section, "Factor de arancel anual", String(year), flow.tuitionFactor, "0,5 por semestre activo");
   }
 
   if (budget.program.type === "MAGISTER_PROFESIONAL") {
@@ -341,28 +341,10 @@ export function buildParameterReport(
 const PDF_IDENTIFICATION_PARAMETERS = new Set([
   "Programa",
   "Cohorte",
-  "Año de inicio",
-  "Semestre de inicio",
   "Duración presupuestada",
   "Estudiantes iniciales",
   "Versión del programa / plan",
-  "Revisión interna de la plataforma",
-  "Fuente del arancel",
   "Modalidad",
-]);
-
-const PDF_CONTROL_PARAMETERS = new Set([
-  "Reconocimiento de matrícula",
-  "Arrastre inicial autorizado",
-]);
-
-const PDF_SEMESTER_PARAMETERS = new Set([
-  "Estudiantes activos",
-  "Estudiantes en graduación",
-  "Horas docentes presenciales",
-  "Horas docentes sincrónicas",
-  "Horas docentes asincrónicas",
-  "Horas docentes de reemplazo",
 ]);
 
 const PDF_PRIMARY_PARAMETERS = new Set([
@@ -377,6 +359,7 @@ const PDF_PRIMARY_PARAMETERS = new Set([
   "Incobrabilidad",
   "Dirección aplicada al presupuesto",
   "Asistencia aplicada al presupuesto",
+  "Otros honorarios no académicos aplicados",
   "Overhead central",
   "Overhead facultad",
 ]);
@@ -398,40 +381,28 @@ function hasActualText(value: string): boolean {
 }
 
 function rowHasMeaningfulInformation(row: ParameterReportRow): boolean {
-  // En identificación y controles sólo se conservan los datos esenciales del reporte.
-  if (row.section === "Identificación") return PDF_IDENTIFICATION_PARAMETERS.has(row.parameter) && (typeof row.value === "number" || hasActualText(row.value));
-  if (row.section === "Controles del presupuesto") {
-    if (!PDF_CONTROL_PARAMETERS.has(row.parameter)) return false;
-    if (row.parameter === "Reconocimiento de matrícula") return true;
-    return typeof row.value === "number" ? Math.abs(row.value) > 0.000001 : hasActualText(row.value);
+  // El PDF es un informe ejecutivo: sólo conserva identificación esencial y parámetros
+  // económicos principales. La trazabilidad completa sigue disponible en XLSX.
+  if (row.section === "Identificación") {
+    return PDF_IDENTIFICATION_PARAMETERS.has(row.parameter)
+      && (typeof row.value === "number" || hasActualText(row.value));
   }
 
-  // Los parámetros institucionales generales sólo se muestran si son efectivamente usados y tienen valor.
-  if (row.section === "Parámetros institucionales generales") {
-    if (row.parameter !== "Valor hora docencia de reemplazo") return false;
-    return typeof row.value === "number" && Math.abs(row.value) > 0.000001;
-  }
+  if (row.section === "Parámetros institucionales generales") return false;
 
-  // En los años se mantienen los parámetros principales aun cuando el valor sea 0,
-  // y cualquier costo/valor adicional sólo cuando tiene información efectiva.
   if (row.section === "Parámetros anuales") {
-    if (PDF_PRIMARY_PARAMETERS.has(row.parameter)) return true;
-    if (row.parameter.startsWith("Porcentaje aplicado") && typeof row.value === "number" && Math.abs(row.value - 1) < 0.000001) return false;
-    if (row.parameter.toLowerCase().includes("prorratead") && row.value === "No") return false;
-    return typeof row.value === "number" ? Math.abs(row.value) > 0.000001 : hasActualText(row.value);
+    if (!PDF_PRIMARY_PARAMETERS.has(row.parameter)) return false;
+    if (typeof row.value === "number") {
+      const optionalWhenZero = new Set(["Beca de manutención mensual", "Guía de tesis por estudiante en graduación", "Otros honorarios no académicos aplicados"]);
+      return Number.isFinite(row.value) && (!optionalWhenZero.has(row.parameter) || Math.abs(row.value) > 0.000001);
+    }
+    return hasActualText(row.value);
   }
 
-  // Por semestre interesa la carga/estudiantes. Los demás detalles quedan completos en Excel.
-  if (row.section === "Parámetros semestrales") {
-    if (!PDF_SEMESTER_PARAMETERS.has(row.parameter)) return false;
-    if (row.parameter === "Estudiantes activos" || row.parameter === "Horas docentes presenciales" || row.parameter === "Horas docentes sincrónicas" || row.parameter === "Horas docentes asincrónicas") return true;
-    return typeof row.value === "number" && Math.abs(row.value) > 0.000001;
-  }
-
-  if (row.section === "Punto de equilibrio") return true;
-
-  // Descuentos, ingresos y costos se muestran únicamente cuando existen registros reales.
-  if (["Descuentos de arancel", "Ingresos extraordinarios", "Costos y gastos registrados"].includes(row.section)) {
+  // Los descuentos concretos son un supuesto central del ingreso y se conservan sólo
+  // cuando existen. No se repiten cargas semestrales, punto de equilibrio ni costos
+  // manuales porque ya están explicados en el relato y en el flujo.
+  if (row.section === "Descuentos de arancel") {
     if (typeof row.value === "number") return Math.abs(row.value) > 0.000001;
     return hasActualText(row.value);
   }
@@ -440,15 +411,14 @@ function rowHasMeaningfulInformation(row: ParameterReportRow): boolean {
 }
 
 /**
- * Versión resumida para PDF: conserva los parámetros principales aunque sean 0
- * y agrega los demás sólo cuando contienen información efectiva. El XLSX usa
- * buildParameterReport() sin este filtro y, por tanto, mantiene la trazabilidad completa.
+ * Anexo ejecutivo para PDF. Mantiene exclusivamente los parámetros principales;
+ * el XLSX continúa utilizando buildParameterReport() y conserva el detalle completo.
  */
 export function compactParameterReportForPdf(report: ParameterReport): ParameterReport {
   return {
     ...report,
     title: report.title.replace("Parámetros completos", "Parámetros principales utilizados"),
-    subtitle: report.subtitle.replace("fotografía completa de los parámetros efectivos usados en el cálculo", "parámetros principales y valores con información efectiva"),
+    subtitle: "Supuestos económicos esenciales utilizados en la formulación",
     rows: report.rows.filter(rowHasMeaningfulInformation),
   };
 }
