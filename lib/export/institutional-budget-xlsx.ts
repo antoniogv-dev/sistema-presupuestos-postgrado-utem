@@ -184,20 +184,12 @@ function discountApplies(discount: CohortBudget["discounts"][number], semester: 
   const value = periodOrdinal(semester.year, semester.semester);
   return value >= periodOrdinal(discount.startYear, discount.startSemester) && value <= periodOrdinal(discount.endYear, discount.endSemester);
 }
-function distinctDiscountRates(budget: CohortBudget): number[] {
-  const rates: number[] = [];
-  for (const discount of budget.discounts) {
-    const rate = Math.max(0, Math.min(1, discount.percentage));
-    if (rate <= 0) continue;
-    if (!rates.some((candidate) => Math.abs(candidate - rate) < 1e-9)) rates.push(rate);
-  }
-  return rates;
+function exportableDiscounts(budget: CohortBudget): CohortBudget["discounts"] {
+  return budget.discounts.filter((discount) => Math.max(0, Math.min(1, discount.percentage)) > 0);
 }
-function weightedDiscountStudents(budget: CohortBudget, year: number, rate: number): number {
-  const semesters = periodsForYear(budget, year);
-  return semesters.reduce((total, semester) => total + budget.discounts
-    .filter((discount) => Math.abs(discount.percentage - rate) < 1e-9 && discountApplies(discount, semester))
-    .reduce((subtotal, discount) => subtotal + Math.max(0, discount.students) * 0.5, 0), 0);
+function weightedDiscountStudentsForItem(budget: CohortBudget, year: number, discount: CohortBudget["discounts"][number]): number {
+  return periodsForYear(budget, year).reduce((total, semester) =>
+    total + (discountApplies(discount, semester) ? Math.max(0, discount.students) * 0.5 : 0), 0);
 }
 function weightedStudents(budget: CohortBudget, year: number): number {
   return periodsForYear(budget, year).reduce((total, semester) => total + Math.max(0, semester.activeStudents) * 0.5, 0);
@@ -231,14 +223,9 @@ function maybeProjectionFormula(base: number, next: number, adjustment: number, 
 function modalityLabel(budget: CohortBudget): string {
   return budget.deliveryModality === "SEMIPRESENCIAL" ? "Semipresencial" : budget.deliveryModality === "E_LEARNING" ? "E-learning" : "Presencial";
 }
-function discountNameForRate(budget: CohortBudget, rate: number, fallback: string): string {
-  const names = [...new Set(budget.discounts.filter((discount) => Math.abs(discount.percentage - rate) < 1e-9).map((discount) => discount.name.trim()).filter(Boolean))];
-  return names.length ? names.join("\n") : fallback;
-}
 export function institutionalTemplateCompatibilityIssue(budget: CohortBudget, result: BudgetResult): string | null {
   if (budget.program.type !== "MAGISTER_PROFESIONAL") return "El formato Excel institucional mejorado se utiliza para Magísteres Profesionales.";
   if (result.years.length !== 2) return "El formato Excel institucional mejorado requiere exactamente dos años presupuestarios.";
-  if (distinctDiscountRates(budget).length > 2) return "El formato Excel institucional mejorado admite hasta dos tasas de descuento diferentes.";
   const payable = payableCurriculumCourses(budget.program).length;
   const generic = genericCurriculumCourses(budget.program).length;
   if (payable > 120) return `La malla contiene ${payable} asignaturas valorizables; excede el máximo técnico de 120 filas para una exportación institucional legible.`;
@@ -279,7 +266,26 @@ export async function createInstitutionalFormulaBudgetXlsx(
   const [year1, year2] = result.years;
   const flow1 = yearFlow(result, year1); const flow2 = yearFlow(result, year2);
   const override1 = resolvedAnnualOverrideForYear(budget, parameters, year1); const override2 = resolvedAnnualOverrideForYear(budget, parameters, year2);
-  const rates = distinctDiscountRates(budget); const rate1 = rates[0] ?? 0; const rate2 = rates[1] ?? 0;
+  const discounts = exportableDiscounts(budget);
+  const discountSlots = Math.max(2, discounts.length);
+  const extraDiscountRows = Math.max(0, discountSlots - 2);
+  const parameterDiscountStartRow = 10;
+  const badDebtParameterRow = 10 + discountSlots;
+  const centralOverheadParameterRow = 11 + discountSlots;
+  const facultyOverheadParameterRow = 12 + discountSlots;
+  const directionParameterRow = 13 + discountSlots;
+  const assistanceParameterRow = 14 + discountSlots;
+  const otherHonorariaParameterRow = 15 + discountSlots;
+  const studentDiscountStartRow = 4;
+  const totalStudentsRow = 4 + discountSlots;
+  const equivalentStudentsRow = 5 + discountSlots;
+  const graduationStudentsRow = 6 + discountSlots;
+  const enrollmentIncomeRow = 7 + discountSlots;
+  const noDiscountIncomeRow = 8 + discountSlots;
+  const discountIncomeStartRow = 9 + discountSlots;
+  const totalTuitionIncomeRow = 9 + (2 * discountSlots);
+  const equilibriumRow = 10 + (2 * discountSlots);
+  const equilibriumWholeStudentsRow = 11 + (2 * discountSlots);
   const adjustment = Math.max(0, parameters.annualAdjustmentRate || 0);
   const teachingRate1 = effectiveTeachingRate(budget, parameters, year1); const teachingRate2 = effectiveTeachingRate(budget, parameters, year2);
   const modality = modalityLabel(budget);
@@ -295,51 +301,73 @@ export async function createInstitutionalFormulaBudgetXlsx(
   s1 = setNumber(s1, "B7", parameters.replacementHour); s1 = setNumber(s1, "C7", parameters.replacementHour);
   s1 = setNumber(s1, "B8", override1.thesisGuidancePerGraduatingStudent); s1 = setNumber(s1, "C8", override2.thesisGuidancePerGraduatingStudent);
   s1 = setText(s1, "B9", `${budget.startYear}-${budget.startSemester}S`); s1 = clearCell(s1, "C9");
-  s1 = setText(s1, "A10", discountNameForRate(budget, rate1, "Beneficio / descuento 1"));
-  s1 = setText(s1, "A11", discountNameForRate(budget, rate2, "Beneficio / descuento 2"));
-  s1 = setNumber(s1, "B10", rate1); s1 = setFormula(s1, "C10", "+B10", rate1);
-  s1 = setNumber(s1, "B11", rate2); s1 = setFormula(s1, "C11", "+B11", rate2);
-  s1 = setNumber(s1, "B12", flow1.tuitionAfterBenefits > 0 ? flow1.badDebt / flow1.tuitionAfterBenefits : 0); s1 = setNumber(s1, "C12", flow2.tuitionAfterBenefits > 0 ? flow2.badDebt / flow2.tuitionAfterBenefits : 0);
-  s1 = setNumber(s1, "B13", flow1.centralOverheadRate); s1 = setNumber(s1, "C13", flow2.centralOverheadRate);
-  s1 = setNumber(s1, "B14", flow1.facultyOverheadRate); s1 = setNumber(s1, "C14", flow2.facultyOverheadRate);
-  s1 = setNumber(s1, "B15", override1.annualDirection);
-  const directionProjection = maybeProjectionFormula(override1.annualDirection, override2.annualDirection, adjustment, "B15"); s1 = directionProjection ? setFormula(s1, "C15", directionProjection, override2.annualDirection) : setNumber(s1, "C15", override2.annualDirection);
-  s1 = setNumber(s1, "B16", override1.annualAssistance);
-  const assistanceProjection = maybeProjectionFormula(override1.annualAssistance, override2.annualAssistance, adjustment, "B16"); s1 = assistanceProjection ? setFormula(s1, "C16", assistanceProjection, override2.annualAssistance) : setNumber(s1, "C16", override2.annualAssistance);
-  s1 = setNumber(s1, "B17", override1.annualOtherNonAcademicHonoraria);
-  const otherProjection = maybeProjectionFormula(override1.annualOtherNonAcademicHonoraria, override2.annualOtherNonAcademicHonoraria, adjustment, "B17"); s1 = otherProjection ? setFormula(s1, "C17", otherProjection, override2.annualOtherNonAcademicHonoraria) : setNumber(s1, "C17", override2.annualOtherNonAcademicHonoraria);
+  if (extraDiscountRows > 0) s1 = insertRowsFromTemplate(s1, 11, extraDiscountRows, 11);
+  for (let index = 0; index < discountSlots; index += 1) {
+    const row = parameterDiscountStartRow + index;
+    const discount = discounts[index];
+    const rate = discount ? Math.max(0, Math.min(1, discount.percentage)) : 0;
+    s1 = setText(s1, `A${row}`, discount?.name?.trim() || `Beneficio / descuento ${index + 1}`);
+    s1 = setNumber(s1, `B${row}`, rate);
+    s1 = setFormula(s1, `C${row}`, `+B${row}`, rate);
+  }
+  s1 = setNumber(s1, `B${badDebtParameterRow}`, flow1.tuitionAfterBenefits > 0 ? flow1.badDebt / flow1.tuitionAfterBenefits : 0); s1 = setNumber(s1, `C${badDebtParameterRow}`, flow2.tuitionAfterBenefits > 0 ? flow2.badDebt / flow2.tuitionAfterBenefits : 0);
+  s1 = setNumber(s1, `B${centralOverheadParameterRow}`, flow1.centralOverheadRate); s1 = setNumber(s1, `C${centralOverheadParameterRow}`, flow2.centralOverheadRate);
+  s1 = setNumber(s1, `B${facultyOverheadParameterRow}`, flow1.facultyOverheadRate); s1 = setNumber(s1, `C${facultyOverheadParameterRow}`, flow2.facultyOverheadRate);
+  s1 = setNumber(s1, `B${directionParameterRow}`, override1.annualDirection);
+  const directionProjection = maybeProjectionFormula(override1.annualDirection, override2.annualDirection, adjustment, `B${directionParameterRow}`); s1 = directionProjection ? setFormula(s1, `C${directionParameterRow}`, directionProjection, override2.annualDirection) : setNumber(s1, `C${directionParameterRow}`, override2.annualDirection);
+  s1 = setNumber(s1, `B${assistanceParameterRow}`, override1.annualAssistance);
+  const assistanceProjection = maybeProjectionFormula(override1.annualAssistance, override2.annualAssistance, adjustment, `B${assistanceParameterRow}`); s1 = assistanceProjection ? setFormula(s1, `C${assistanceParameterRow}`, assistanceProjection, override2.annualAssistance) : setNumber(s1, `C${assistanceParameterRow}`, override2.annualAssistance);
+  s1 = setNumber(s1, `B${otherHonorariaParameterRow}`, override1.annualOtherNonAcademicHonoraria);
+  const otherProjection = maybeProjectionFormula(override1.annualOtherNonAcademicHonoraria, override2.annualOtherNonAcademicHonoraria, adjustment, `B${otherHonorariaParameterRow}`); s1 = otherProjection ? setFormula(s1, `C${otherHonorariaParameterRow}`, otherProjection, override2.annualOtherNonAcademicHonoraria) : setNumber(s1, `C${otherHonorariaParameterRow}`, override2.annualOtherNonAcademicHonoraria);
   files.set("xl/worksheets/sheet1.xml", encoder.encode(s1));
 
   // 2. Flujo estudiantes: incorpora matrículas equivalentes y punto de equilibrio sin el texto "flujo simulado".
   let s2 = decoder.decode(files.get("xl/worksheets/sheet2.xml")!);
+  if (extraDiscountRows > 0) {
+    s2 = insertRowsFromTemplate(s2, 5, extraDiscountRows, 5);
+    s2 = insertRowsFromTemplate(s2, 12 + extraDiscountRows, extraDiscountRows, 12 + extraDiscountRows);
+  }
   s2 = setText(s2, "B2", `año ${year1}`); s2 = setText(s2, "C2", `año ${year2}`);
-  const d11 = weightedDiscountStudents(budget, year1, rate1); const d12 = weightedDiscountStudents(budget, year2, rate1);
-  const d21 = weightedDiscountStudents(budget, year1, rate2); const d22 = weightedDiscountStudents(budget, year2, rate2);
-  const no1 = Math.max(0, weightedStudents(budget, year1) - d11 - d21); const no2 = Math.max(0, weightedStudents(budget, year2) - d12 - d22);
+  const discountStudents1 = discounts.map((discount) => weightedDiscountStudentsForItem(budget, year1, discount));
+  const discountStudents2 = discounts.map((discount) => weightedDiscountStudentsForItem(budget, year2, discount));
+  const discounted1 = discountStudents1.reduce((total, value) => total + value, 0);
+  const discounted2 = discountStudents2.reduce((total, value) => total + value, 0);
+  const no1 = Math.max(0, weightedStudents(budget, year1) - discounted1);
+  const no2 = Math.max(0, weightedStudents(budget, year2) - discounted2);
   const continuationFormula = (baseRef: string, base: number, next: number) => { const delta = next - base; if (Math.abs(delta) < 1e-9) return `+${baseRef}`; return delta > 0 ? `${baseRef}+${delta}` : `${baseRef}-${Math.abs(delta)}`; };
   s2 = setNumber(s2, "B3", no1); s2 = setFormula(s2, "C3", continuationFormula("B3", no1, no2), no2);
-  s2 = setNumber(s2, "B4", d11); s2 = setFormula(s2, "C4", continuationFormula("B4", d11, d12), d12);
-  s2 = setNumber(s2, "B5", d21); s2 = setFormula(s2, "C5", continuationFormula("B5", d21, d22), d22);
-  const rateLabel = (rate: number, fallback: string) => rate > 0 ? `${(rate * 100).toLocaleString("es-CL", { maximumFractionDigits: 2 })}%` : fallback;
-  s2 = setText(s2, "A4", rate1 > 0 ? `Descuento ${rateLabel(rate1, "1")}` : "Descuento 1"); s2 = setText(s2, "A5", rate2 > 0 ? `Descuento ${rateLabel(rate2, "2")}` : "Descuento 2");
-  s2 = setText(s2, "A11", rate1 > 0 ? `Ingresos arancel descuento ${rateLabel(rate1, "1")}` : "Ingresos arancel descuento 1"); s2 = setText(s2, "A12", rate2 > 0 ? `Ingresos arancel descuento ${rateLabel(rate2, "2")}` : "Ingresos arancel descuento 2");
-  const total1 = no1 + d11 + d21; const total2 = no2 + d12 + d22;
-  s2 = setFormula(s2, "B6", "SUM(B3:B5)", total1); s2 = setFormula(s2, "C6", "SUM(C3:C5)", total2);
-  s2 = setFormula(s2, "B7", "B3+B4*(1-Parámetros!B10)+B5*(1-Parámetros!B11)", flow1.equivalentEnrollments); s2 = setFormula(s2, "C7", "C3+C4*(1-Parámetros!C10)+C5*(1-Parámetros!C11)", flow2.equivalentEnrollments);
-  s2 = setFormula(s2, "B8", `${flow1.graduatingStudents}`, flow1.graduatingStudents); const graduationFormula2 = Math.abs(flow2.graduatingStudents - total2) < 1e-9 ? "C6" : `${flow2.graduatingStudents}`; s2 = setFormula(s2, "C8", graduationFormula2, flow2.graduatingStudents);
+  for (let index = 0; index < discountSlots; index += 1) {
+    const studentRow = studentDiscountStartRow + index;
+    const parameterRow = parameterDiscountStartRow + index;
+    const discount = discounts[index];
+    const students1 = discountStudents1[index] ?? 0;
+    const students2 = discountStudents2[index] ?? 0;
+    const rate = discount ? Math.max(0, Math.min(1, discount.percentage)) : 0;
+    const fallback = `Descuento ${index + 1}`;
+    const label = discount?.name?.trim() || (rate > 0 ? `Descuento ${(rate * 100).toLocaleString("es-CL", { maximumFractionDigits: 2 })}%` : fallback);
+    s2 = setText(s2, `A${studentRow}`, label);
+    s2 = setNumber(s2, `B${studentRow}`, students1);
+    s2 = setFormula(s2, `C${studentRow}`, continuationFormula(`B${studentRow}`, students1, students2), students2);
+    const incomeRow = discountIncomeStartRow + index;
+    s2 = setText(s2, `A${incomeRow}`, `Ingresos arancel ${label}`);
+    s2 = setFormula(s2, `B${incomeRow}`, `(B${studentRow})*Parámetros!$B$4*(1-Parámetros!$B$${parameterRow})`, students1 * override1.annualTuition * (1 - rate));
+    s2 = setFormula(s2, `C${incomeRow}`, `(C${studentRow})*Parámetros!$C$4*(1-Parámetros!$C$${parameterRow})`, students2 * override2.annualTuition * (1 - rate));
+  }
+  s2 = setFormula(s2, `B${totalStudentsRow}`, `SUM(B3:B${studentDiscountStartRow + discountSlots - 1})`, no1 + discounted1); s2 = setFormula(s2, `C${totalStudentsRow}`, `SUM(C3:C${studentDiscountStartRow + discountSlots - 1})`, no2 + discounted2);
+  const equivalentFormula = (column: "B" | "C") => [`${column}3`, ...Array.from({ length: discountSlots }, (_, index) => `${column}${studentDiscountStartRow + index}*(1-Parámetros!${column}${parameterDiscountStartRow + index})`)].join("+");
+  s2 = setFormula(s2, `B${equivalentStudentsRow}`, equivalentFormula("B"), flow1.equivalentEnrollments); s2 = setFormula(s2, `C${equivalentStudentsRow}`, equivalentFormula("C"), flow2.equivalentEnrollments);
+  s2 = setFormula(s2, `B${graduationStudentsRow}`, `${flow1.graduatingStudents}`, flow1.graduatingStudents); const graduationFormula2 = Math.abs(flow2.graduatingStudents - (no2 + discounted2)) < 1e-9 ? `C${totalStudentsRow}` : `${flow2.graduatingStudents}`; s2 = setFormula(s2, `C${graduationStudentsRow}`, graduationFormula2, flow2.graduatingStudents);
   const enrollmentStudents1 = annualEnrollmentStudents(budget, year1, flow1.grossEnrollmentFee, override1.annualEnrollmentFee); const enrollmentStudents2 = annualEnrollmentStudents(budget, year2, flow2.grossEnrollmentFee, override2.annualEnrollmentFee);
-  s2 = setFormula(s2, "B9", Math.abs(enrollmentStudents1 - total1) < 1e-9 ? "B6*Parámetros!$B$5" : `${enrollmentStudents1}*Parámetros!$B$5`, flow1.grossEnrollmentFee); s2 = setFormula(s2, "C9", Math.abs(enrollmentStudents2 - total2) < 1e-9 ? "C6*Parámetros!$C$5" : `${enrollmentStudents2}*Parámetros!$C$5`, flow2.grossEnrollmentFee);
-  s2 = setFormula(s2, "B10", `(B3)*Parámetros!$B$4`, no1 * override1.annualTuition); s2 = setFormula(s2, "C10", `(C3)*Parámetros!$C$4`, no2 * override2.annualTuition);
-  s2 = setFormula(s2, "B11", `(B4)*Parámetros!$B$4*(1-Parámetros!$B$10)`, d11 * override1.annualTuition * (1 - rate1)); s2 = setFormula(s2, "C11", `(C4)*Parámetros!$C$4*(1-Parámetros!$C$10)`, d12 * override2.annualTuition * (1 - rate1));
-  s2 = setFormula(s2, "B12", `(B5)*Parámetros!$B$4*(1-Parámetros!$B$11)`, d21 * override1.annualTuition * (1 - rate2)); s2 = setFormula(s2, "C12", `(C5)*Parámetros!$C$4*(1-Parámetros!$C$11)`, d22 * override2.annualTuition * (1 - rate2));
-  s2 = setFormula(s2, "B13", "SUM(B10:B12)", flow1.tuitionAfterBenefits); s2 = setFormula(s2, "C13", "SUM(C10:C12)", flow2.tuitionAfterBenefits);
+  s2 = setFormula(s2, `B${enrollmentIncomeRow}`, Math.abs(enrollmentStudents1 - (no1 + discounted1)) < 1e-9 ? `B${totalStudentsRow}*Parámetros!$B$5` : `${enrollmentStudents1}*Parámetros!$B$5`, flow1.grossEnrollmentFee); s2 = setFormula(s2, `C${enrollmentIncomeRow}`, Math.abs(enrollmentStudents2 - (no2 + discounted2)) < 1e-9 ? `C${totalStudentsRow}*Parámetros!$C$5` : `${enrollmentStudents2}*Parámetros!$C$5`, flow2.grossEnrollmentFee);
+  s2 = setFormula(s2, `B${noDiscountIncomeRow}`, `(B3)*Parámetros!$B$4`, no1 * override1.annualTuition); s2 = setFormula(s2, `C${noDiscountIncomeRow}`, `(C3)*Parámetros!$C$4`, no2 * override2.annualTuition);
+  s2 = setFormula(s2, `B${totalTuitionIncomeRow}`, `SUM(B${noDiscountIncomeRow}:B${discountIncomeStartRow + discountSlots - 1})`, flow1.tuitionAfterBenefits); s2 = setFormula(s2, `C${totalTuitionIncomeRow}`, `SUM(C${noDiscountIncomeRow}:C${discountIncomeStartRow + discountSlots - 1})`, flow2.tuitionAfterBenefits);
   const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, parameters);
-  if (equilibrium) { s2 = setNumber(s2, "B14", equilibrium.minimumEquivalentEnrollments ?? 0); s2 = setText(s2, "C14", "matrículas equivalentes"); s2 = setNumber(s2, "B15", equilibrium.minimumWholeStudents ?? 0); s2 = setText(s2, "C15", "estudiantes"); }
-  else { s2 = setNumber(s2, "B14", 0); s2 = setText(s2, "C14", "matrículas equivalentes"); s2 = setNumber(s2, "B15", 0); s2 = setText(s2, "C15", "estudiantes"); }
+  if (equilibrium) { s2 = setNumber(s2, `B${equilibriumRow}`, equilibrium.minimumEquivalentEnrollments ?? 0); s2 = setText(s2, `C${equilibriumRow}`, "matrículas equivalentes"); s2 = setNumber(s2, `B${equilibriumWholeStudentsRow}`, equilibrium.minimumWholeStudents ?? 0); s2 = setText(s2, `C${equilibriumWholeStudentsRow}`, "estudiantes"); }
+  else { s2 = setNumber(s2, `B${equilibriumRow}`, 0); s2 = setText(s2, `C${equilibriumRow}`, "matrículas equivalentes"); s2 = setNumber(s2, `B${equilibriumWholeStudentsRow}`, 0); s2 = setText(s2, `C${equilibriumWholeStudentsRow}`, "estudiantes"); }
   files.set("xl/worksheets/sheet2.xml", encoder.encode(s2));
 
   // 3. Costo Directo de Docencia: utiliza la malla real del programa cuando está disponible.
-  // v11.0.2: la hoja se amplía dinámicamente; ya no existe el límite rígido de 13 asignaturas.
+  // v11.0.3: la hoja se amplía dinámicamente y los descuentos también se exportan como filas variables.
   let s3 = decoder.decode(files.get("xl/worksheets/sheet3.xml")!);
   const activePeriods = getActivePeriods(budget.startYear, budget.startSemester, budget.durationSemesters);
   const courses = payableCurriculumCourses(budget.program);
@@ -381,32 +409,32 @@ export async function createInstitutionalFormulaBudgetXlsx(
   s3 = setFormula(s3, `G${directCostRow}`, `+G${totalHoursRow}*Parámetros!B6`, flow1.directTeachingCost); s3 = setFormula(s3, `H${directCostRow}`, `+H${totalHoursRow}*Parámetros!C6`, flow2.directTeachingCost);
   for (let row = genericStartRow; row <= genericEndRow; row += 1) { const course = generic[row - genericStartRow]; if (!course) { s3 = clearCell(s3, `A${row}`); s3 = clearCell(s3, `B${row}`); s3 = setNumber(s3, `C${row}`, 0); s3 = setNumber(s3, `D${row}`, 0); } else { s3 = setText(s3, `A${row}`, course.code ?? ""); s3 = setText(s3, `B${row}`, course.name); s3 = setNumber(s3, `C${row}`, course.directWeeklyHours); s3 = setNumber(s3, `D${row}`, 0); } }
   s3 = setText(s3, `B${thesisHeaderRow}`, `Base estudiantes ${year2}`); s3 = setText(s3, `C${thesisHeaderRow}`, `Valor unitario ${year2}`); s3 = setText(s3, `D${thesisHeaderRow}`, `Costo ${year2}`);
-  s3 = setFormula(s3, `B${thesisRow}`, "+'Flujo estudiantes'!C8", flow2.graduatingStudents); s3 = setFormula(s3, `C${thesisRow}`, "+Parámetros!C8", override2.thesisGuidancePerGraduatingStudent); s3 = setFormula(s3, `D${thesisRow}`, `B${thesisRow}*C${thesisRow}`, flow2.thesisGuidanceCost);
+  s3 = setFormula(s3, `B${thesisRow}`, `+'Flujo estudiantes'!C${graduationStudentsRow}`, flow2.graduatingStudents); s3 = setFormula(s3, `C${thesisRow}`, "+Parámetros!C8", override2.thesisGuidancePerGraduatingStudent); s3 = setFormula(s3, `D${thesisRow}`, `B${thesisRow}*C${thesisRow}`, flow2.thesisGuidanceCost);
   files.set("xl/worksheets/sheet3.xml", encoder.encode(s3));
 
   // 4. Prorrateo Staff de la versión mejorada: Factor, Valor y Monto prorrateado.
   let s5 = decoder.decode(files.get("xl/worksheets/sheet5.xml")!);
   const staffBlocks = [
-    { titleRow: 2, rows: [4,5,6,7,8,9], paramRow: 15, label: "Dirección del programa", rates: [override1.directionProrated ? override1.directionAllocationRate : 1, override2.directionProrated ? override2.directionAllocationRate : 1], bases: [override1.annualDirection, override2.annualDirection] },
-    { titleRow: 11, rows: [13,14,15,16,17,18], paramRow: 16, label: "Asistente de Dirección", rates: [override1.assistanceProrated ? override1.assistanceAllocationRate : 1, override2.assistanceProrated ? override2.assistanceAllocationRate : 1], bases: [override1.annualAssistance, override2.annualAssistance] },
-    { titleRow: 20, rows: [22,23,24,25,26,27], paramRow: 17, label: "Otros honorarios no académicos", rates: [override1.otherNonAcademicProrated ? override1.otherNonAcademicAllocationRate : 1, override2.otherNonAcademicProrated ? override2.otherNonAcademicAllocationRate : 1], bases: [override1.annualOtherNonAcademicHonoraria, override2.annualOtherNonAcademicHonoraria] },
+    { titleRow: 2, rows: [4,5,6,7,8,9], paramRow: directionParameterRow, label: "Dirección del programa", rates: [override1.directionProrated ? override1.directionAllocationRate : 1, override2.directionProrated ? override2.directionAllocationRate : 1], bases: [override1.annualDirection, override2.annualDirection] },
+    { titleRow: 11, rows: [13,14,15,16,17,18], paramRow: assistanceParameterRow, label: "Asistente de Dirección", rates: [override1.assistanceProrated ? override1.assistanceAllocationRate : 1, override2.assistanceProrated ? override2.assistanceAllocationRate : 1], bases: [override1.annualAssistance, override2.annualAssistance] },
+    { titleRow: 20, rows: [22,23,24,25,26,27], paramRow: otherHonorariaParameterRow, label: "Otros honorarios no académicos", rates: [override1.otherNonAcademicProrated ? override1.otherNonAcademicAllocationRate : 1, override2.otherNonAcademicProrated ? override2.otherNonAcademicAllocationRate : 1], bases: [override1.annualOtherNonAcademicHonoraria, override2.annualOtherNonAcademicHonoraria] },
   ] as const;
   for (const block of staffBlocks) { s5 = setText(s5, `A${block.titleRow}`, block.label); const [current1, other1, total1Row, current2, other2, total2Row] = block.rows; const configs = [{ year: year1, current: current1, other: other1, total: total1Row, rate: Math.max(0, Math.min(1, block.rates[0])), base: block.bases[0], paramCol: "B" }, { year: year2, current: current2, other: other2, total: total2Row, rate: Math.max(0, Math.min(1, block.rates[1])), base: block.bases[1], paramCol: "C" }]; for (const config of configs) { s5 = setNumber(s5, `A${config.current}`, config.year); s5 = setText(s5, `B${config.current}`, `Cohorte ${budget.startYear}`); s5 = setText(s5, `C${config.current}`, "primer y segundo semestre "); s5 = setNumber(s5, `D${config.current}`, config.rate); s5 = setNumber(s5, `A${config.other}`, config.year); s5 = setText(s5, `B${config.other}`, "Otras cohortes / versiones"); s5 = clearCell(s5, `C${config.other}`); s5 = setNumber(s5, `D${config.other}`, Math.max(0, 1 - config.rate)); s5 = setNumber(s5, `A${config.total}`, config.year); s5 = setText(s5, `B${config.total}`, `Total ${config.year}`); s5 = setFormula(s5, `C${config.total}`, `+Parámetros!${config.paramCol}${block.paramRow}`, config.base); s5 = setFormula(s5, `D${config.total}`, `SUM(D${config.current}:D${config.other})`, 1); s5 = setFormula(s5, `E${config.current}`, `+$C$${config.total}/$D$${config.total}`, config.base); s5 = setFormula(s5, `E${config.other}`, `+$C$${config.total}/$D$${config.total}`, config.base); s5 = setFormula(s5, `F${config.current}`, `D${config.current}*E${config.current}`, config.base * config.rate); s5 = setFormula(s5, `F${config.other}`, `D${config.other}*E${config.other}`, config.base * Math.max(0, 1 - config.rate)); s5 = setFormula(s5, `F${config.total}`, `SUM(F${config.current}:F${config.other})`, config.base); } }
   files.set("xl/worksheets/sheet5.xml", encoder.encode(s5));
 
   // 5. Flujo Total: referencias actualizadas a la estructura mejorada.
   let s4 = decoder.decode(files.get("xl/worksheets/sheet4.xml")!); s4 = setText(s4, "A1", `${budget.program.name} (${budget.startYear}-${budget.startSemester})`); s4 = setText(s4, "A2", modality); s4 = setNumber(s4, "B3", year1); s4 = setNumber(s4, "C3", year2);
-  s4 = setFormula(s4, "B4", "'Flujo estudiantes'!B9", flow1.grossEnrollmentFee); s4 = setFormula(s4, "C4", "'Flujo estudiantes'!C9", flow2.grossEnrollmentFee);
-  s4 = setFormula(s4, "B5", "'Flujo estudiantes'!B13", flow1.tuitionAfterBenefits); s4 = setFormula(s4, "C5", "'Flujo estudiantes'!C13", flow2.tuitionAfterBenefits);
-  s4 = setFormula(s4, "B6", "-B5*Parámetros!B12", -flow1.badDebt); s4 = setFormula(s4, "C6", "-C5*Parámetros!C12", -flow2.badDebt);
+  s4 = setFormula(s4, "B4", `'Flujo estudiantes'!B${enrollmentIncomeRow}`, flow1.grossEnrollmentFee); s4 = setFormula(s4, "C4", `'Flujo estudiantes'!C${enrollmentIncomeRow}`, flow2.grossEnrollmentFee);
+  s4 = setFormula(s4, "B5", `'Flujo estudiantes'!B${totalTuitionIncomeRow}`, flow1.tuitionAfterBenefits); s4 = setFormula(s4, "C5", `'Flujo estudiantes'!C${totalTuitionIncomeRow}`, flow2.tuitionAfterBenefits);
+  s4 = setFormula(s4, "B6", `-B5*Parámetros!B${badDebtParameterRow}`, -flow1.badDebt); s4 = setFormula(s4, "C6", `-C5*Parámetros!C${badDebtParameterRow}`, -flow2.badDebt);
   const ext1 = flow1.externalIncome + flow1.otherIncome; const ext2 = flow2.externalIncome + flow2.otherIncome; s4 = setFormula(s4, "B7", ext1 ? `SUM(B5:B6)+${ext1}` : "SUM(B5:B6)", flow1.totalIncome); s4 = setFormula(s4, "C7", ext2 ? `SUM(C5:C6)+${ext2}` : "SUM(C5:C6)", flow2.totalIncome);
   s4 = setFormula(s4, "B8", `-'Costo Directo de Docencia'!G${directCostRow}`, -flow1.directTeachingCost); s4 = setFormula(s4, "C8", `-'Costo Directo de Docencia'!H${directCostRow}`, -flow2.directTeachingCost);
   const repHours1 = replacementHoursForYear(budget, year1); const repHours2 = replacementHoursForYear(budget, year2); s4 = setFormula(s4, "B9", `-${repHours1}*Parámetros!B7`, -flow1.replacementTeachingCost); s4 = setFormula(s4, "C9", `-${repHours2}*Parámetros!C7`, -flow2.replacementTeachingCost);
-  s4 = setFormula(s4, "B10", "-'Flujo estudiantes'!B8*Parámetros!$B$8", -flow1.thesisGuidanceCost); s4 = setFormula(s4, "C10", "-'Flujo estudiantes'!C8*Parámetros!$C$8", -flow2.thesisGuidanceCost); s4 = setFormula(s4, "B11", "SUM(B8:B10)", -flow1.academicHonoraria); s4 = setFormula(s4, "C11", "SUM(C8:C10)", -flow2.academicHonoraria);
+  s4 = setFormula(s4, "B10", `-'Flujo estudiantes'!B${graduationStudentsRow}*Parámetros!$B$8`, -flow1.thesisGuidanceCost); s4 = setFormula(s4, "C10", `-'Flujo estudiantes'!C${graduationStudentsRow}*Parámetros!$C$8`, -flow2.thesisGuidanceCost); s4 = setFormula(s4, "B11", "SUM(B8:B10)", -flow1.academicHonoraria); s4 = setFormula(s4, "C11", "SUM(C8:C10)", -flow2.academicHonoraria);
   s4 = setFormula(s4, "B12", "-'Prorrateo Staff'!F4", -flow1.direction); s4 = setFormula(s4, "C12", "-'Prorrateo Staff'!F7", -flow2.direction); s4 = setFormula(s4, "B13", "-'Prorrateo Staff'!F13", -flow1.assistance); s4 = setFormula(s4, "C13", "-'Prorrateo Staff'!F16", -flow2.assistance); s4 = setNumber(s4, "B14", 0); s4 = setNumber(s4, "C14", 0); s4 = setFormula(s4, "B15", "-'Prorrateo Staff'!F22", -flow1.otherNonAcademicHonoraria); s4 = setFormula(s4, "C15", "-'Prorrateo Staff'!F25", -flow2.otherNonAcademicHonoraria); s4 = setFormula(s4, "B16", "SUM(B12:B15)", -flow1.nonAcademicHonoraria); s4 = setFormula(s4, "C16", "SUM(C12:C15)", -flow2.nonAcademicHonoraria);
   s4 = setNumber(s4, "B17", -flow1.equipment); s4 = setNumber(s4, "C17", -flow2.equipment); s4 = setNumber(s4, "B18", -flow1.booksPublications); s4 = setNumber(s4, "C18", -flow2.booksPublications); s4 = setNumber(s4, "B20", -flow1.diffusion); s4 = setNumber(s4, "C20", -flow2.diffusion); s4 = setNumber(s4, "B22", -flow1.travelFreight); s4 = setNumber(s4, "C22", -flow2.travelFreight); s4 = setNumber(s4, "B23", 0); s4 = setNumber(s4, "C23", 0); s4 = setNumber(s4, "B25", -flow1.perDiem); s4 = setNumber(s4, "C25", -flow2.perDiem); s4 = setNumber(s4, "B27", -flow1.software); s4 = setNumber(s4, "C27", -flow2.software); s4 = setNumber(s4, "B29", -(flow1.operational + flow1.otherCosts)); s4 = setNumber(s4, "C29", -(flow2.operational + flow2.otherCosts)); s4 = setNumber(s4, "B30", -flow1.foodBeverages); s4 = setNumber(s4, "C30", -flow2.foodBeverages); s4 = setNumber(s4, "B32", -(flow1.congressesInternships + flow1.scholarshipsAndAid)); s4 = setNumber(s4, "C32", -(flow2.congressesInternships + flow2.scholarshipsAndAid));
   s4 = setFormula(s4, "B19", "SUM(B17:B18)", -(flow1.equipment + flow1.booksPublications)); s4 = setFormula(s4, "C19", "SUM(C17:C18)", -(flow2.equipment + flow2.booksPublications)); s4 = setFormula(s4, "B21", "SUM(B20)", -flow1.diffusion); s4 = setFormula(s4, "C21", "SUM(C20)", -flow2.diffusion); s4 = setFormula(s4, "B24", "SUM(B22:B23)", -flow1.travelFreight); s4 = setFormula(s4, "C24", "SUM(C22:C23)", -flow2.travelFreight); s4 = setFormula(s4, "B26", "SUM(B25)", -flow1.perDiem); s4 = setFormula(s4, "C26", "SUM(C25)", -flow2.perDiem); s4 = setFormula(s4, "B28", "SUM(B27)", -flow1.software); s4 = setFormula(s4, "C28", "SUM(C27)", -flow2.software); s4 = setFormula(s4, "B31", "SUM(B29:B30)", -(flow1.operational + flow1.otherCosts + flow1.foodBeverages)); s4 = setFormula(s4, "C31", "SUM(C29:C30)", -(flow2.operational + flow2.otherCosts + flow2.foodBeverages)); s4 = setFormula(s4, "B33", "SUM(B32)", -(flow1.congressesInternships + flow1.scholarshipsAndAid)); s4 = setFormula(s4, "C33", "SUM(C32)", -(flow2.congressesInternships + flow2.scholarshipsAndAid));
-  s4 = setFormula(s4, "B34", "-(B5+B6)*Parámetros!B13", -flow1.centralOverhead); s4 = setFormula(s4, "C34", "-(C5+C6)*Parámetros!C13", -flow2.centralOverhead); s4 = setFormula(s4, "B35", "-(B5+B6)*Parámetros!B14", -flow1.facultyOverhead); s4 = setFormula(s4, "C35", "-(C5+C6)*Parámetros!C14", -flow2.facultyOverhead); s4 = setFormula(s4, "B36", "SUM(B34:B35)", -(flow1.centralOverhead + flow1.facultyOverhead)); s4 = setFormula(s4, "C36", "SUM(C34:C35)", -(flow2.centralOverhead + flow2.facultyOverhead)); s4 = setFormula(s4, "B37", "SUM(B11,B16,B19,B21,B24,B26,B28,B31,B33,B36)", -flow1.totalExpenses); s4 = setFormula(s4, "C37", "SUM(C11,C16,C19,C21,C24,C26,C28,C31,C33,C36)", -flow2.totalExpenses); s4 = setFormula(s4, "B38", "+B7+B37", flow1.netFlow); s4 = setFormula(s4, "C38", "+C7+C37", flow2.netFlow); s4 = setNumber(s4, "B39", flow1.startingCarryover); s4 = setFormula(s4, "C39", "+B40", flow2.startingCarryover); s4 = setFormula(s4, "B40", "+SUM(B38:B39)", flow1.accumulatedFlow); s4 = setFormula(s4, "C40", "+SUM(C38:C39)", flow2.accumulatedFlow); s4 = setFormula(s4, "B41", "IFERROR((B7+B37)/B7,0)", flow1.operatingMargin ?? 0); s4 = setFormula(s4, "C41", "IFERROR((C7+C37)/C7,0)", flow2.operatingMargin ?? 0);
+  s4 = setFormula(s4, "B34", `-(B5+B6)*Parámetros!B${centralOverheadParameterRow}`, -flow1.centralOverhead); s4 = setFormula(s4, "C34", `-(C5+C6)*Parámetros!C${centralOverheadParameterRow}`, -flow2.centralOverhead); s4 = setFormula(s4, "B35", `-(B5+B6)*Parámetros!B${facultyOverheadParameterRow}`, -flow1.facultyOverhead); s4 = setFormula(s4, "C35", `-(C5+C6)*Parámetros!C${facultyOverheadParameterRow}`, -flow2.facultyOverhead); s4 = setFormula(s4, "B36", "SUM(B34:B35)", -(flow1.centralOverhead + flow1.facultyOverhead)); s4 = setFormula(s4, "C36", "SUM(C34:C35)", -(flow2.centralOverhead + flow2.facultyOverhead)); s4 = setFormula(s4, "B37", "SUM(B11,B16,B19,B21,B24,B26,B28,B31,B33,B36)", -flow1.totalExpenses); s4 = setFormula(s4, "C37", "SUM(C11,C16,C19,C21,C24,C26,C28,C31,C33,C36)", -flow2.totalExpenses); s4 = setFormula(s4, "B38", "+B7+B37", flow1.netFlow); s4 = setFormula(s4, "C38", "+C7+C37", flow2.netFlow); s4 = setNumber(s4, "B39", flow1.startingCarryover); s4 = setFormula(s4, "C39", "+B40", flow2.startingCarryover); s4 = setFormula(s4, "B40", "+SUM(B38:B39)", flow1.accumulatedFlow); s4 = setFormula(s4, "C40", "+SUM(C38:C39)", flow2.accumulatedFlow); s4 = setFormula(s4, "B41", "IFERROR((B7+B37)/B7,0)", flow1.operatingMargin ?? 0); s4 = setFormula(s4, "C41", "IFERROR((C7+C37)/C7,0)", flow2.operatingMargin ?? 0);
   files.set("xl/worksheets/sheet4.xml", encoder.encode(s4));
 
   files.delete("xl/calcChain.xml"); const workbookXml = decoder.decode(files.get("xl/workbook.xml")!); files.set("xl/workbook.xml", encoder.encode(workbookXml.replace(/<calcPr[^>]*\/>/, '<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>'))); const relsName = "xl/_rels/workbook.xml.rels"; files.set(relsName, encoder.encode(decoder.decode(files.get(relsName)!).replace(/<Relationship[^>]*calcChain[^>]*\/>/g, ""))); files.set("[Content_Types].xml", encoder.encode(decoder.decode(files.get("[Content_Types].xml")!).replace(/<Override[^>]*calcChain[^>]*\/>/g, "")));

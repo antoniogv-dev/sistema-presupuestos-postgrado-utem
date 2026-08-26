@@ -236,3 +236,34 @@ test("v10.30 genera XLSX institucional mejorado, con malla y fórmulas coherente
   assert.ok(Math.abs(cachedNumber(flowXml, "C38") - second.netFlow) < 0.01);
   assert.ok(Math.abs(cachedNumber(flowXml, "C40") - second.accumulatedFlow) < 0.01);
 });
+
+test("v11.0.3 exporta N descuentos como filas independientes y mantiene las fórmulas conciliadas", async () => {
+  const many = structuredClone(budget);
+  many.initialStudents = 20;
+  many.semesters = many.semesters.map((semester) => ({ ...semester, activeStudents: 20 }));
+  many.discounts = [
+    { id: "disc-1", name: "Funcionarios públicos", percentage: 0.1, students: 2, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 2 },
+    { id: "disc-2", name: "Convenio institucional A", percentage: 0.2, students: 2, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 2 },
+    { id: "disc-3", name: "Convenio institucional B", percentage: 0.2, students: 2, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 2 },
+    { id: "disc-4", name: "Beneficio especial", percentage: 0.3, students: 2, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 2 },
+    { id: "disc-5", name: "Beca parcial", percentage: 0.4, students: 2, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 2 },
+  ];
+  const manyResult = calculateBudget(many, institutionalParameters);
+  assert.equal(canUseFormulaTemplate(many, manyResult), true);
+  const generated = await createInstitutionalFormulaBudgetXlsx(template, many, manyResult, institutionalParameters);
+  const out = unzip(generated);
+  const parameterXml = text(out, "xl/worksheets/sheet1.xml");
+  const studentXml = text(out, "xl/worksheets/sheet2.xml");
+  const flowXml = text(out, "xl/worksheets/sheet4.xml");
+  for (const label of ["Funcionarios públicos", "Convenio institucional A", "Convenio institucional B", "Beneficio especial", "Beca parcial"]) {
+    assert.ok(parameterXml.includes(label), `Parámetros no contiene ${label}`);
+    assert.ok(studentXml.includes(label), `Flujo estudiantes no contiene ${label}`);
+  }
+  assert.match(parameterXml, /<dimension ref="A1:C20"\/>/);
+  assert.match(studentXml, /<dimension ref="A1:C21"\/>/);
+  assert.match(studentXml, /<c(?=[^>]*\br="B19")[^>]*>[\s\S]*?<f>SUM\(B13:B18\)<\/f>/);
+  assert.match(flowXml, /<c(?=[^>]*\br="B5")[^>]*>[\s\S]*?<f>'Flujo estudiantes'!B19<\/f>/);
+  assert.match(flowXml, /<c(?=[^>]*\br="B6")[^>]*>[\s\S]*?<f>-B5\*Parámetros!B15<\/f>/);
+  assert.ok(Math.abs(cachedNumber(studentXml, "B19") - manyResult.annualFlows[0].tuitionAfterBenefits) < 0.01, "los descuentos múltiples no concilian con el ingreso neto 2027");
+  assert.equal(/#REF!|#NAME\?|#DIV\/0!|#VALUE!/.test(parameterXml + studentXml + flowXml), false);
+});

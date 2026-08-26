@@ -5,8 +5,8 @@ export async function GET() {
   return Response.json({
     ok: true,
     app: "Sistema de Presupuestos de Postgrado UTEM",
-    version: "1.1.2-d1-web",
-    release: "v11.0.2",
+    version: "1.1.3-d1-web",
+    release: "v11.0.3",
     loginResponseTypingFix: true,
   });
 }

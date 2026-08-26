@@ -277,8 +277,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v11.0.2") || !appShellV110.includes("1.1.2-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v11.0.2 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v11.0.3") || !appShellV110.includes("1.1.3-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v11.0.3 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -671,7 +671,7 @@ const institutionalXlsxV1025 = await readFile(path.join(root, "lib/export/instit
 for (const marker of [
   "createInstitutionalFormulaBudgetXlsx",
   "canUseFormulaTemplate",
-  "B6*Parámetros!$B$5",
+  "totalStudentsRow}*Parámetros!$B$5",
   "SUM(B11,B16,B19,B21,B24,B26,B28,B31,B33,B36)",
   'calcMode="auto"',
   'forceFullCalc="1"',
@@ -714,9 +714,16 @@ for (const marker of [
   if (!downloadV112.includes(marker) && !institutionalXlsxV1025.includes(marker)) fail(`XLSX v10.30: falta control anti-regresión ${marker}.`);
 }
 for (const marker of ["insertRowsFromTemplate", "extraCourseRows", "extraGenericRows", "courseEndRow", "directCostRow", "payable > 120", "generic > 40"]) {
-  if (!institutionalXlsxV1025.includes(marker)) fail(`XLSX v11.0.2: falta expansión curricular dinámica ${marker}.`);
+  if (!institutionalXlsxV1025.includes(marker)) fail(`XLSX v11.0.3: falta expansión curricular dinámica ${marker}.`);
 }
-if (institutionalXlsxV1025.includes("payable > 13")) fail("XLSX v11.0.2: reapareció el límite rígido de 13 asignaturas valorizables.");
+if (institutionalXlsxV1025.includes("payable > 13")) fail("XLSX v11.0.3: reapareció el límite rígido de 13 asignaturas valorizables.");
+for (const marker of ["exportableDiscounts", "discountSlots", "extraDiscountRows", "weightedDiscountStudentsForItem", "totalTuitionIncomeRow"]) {
+  if (!institutionalXlsxV1025.includes(marker)) fail(`XLSX v11.0.3: falta expansión dinámica de descuentos ${marker}.`);
+}
+if (institutionalXlsxV1025.includes("admite hasta dos tasas de descuento")) fail("XLSX v11.0.3: reapareció el límite rígido de dos descuentos.");
+if (institutionalXlsxV1025.includes("distinctDiscountRates")) fail("XLSX v11.0.3: el exportador volvió a agrupar descuentos por tasa en vez de conservar cada beneficio.");
+const institutionalXlsxTestsV1103 = await readFile(path.join(root, "demo/tests/institutional-xlsx.test.mjs"), "utf8");
+if (!institutionalXlsxTestsV1103.includes("v11.0.3 exporta N descuentos como filas independientes")) fail("XLSX v11.0.3: falta prueba de múltiples descuentos.");
 
 
 // v10.26: malla curricular editable/importable y valorización docente por asignatura.
@@ -850,12 +857,12 @@ for (const marker of ["calculateAnnualOfferingPlan", "normalizedStaff", "minimum
 for (const marker of ["Planes anuales de dictación", "Descargar memorándum", "Exportar XLSX", "Exportar PDF"]) if (!v11Page.includes(marker)) fail(`v11.0 interfaz anual: falta ${marker}.`);
 if (!v11Migration.includes('CREATE TABLE "AnnualOfferingPlan"')) fail("v11.0: falta migración de Plan Anual.");
 
-// v11.0.2: detecta pruebas antiguas del relato antes de ejecutar Vitest.
+// v11.0.3: detecta pruebas antiguas del relato antes de ejecutar Vitest.
 const exportParametersTestV1101 = await readFile(path.join(root, "tests/unit/export-parameters.test.ts"), "utf8");
 const narrativeFeatureTestV1101 = await readFile(path.join(root, "tests/unit/v1018-features.test.ts"), "utf8");
 const narrativeTitleV1101 = "Análisis económico-financiero de la cohorte";
-if (!exportParametersTestV1101.includes(narrativeTitleV1101)) fail("v11.0.2 tests: export-parameters.test.ts conserva el título antiguo del relato.");
-if (!narrativeFeatureTestV1101.includes(narrativeTitleV1101)) fail("v11.0.2 tests: v1018-features.test.ts conserva el título antiguo del relato.");
+if (!exportParametersTestV1101.includes(narrativeTitleV1101)) fail("v11.0.3 tests: export-parameters.test.ts conserva el título antiguo del relato.");
+if (!narrativeFeatureTestV1101.includes(narrativeTitleV1101)) fail("v11.0.3 tests: v1018-features.test.ts conserva el título antiguo del relato.");
 
 if (failures.length) {
   for (const message of failures) console.error(`ERROR: ${message}`);
