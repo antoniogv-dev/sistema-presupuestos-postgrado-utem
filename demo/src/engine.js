@@ -196,19 +196,19 @@ function calculateBudget(budget) {
   const annualFlows = years.map((year, yearIndex) => {
     const semesters = periods.filter((p) => p.year === year).map((p) => map.get(periodKey(p.year, p.semester))).filter(Boolean);
     const annualTuition = tuitionFor(budget, year);
-    const tuitionFactor = semesters.length ? 1 : 0;
-    const tuitionSemester = semesters[0];
-    const grossTuition = tuitionSemester ? safe(tuitionSemester.activeStudents) * annualTuition : 0;
-    const discounts = tuitionSemester ? sum((budget.discounts || []).filter((d) => within(tuitionSemester.year, tuitionSemester.semester, d.startYear, d.startSemester, d.endYear, d.endSemester)).map((d) => Math.min(safe(d.students), safe(tuitionSemester.activeStudents)) * annualTuition * Math.min(1, safe(d.percentage)))) : 0;
-    const tuitionScholarships = tuitionSemester ? Math.min(safe(tuitionSemester.scholarshipStudents), safe(tuitionSemester.activeStudents)) * annualTuition * Math.min(1, safe(tuitionSemester.scholarshipCoverage)) : 0;
+    const tuitionFactor = semesters.length * 0.5;
+    const grossTuition = sum(semesters.map((semester) => safe(semester.activeStudents) * annualTuition * 0.5));
+    const discounts = sum(semesters.flatMap((semester) => (budget.discounts || []).filter((d) => within(semester.year, semester.semester, d.startYear, d.startSemester, d.endYear, d.endSemester)).map((d) => Math.min(safe(d.students), safe(semester.activeStudents)) * annualTuition * 0.5 * Math.min(1, safe(d.percentage)))));
+    const tuitionScholarships = sum(semesters.map((semester) => Math.min(safe(semester.scholarshipStudents), safe(semester.activeStudents)) * annualTuition * 0.5 * Math.min(1, safe(semester.scholarshipCoverage))));
     const tuitionAfterBenefits = Math.max(0, grossTuition - discounts - tuitionScholarships);
-    const equivalentEnrollments = annualTuition > 0 ? tuitionAfterBenefits / annualTuition : 0;
+    const equivalentEnrollments = annualTuition * tuitionFactor > 0 ? tuitionAfterBenefits / (annualTuition * tuitionFactor) : 0;
     const roundedEquivalentStudents = Math.ceil(equivalentEnrollments);
     const badDebt = tuitionAfterBenefits * typeParameters.badDebtRate;
     const netTuitionIncome = tuitionAfterBenefits - badDebt;
     const enrollment = sum(semesters.map((semester) => safe(semester.activeStudents) * valueForYear(parameters.enrollmentFee, year) * 0.5 * safe(budget.enrollmentRecognitionRate)));
-    const externalIncome = sum((budget.externalIncome || []).filter((income) => income.year === year).map((income) => safe(income.students) * safe(income.amountPerStudent)));
-    const totalIncome = netTuitionIncome + enrollment + externalIncome;
+    const institutionalFinancing = sum((budget.externalIncome || []).filter((income) => income.year === year && income.type === 'Financiamiento institucional').map((income) => safe(income.amountPerStudent)));
+    const externalIncome = sum((budget.externalIncome || []).filter((income) => income.year === year && income.type !== 'Financiamiento institucional').map((income) => safe(income.students) * safe(income.amountPerStudent)));
+    const totalIncome = netTuitionIncome + enrollment + externalIncome + institutionalFinancing;
     const directTeachingCost = sum(semesters.map((semester) => safe(semester.directTeachingHours) * valueForYear(parameters.teachingHour, year)));
     const replacementTeachingCost = sum(semesters.map((semester) => safe(semester.replacementTeachingHours) * parameters.replacementHour));
     const graduatingStudents = Math.max(0, ...semesters.map((semester) => safe(semester.graduatingStudents)));
@@ -239,7 +239,7 @@ function calculateBudget(budget) {
       const discountStudents = sum((budget.discounts || []).filter((d) => within(semester.year, semester.semester, d.startYear, d.startSemester, d.endYear, d.endSemester)).map((d) => safe(d.students)));
       if (discountStudents + safe(semester.scholarshipStudents) > safe(semester.activeStudents)) warnings.push(`${semester.year}-${semester.semester}: descuentos y becas superan estudiantes activos.`);
     });
-    return { year, annualTuition, tuitionFactor, grossTuition, discounts, tuitionScholarships, tuitionAfterBenefits, equivalentEnrollments, roundedEquivalentStudents, badDebt, netTuitionIncome, enrollment, externalIncome, totalIncome, directTeachingCost, replacementTeachingCost, thesisGuidanceCost, academicHonoraria, nonAcademicHonoraria, direction, assistance, operational, software, diffusion, maintenance, congresses, books, travel, perDiem, other, centralOverhead, facultyOverhead, totalExpenses, netFlow, startingCarryover, accumulatedFlow, graduatingStudents, operatingMargin: totalIncome ? netFlow / totalIncome : 0 };
+    return { year, annualTuition, tuitionFactor, grossTuition, discounts, tuitionScholarships, tuitionAfterBenefits, equivalentEnrollments, roundedEquivalentStudents, badDebt, netTuitionIncome, enrollment, externalIncome, institutionalFinancing, totalIncome, directTeachingCost, replacementTeachingCost, thesisGuidanceCost, academicHonoraria, nonAcademicHonoraria, direction, assistance, operational, software, diffusion, maintenance, congresses, books, travel, perDiem, other, centralOverhead, facultyOverhead, totalExpenses, netFlow, startingCarryover, accumulatedFlow, graduatingStudents, operatingMargin: totalIncome ? netFlow / totalIncome : 0 };
   });
   const finalAccumulatedFlow = annualFlows.at(-1)?.accumulatedFlow || (budget.includeAuthorizedCarryover === false ? 0 : safe(budget.carryover));
   return { periods, years, annualFlows, finalAccumulatedFlow, viable: budget.program.type === 'MAGISTER_PROFESIONAL' ? finalAccumulatedFlow >= 0 : null, warnings: [...new Set(warnings)] };

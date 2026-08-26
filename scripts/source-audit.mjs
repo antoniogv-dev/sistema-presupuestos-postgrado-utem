@@ -204,8 +204,8 @@ for (const marker of [
   "Versión del programa / plan",
   "Revisión interna",
   "Staff comprometido/prorrateable y overhead",
-  "Matrícula anual (informativa, sin descuentos)",
-  "INGRESOS TOTAL (sin matrícula)",
+  "Matrícula anual bruta (referencial, sin descuentos)",
+  "INGRESOS TOTAL",
   "Valores hora según modalidad",
   "Guía de tesis por graduando",
   "Habilitar becas",
@@ -222,7 +222,7 @@ for (const marker of ['ADD COLUMN "annualTuition"', 'ProgramAnnualTuition']) {
 for (const marker of [
   '"Alimentos y bebidas"',
   'Arancel anual',
-  'Matrícula anual (informativa, sin descuentos)',
+  'Matrícula anual bruta (referencial, sin descuentos)',
   'Gastos operacionales / Bienes y servicios',
   'Otros costos y gastos',
 ]) {
@@ -235,7 +235,7 @@ for (const forbidden of ['label="Descuentos matrícula"', 'label="Matrícula net
 const engineV108 = await readFile(path.join(root, "lib/calculations/budget-engine.ts"), "utf8");
 for (const marker of [
   'item.periodicity === "Anual"',
-  "const totalIncome = netTuitionIncome + externalIncome + otherIncome",
+  "const totalIncome = netTuitionIncome + recognizedEnrollmentFee + externalIncome + institutionalFinancing + otherIncome",
   "const overheadBase = Math.max(0, grossTuition - discounts - badDebt)",
   "budget.scholarshipsEnabled",
   "directionAllocationRate",
@@ -252,12 +252,12 @@ if (!v110Migration.includes('WHERE COALESCE("annualTuition", 0) <= 0')) {
 }
 for (const marker of [
   '"Alimentos y bebidas"',
-  'Matrícula anual (informativa, sin descuentos)',
+  'Matrícula anual bruta (referencial, sin descuentos)',
   'EditableCostFlowRow',
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v11.0"',
+  'FUNCTIONAL_RELEASE = "v11.0.4"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -277,8 +277,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v11.0.3") || !appShellV110.includes("1.1.3-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v11.0.3 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v11.0.4") || !appShellV110.includes("1.1.4-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v11.0.4 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -583,7 +583,7 @@ for (const marker of [
   "Toda la página quedó sincronizada con este presupuesto",
   "auditBudgetIntegrity",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v11.0"',
+  'FUNCTIONAL_RELEASE = "v11.0.4"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.23: falta ${marker}.`);
 }
@@ -610,7 +610,7 @@ for (const marker of [
   "setInitialStudentsForAllSemesters",
   "Punto de equilibrio",
   "Viabilidad mínima de dictación",
-  'FUNCTIONAL_RELEASE = "v11.0"',
+  'FUNCTIONAL_RELEASE = "v11.0.4"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
 }
@@ -725,6 +725,15 @@ if (institutionalXlsxV1025.includes("distinctDiscountRates")) fail("XLSX v11.0.3
 const institutionalXlsxTestsV1103 = await readFile(path.join(root, "demo/tests/institutional-xlsx.test.mjs"), "utf8");
 if (!institutionalXlsxTestsV1103.includes("v11.0.3 exporta N descuentos como filas independientes")) fail("XLSX v11.0.3: falta prueba de múltiples descuentos.");
 
+// v11.0.4: matrícula reconocida como ingreso y financiamiento institucional fijo.
+const budgetEngineV1104 = await readFile(path.join(root, "lib/calculations/budget-engine.ts"), "utf8");
+const budgetWorkspaceV1104 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
+const reportModelV1104 = await readFile(path.join(root, "lib/export/report-model.ts"), "utf8");
+for (const marker of ["institutionalFinancing", "recognizedEnrollmentFee + externalIncome + institutionalFinancing", "No incorpora matrícula reconocida ni financiamiento institucional"]) if (!budgetEngineV1104.includes(marker)) fail(`v11.0.4 motor: falta ${marker}.`);
+for (const marker of ["Agregar financiamiento institucional", "Monto fijo del proyecto", "Matrícula reconocida (ingreso del programa)", "INGRESOS TOTAL"]) if (!budgetWorkspaceV1104.includes(marker)) fail(`v11.0.4 interfaz: falta ${marker}.`);
+for (const marker of ["Financiamiento institucional", "Matrícula reconocida (ingreso del programa)", "Base overhead (solo arancel neto sujeto a cobro)"]) if (!reportModelV1104.includes(marker)) fail(`v11.0.4 reportes: falta ${marker}.`);
+if (!institutionalXlsxTestsV1103.includes("v11.0.4 suma matrícula reconocida y financiamiento institucional fijo")) fail("XLSX v11.0.4: falta prueba de ingresos reconocidos/fijos.");
+
 
 // v10.26: malla curricular editable/importable y valorización docente por asignatura.
 const curriculumEditorV1026 = await readFile(path.join(root, "features/programs/components/CurriculumEditor.tsx"), "utf8");
@@ -790,7 +799,7 @@ for (const marker of ["curriculumCourseWeeklyDirectHours", "theoryWeeklyHours", 
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.28: falta ${marker}.`);
 }
 const budgetWorkspaceV1028 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v11.0"']) {
+for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v11.0.4"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.28: falta ${marker}.`);
 }
 
@@ -798,7 +807,7 @@ for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla recon
 for (const marker of ["curriculumCourseAppliedMode", 'modality === "PRESENCIAL"', 'return "PRESENCIAL"']) {
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.30: falta ${marker}.`);
 }
-for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v11.0"']) {
+for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v11.0.4"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.30: falta ${marker}.`);
 }
 

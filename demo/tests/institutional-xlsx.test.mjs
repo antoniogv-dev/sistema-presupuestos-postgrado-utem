@@ -267,3 +267,23 @@ test("v11.0.3 exporta N descuentos como filas independientes y mantiene las fór
   assert.ok(Math.abs(cachedNumber(studentXml, "B19") - manyResult.annualFlows[0].tuitionAfterBenefits) < 0.01, "los descuentos múltiples no concilian con el ingreso neto 2027");
   assert.equal(/#REF!|#NAME\?|#DIV\/0!|#VALUE!/.test(parameterXml + studentXml + flowXml), false);
 });
+
+test("v11.0.4 suma matrícula reconocida y financiamiento institucional fijo sin alterar la base de overhead", async () => {
+  const financed = structuredClone(budget);
+  financed.enrollmentRecognitionRate = 1;
+  financed.externalIncome = [{
+    id: "fi-v1104", type: "Financiamiento institucional", description: "Aporte interno proyecto",
+    year: result.years[0], semester: 2, students: 99, amountPerStudent: 12500000, source: "UTEM",
+  }];
+  const financedResult = calculateBudget(financed, institutionalParameters);
+  const first = financedResult.annualFlows[0];
+  assert.equal(first.institutionalFinancing, 12500000);
+  assert.equal(first.externalIncome, 0);
+  assert.ok(first.recognizedEnrollmentFee > 0);
+  assert.equal(first.totalIncome, first.netTuitionIncome + first.recognizedEnrollmentFee + first.institutionalFinancing + first.otherIncome);
+  assert.ok(Math.abs(first.overheadBase - (first.grossTuition - first.discounts - first.badDebt)) < 0.01);
+  const generated = await createInstitutionalFormulaBudgetXlsx(template, financed, financedResult, institutionalParameters);
+  const flowXml = text(unzip(generated), "xl/worksheets/sheet4.xml");
+  assert.ok(Math.abs(cachedNumber(flowXml, "B7") - first.totalIncome) < 0.01, "FLUJO TOTAL no incorpora matrícula reconocida y financiamiento institucional");
+  assert.ok(Math.abs(cachedNumber(flowXml, "B34") + first.centralOverhead) < 0.01, "overhead central alterado por ingresos no arancelarios");
+});

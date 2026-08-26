@@ -50,14 +50,15 @@ export function buildFinancialReport(budget: CohortBudget, result: BudgetResult)
     years: result.years,
     generatedAt: new Date().toISOString(),
     rows: [
-      { label: "Matrícula anual (informativa, sin descuentos; no suma a ingresos total)", values: positive("grossEnrollmentFee"), tone: "income", valueKind: "currency" },
-      ...(budget.enrollmentRecognitionRate > 0 ? [{ label: "Matrícula reconocida (informativa; no suma a ingresos total)", values: positive("recognizedEnrollmentFee"), tone: "income" as const, valueKind: "currency" as const }] : []),
+      { label: "Matrícula anual bruta (referencial, sin descuentos)", values: positive("grossEnrollmentFee"), tone: "income", valueKind: "currency" },
+      ...(budget.enrollmentRecognitionRate > 0 ? [{ label: "Matrícula reconocida (ingreso del programa)", values: positive("recognizedEnrollmentFee"), tone: "income" as const, valueKind: "currency" as const }] : []),
       { label: "Arancel bruto", values: positive("grossTuition"), tone: "income", valueKind: "currency" },
       { label: "Descuentos arancel", values: negative("discounts"), tone: "income", valueKind: "currency" },
       ...(budget.scholarshipsEnabled ? [{ label: "Beca interna de arancel", values: negative("internalTuitionScholarships"), tone: "income" as const, valueKind: "currency" as const }] : []),
       { label: "Incobrables", values: negative("badDebt"), tone: "income", valueKind: "currency" },
       { label: "Ingresos extraordinarios", values: positive("externalIncome"), tone: "income", valueKind: "currency" },
-      { label: "INGRESOS TOTAL (sin matrícula)", values: positive("totalIncome"), tone: "income", bold: true, valueKind: "currency" },
+      ...(f.some((flow) => flow.institutionalFinancing > 0) ? [{ label: "Financiamiento institucional", values: positive("institutionalFinancing"), tone: "income" as const, valueKind: "currency" as const }] : []),
+      { label: "INGRESOS TOTAL", values: positive("totalIncome"), tone: "income", bold: true, valueKind: "currency" },
 
       ...(budget.deliveryModality === "PRESENCIAL"
         ? [{ label: "Horas docentes presenciales", values: negative("directTeachingCost"), tone: "expense" as const, valueKind: "currency" as const }]
@@ -98,7 +99,7 @@ export function buildFinancialReport(budget: CohortBudget, result: BudgetResult)
           ]
         : []),
 
-      { label: "Base overhead", values: positive("overheadBase"), tone: "plain", valueKind: "currency" },
+      { label: "Base overhead (solo arancel neto sujeto a cobro)", values: positive("overheadBase"), tone: "plain", valueKind: "currency" },
       { label: "Overhead central", values: negative("centralOverhead"), tone: "expense", valueKind: "currency" },
       { label: "Overhead facultad", values: negative("facultyOverhead"), tone: "expense", valueKind: "currency" },
       { label: "TOTAL COSTOS Y GASTOS", values: negative("totalExpenses"), tone: "result", bold: true, valueKind: "currency" },
@@ -179,7 +180,7 @@ export function buildParameterReport(
 
   // Controles del presupuesto.
   pushText("Controles del presupuesto", "Becas habilitadas", "General", yesNo(budget.scholarshipsEnabled));
-  pushPercent("Controles del presupuesto", "Reconocimiento de matrícula", "General", budget.enrollmentRecognitionRate, "Informativo; la matrícula no integra INGRESOS TOTAL");
+  pushPercent("Controles del presupuesto", "Reconocimiento de matrícula", "General", budget.enrollmentRecognitionRate, "La fracción reconocida integra INGRESOS TOTAL; no integra la base de overhead");
   pushCurrency("Controles del presupuesto", "Arrastre inicial autorizado", "General", budget.authorizedInitialCarryover);
   pushText("Controles del presupuesto", "Incluir arrastre autorizado", "General", yesNo(budget.includeAuthorizedCarryover));
   pushText("Controles del presupuesto", "Normalizar costos compartidos", "General", yesNo(budget.normalizeSharedCosts));
@@ -191,7 +192,7 @@ export function buildParameterReport(
     const annual = resolvedAnnualOverrideForYear(budget, parameters, year);
     const section = "Parámetros anuales";
     pushCurrency(section, "Arancel anual por estudiante", String(year), annual.annualTuition, "Valor efectivo usado para calcular el arancel bruto");
-    pushCurrency(section, "Matrícula anual por estudiante", String(year), annual.annualEnrollmentFee, "Informativa; sin descuentos y fuera de INGRESOS TOTAL");
+    pushCurrency(section, "Matrícula anual por estudiante", String(year), annual.annualEnrollmentFee, budget.enrollmentRecognitionRate > 0 ? `Sin descuentos; ${(budget.enrollmentRecognitionRate * 100).toLocaleString("es-CL", { maximumFractionDigits: 1 })}% se reconoce como ingreso y no integra la base de overhead` : "Referencial; sin descuentos y sin reconocimiento como ingreso");
     if (budget.program.type === "MAGISTER_PROFESIONAL") {
       pushCurrency(section, "Valor hora docencia sincrónica", String(year), annual.synchronousTeachingHourValue, "Valor hora único visible para la modalidad profesional");
     } else {
@@ -292,12 +293,15 @@ export function buildParameterReport(
     pushText("Ingresos extraordinarios", "Ingresos registrados", "General", "Sin ingresos extraordinarios");
   } else {
     budget.externalIncome.forEach((income, index) => {
+      const fixedInstitutional = income.type === "Financiamiento institucional";
       pushCurrency(
-        "Ingresos extraordinarios",
+        fixedInstitutional ? "Financiamiento institucional" : "Ingresos extraordinarios",
         `${index + 1}. ${income.description || income.type}`,
-        periodLabel(income.year, income.semester),
+        fixedInstitutional ? String(income.year) : periodLabel(income.year, income.semester),
         income.amountPerStudent,
-        appendDetail(`${income.students} estudiante(s)`, income.type, `Fuente: ${income.source || "No informada"}`, income.note ? `Nota: ${income.note}` : undefined, income.originTemplateItemKey ? `Origen plantilla: ${income.originTemplateItemKey}` : undefined),
+        fixedInstitutional
+          ? appendDetail("Monto fijo del proyecto/programa", "No depende de estudiantes ni semestre", `Fuente: ${income.source || "No informada"}`, income.note ? `Nota: ${income.note}` : undefined)
+          : appendDetail(`${income.students} estudiante(s)`, income.type, `Fuente: ${income.source || "No informada"}`, income.note ? `Nota: ${income.note}` : undefined, income.originTemplateItemKey ? `Origen plantilla: ${income.originTemplateItemKey}` : undefined),
       );
     });
   }

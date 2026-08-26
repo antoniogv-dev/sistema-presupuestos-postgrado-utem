@@ -126,7 +126,7 @@ export interface CohortDiscount {
 
 export interface ExternalIncome {
   id: string;
-  type: "Beca ANID" | "Otra beca externa" | "Convenio" | "Aporte institucional" | "Proyecto" | "Donación" | "Ingreso extraordinario" | "Otro";
+  type: "Beca ANID" | "Otra beca externa" | "Convenio" | "Aporte institucional" | "Financiamiento institucional" | "Proyecto" | "Donación" | "Ingreso extraordinario" | "Otro";
   description: string;
   year: number;
   semester: SemesterNumber;
@@ -351,6 +351,7 @@ export interface AnnualFlow {
   netEnrollmentFee: number;
   recognizedEnrollmentFee: number;
   externalIncome: number;
+  institutionalFinancing: number;
   otherIncome: number;
   totalIncome: number;
   directTeachingCost: number;

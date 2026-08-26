@@ -1,0 +1,16 @@
+HOTFIX_V11_0_4_INGRESOS_MATRICULA_FINANCIAMIENTO.md
+README.md
+app/api/version/route.ts
+components/AppShell.tsx
+demo/src/engine.js
+demo/tests/engine.test.mjs
+demo/tests/institutional-xlsx.test.mjs
+features/budgets/components/BudgetWorkspace.tsx
+lib/calculations/budget-engine.ts
+lib/calculations/types.ts
+lib/export/financial-narrative.ts
+lib/export/institutional-budget-xlsx.ts
+lib/export/report-model.ts
+package.json
+scripts/source-audit.mjs
+tests/unit/budget-engine.test.ts

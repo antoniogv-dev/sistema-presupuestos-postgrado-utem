@@ -273,10 +273,20 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
     const netEnrollmentFee = grossEnrollmentFee;
     const recognizedEnrollmentFee = grossEnrollmentFee * clampRate(budget.enrollmentRecognitionRate);
 
-    const externalIncome = sum(budget.externalIncome.filter((income) => income.year === year).map((income) => nonNegative(income.students) * nonNegative(income.amountPerStudent)));
+    // Los ingresos externos ordinarios conservan su lógica por estudiante. El financiamiento
+    // institucional es un aporte fijo al proyecto/programa: se registra una sola vez en el año
+    // indicado y no depende de semestre ni cantidad de estudiantes.
+    const institutionalFinancing = sum(budget.externalIncome
+      .filter((income) => income.year === year && income.type === "Financiamiento institucional")
+      .map((income) => nonNegative(income.amountPerStudent)));
+    const externalIncome = sum(budget.externalIncome
+      .filter((income) => income.year === year && income.type !== "Financiamiento institucional")
+      .map((income) => nonNegative(income.students) * nonNegative(income.amountPerStudent)));
     const otherIncome = 0;
-    // La matrícula se muestra y controla en el flujo, pero no forma parte de INGRESOS TOTAL.
-    const totalIncome = netTuitionIncome + externalIncome + otherIncome;
+    // La fracción reconocida de matrícula sí financia el programa. Por criterio institucional
+    // conservador, ni la matrícula reconocida ni el financiamiento institucional amplían la base
+    // de overhead, la cual continúa circunscrita al arancel neto sujeto a cobro.
+    const totalIncome = netTuitionIncome + recognizedEnrollmentFee + externalIncome + institutionalFinancing + otherIncome;
 
     const grossPresentialTeachingCost = sum(semesters.map((semester) => nonNegative(semester.directTeachingHours) * nonNegative(override.directTeachingHourValue)));
     const grossSynchronousTeachingCost = sum(semesters.map((semester) => nonNegative(semester.synchronousTeachingHours) * nonNegative(override.synchronousTeachingHourValue)));
@@ -355,7 +365,8 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
     const otherExpenses = operational + software + diffusion + congressesInternships
       + booksPublications + travelFreight + perDiem + foodBeverages + otherCosts;
 
-    // Base solicitada: arancel bruto - descuentos de arancel - incobrables.
+    // Base de overhead: sólo arancel bruto - descuentos de arancel - incobrables.
+    // No incorpora matrícula reconocida ni financiamiento institucional.
     const overheadBase = Math.max(0, grossTuition - discounts - badDebt);
     const centralOverheadRate = overheadApplies(budget.program.type) ? clampRate(override.centralOverheadRate) : 0;
     const facultyOverheadRate = overheadApplies(budget.program.type) ? clampRate(override.facultyOverheadRate) : 0;
@@ -387,6 +398,7 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
       netEnrollmentFee,
       recognizedEnrollmentFee,
       externalIncome,
+      institutionalFinancing,
       otherIncome,
       totalIncome,
       directTeachingCost,

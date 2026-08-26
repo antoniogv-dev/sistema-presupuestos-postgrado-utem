@@ -19,11 +19,11 @@ test('periodos activos no incluyen años previos', () => {
   assert.deepEqual(e.activePeriods(2028, 2, 4).map((p) => `${p.year}-${p.semester}`), ['2028-2','2029-1','2029-2','2030-1']);
 });
 
-test('arancel anual y matrícula equivalente', () => {
+test('arancel semestral y matrícula equivalente', () => {
   const b = budget();
   b.discounts = [{ id:'d', name:'Convenio', percentage:.2, students:10, startYear:2027, startSemester:2, endYear:2029, endSemester:1 }];
   const first = e.calculateBudget(b).annualFlows[0];
-  assert.equal(first.tuitionFactor, 1);
+  assert.equal(first.tuitionFactor, .5);
   assert.ok(first.equivalentEnrollments > 0);
   assert.equal(first.roundedEquivalentStudents, Math.ceil(first.equivalentEnrollments));
 });
@@ -101,4 +101,14 @@ test('flujo de revisión respeta tres roles', () => {
   e.applyWorkflow(b, 'VISTO_BUENO', 'VB_APPROVE');
   e.applyWorkflow(b, 'APROBADOR', 'FINAL_APPROVE');
   assert.equal(b.status, 'Aprobado'); assert.equal(b.workflowStage, 'FINALIZADO');
+});
+
+
+test('financiamiento institucional se incorpora una vez y no depende de estudiantes', () => {
+  const b = budget();
+  b.externalIncome = [{ id:'fi', type:'Financiamiento institucional', description:'Aporte interno', year:2027, semester:2, students:99, amountPerStudent:12500000, source:'UTEM' }];
+  const flow = e.calculateBudget(b).annualFlows[0];
+  assert.equal(flow.institutionalFinancing, 12500000);
+  assert.equal(flow.externalIncome, 0);
+  assert.equal(flow.totalIncome, flow.netTuitionIncome + flow.enrollment + 12500000);
 });
