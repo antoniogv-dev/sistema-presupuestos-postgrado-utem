@@ -56,6 +56,7 @@ export type ApiBudgetRecord = {
   workflowStage: CohortBudget["workflowStage"];
   facultyOverheadRate: string | number;
   enrollmentRecognitionRate: string | number;
+  badDebtRate?: string | number | null;
   programVersionLabel?: string | null;
   scholarshipsEnabled?: boolean | number;
   deliveryModality?: CohortBudget["deliveryModality"];
@@ -333,6 +334,7 @@ export function toBudget(record: ApiBudgetRecord): CohortBudget {
     workflowStage: record.workflowStage,
     facultyOverheadRate: numberValue(record.facultyOverheadRate),
     enrollmentRecognitionRate: numberValue(record.enrollmentRecognitionRate),
+    badDebtRate: optionalNumberValue(record.badDebtRate),
     programVersionLabel: record.programVersionLabel?.trim() || record.program.versionLabel?.trim() || "1",
     scholarshipsEnabled: record.scholarshipsEnabled === undefined ? record.program.type !== "MAGISTER_PROFESIONAL" : Boolean(record.scholarshipsEnabled),
     deliveryModality: record.deliveryModality ?? "PRESENCIAL",

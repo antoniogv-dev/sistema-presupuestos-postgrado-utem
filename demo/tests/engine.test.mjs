@@ -112,3 +112,10 @@ test('financiamiento institucional se incorpora una vez y no depende de estudian
   assert.equal(flow.externalIncome, 0);
   assert.equal(flow.totalIncome, flow.netTuitionIncome + flow.enrollment + 12500000);
 });
+
+test('incobrabilidad puede ajustarse por presupuesto', () => {
+  const b = budget();
+  b.badDebtRate = 0.05;
+  const flow = e.calculateBudget(b).annualFlows[0];
+  assert.equal(Math.round(flow.badDebt), Math.round(flow.tuitionAfterBenefits * 0.05));
+});

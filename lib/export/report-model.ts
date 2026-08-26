@@ -1,4 +1,4 @@
-import { programTypeParameters, resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
+import { effectiveBadDebtRate, resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
 import { calculateBreakEvenEquivalentEnrollments } from "../calculations/break-even";
 import type { BudgetResult, CohortBudget, InstitutionalParameters } from "../calculations/types";
 
@@ -132,7 +132,6 @@ export function buildParameterReport(
   parameters: InstitutionalParameters,
 ): ParameterReport {
   const rows: ParameterReportRow[] = [];
-  const scoped = programTypeParameters(parameters, budget.program.type);
 
   const pushText = (section: string, parameter: string, period: string, value: string, detail?: string) => {
     rows.push({ section, parameter, period, value, valueKind: "text", detail });
@@ -203,7 +202,7 @@ export function buildParameterReport(
     if (budget.scholarshipsEnabled) {
       pushCurrency(section, "Beca de manutención mensual", String(year), annual.maintenanceScholarshipMonthlyValue);
     }
-    pushPercent(section, "Incobrabilidad", String(year), scoped.badDebtRate, "Aplicada al arancel después de descuentos y beca de arancel");
+    pushPercent(section, "Incobrabilidad", String(year), effectiveBadDebtRate(budget, parameters), "Porcentaje editable de esta formulación; aplicado al arancel después de descuentos y beca de arancel");
 
     pushCurrency(section, "Dirección anual base", String(year), annual.annualDirection);
     pushText(section, "Dirección prorrateada", String(year), yesNo(annual.directionProrated));

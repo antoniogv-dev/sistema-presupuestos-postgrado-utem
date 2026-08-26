@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
-import { calculateBudget, defaultAnnualOverrideForYear, hydrateAnnualOverrides, manualItemAmountForYear, overheadApplies, programTypeParameters, resolvedAnnualOverrideForYear, tuitionForProgramYear } from "@/lib/calculations/budget-engine";
+import { calculateBudget, defaultAnnualOverrideForYear, effectiveBadDebtRate, hydrateAnnualOverrides, manualItemAmountForYear, overheadApplies, programTypeParameters, resolvedAnnualOverrideForYear, tuitionForProgramYear } from "@/lib/calculations/budget-engine";
 import { calculateBreakEvenEquivalentEnrollments } from "@/lib/calculations/break-even";
 import { detectPotentialDuplicateCosts } from "@/lib/calculations/consolidation";
 import { formatCLP, formatPercent } from "@/lib/calculations/currency";
@@ -34,7 +34,7 @@ import { applyProgramCurriculumToBudget, curriculumCourseAppliedMode, curriculum
 import { fullProgramDiscountRange, synchronizeInitialStudents, synchronizeLastSemesterGraduation } from "@/lib/budgets/form-defaults";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v11.0.4";
+const FUNCTIONAL_RELEASE = "v11.0.5";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",
@@ -109,6 +109,7 @@ function freshBudget(program: Program, responsible: string, parameters: Institut
     durationSemesters: duration, initialStudents: 0, status: "Borrador", workflowStage: "GESTION",
     facultyOverheadRate: overheadApplies(program.type) ? typeParameters.facultyOverheadRate : 0,
     enrollmentRecognitionRate: 0,
+    badDebtRate: typeParameters.badDebtRate,
     programVersionLabel: program.versionLabel ?? "1",
     scholarshipsEnabled: program.type !== "MAGISTER_PROFESIONAL",
     deliveryModality: "PRESENCIAL",
@@ -423,7 +424,7 @@ export function BudgetWorkspace() {
         body: JSON.stringify({
           programId: program.id, cohortName: draft.cohortName, startYear: draft.startYear, startSemester: draft.startSemester,
           durationSemesters: draft.durationSemesters, initialStudents: draft.initialStudents,
-          facultyOverheadRate: draft.facultyOverheadRate, enrollmentRecognitionRate: draft.enrollmentRecognitionRate,
+          facultyOverheadRate: draft.facultyOverheadRate, enrollmentRecognitionRate: draft.enrollmentRecognitionRate, badDebtRate: draft.badDebtRate,
           programVersionLabel: draft.programVersionLabel, scholarshipsEnabled: draft.scholarshipsEnabled, deliveryModality: draft.deliveryModality,
           annualOverrides: draft.annualOverrides,
           authorizedInitialCarryover: 0, includeAuthorizedCarryover: true, normalizeSharedCosts: true, alertPotentialDuplicates: true,
@@ -452,6 +453,7 @@ export function BudgetWorkspace() {
           initialStudents: budget.initialStudents,
           facultyOverheadRate: budget.facultyOverheadRate,
           enrollmentRecognitionRate: budget.enrollmentRecognitionRate,
+          badDebtRate: Number.isFinite(budget.badDebtRate) ? budget.badDebtRate : null,
           programVersionLabel: budget.programVersionLabel,
           scholarshipsEnabled: budget.scholarshipsEnabled,
           deliveryModality: budget.deliveryModality,
@@ -535,7 +537,7 @@ export function BudgetWorkspace() {
     try {
       const cloneTag = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
       const clonedCohortName = `${budget.cohortName} · copia ${cloneTag}`;
-      const created = await responseBody<{ id: string }>(await fetch("/api/budgets", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ programId: budget.program.id, cohortName: clonedCohortName, startYear: budget.startYear, startSemester: budget.startSemester, durationSemesters: budget.durationSemesters, initialStudents: budget.initialStudents, facultyOverheadRate: budget.facultyOverheadRate, enrollmentRecognitionRate: budget.enrollmentRecognitionRate, programVersionLabel: budget.programVersionLabel, scholarshipsEnabled: budget.scholarshipsEnabled, deliveryModality: budget.deliveryModality, annualOverrides: budget.annualOverrides, authorizedInitialCarryover: budget.authorizedInitialCarryover, includeAuthorizedCarryover: budget.includeAuthorizedCarryover, normalizeSharedCosts: budget.normalizeSharedCosts, alertPotentialDuplicates: budget.alertPotentialDuplicates, appliedTemplateId: budget.appliedTemplateId ?? null, appliedTemplateVersion: budget.appliedTemplateVersion ?? null, notes: `Clonado desde ${budget.cohortName}`, responsibleId: identity.userId }) }));
+      const created = await responseBody<{ id: string }>(await fetch("/api/budgets", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ programId: budget.program.id, cohortName: clonedCohortName, startYear: budget.startYear, startSemester: budget.startSemester, durationSemesters: budget.durationSemesters, initialStudents: budget.initialStudents, facultyOverheadRate: budget.facultyOverheadRate, enrollmentRecognitionRate: budget.enrollmentRecognitionRate, badDebtRate: Number.isFinite(budget.badDebtRate) ? budget.badDebtRate : null, programVersionLabel: budget.programVersionLabel, scholarshipsEnabled: budget.scholarshipsEnabled, deliveryModality: budget.deliveryModality, annualOverrides: budget.annualOverrides, authorizedInitialCarryover: budget.authorizedInitialCarryover, includeAuthorizedCarryover: budget.includeAuthorizedCarryover, normalizeSharedCosts: budget.normalizeSharedCosts, alertPotentialDuplicates: budget.alertPotentialDuplicates, appliedTemplateId: budget.appliedTemplateId ?? null, appliedTemplateVersion: budget.appliedTemplateVersion ?? null, notes: `Clonado desde ${budget.cohortName}`, responsibleId: identity.userId }) }));
       await responseBody(await fetch(`/api/budgets/${created.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ deliveryModality: budget.deliveryModality, annualOverrides: budget.annualOverrides, semesters: budget.semesters.map((semester, position) => ({ ...semester, position })), discounts: budget.discounts, externalIncome: budget.externalIncome, items: budget.manualItems, sharedCourses: budget.sharedCourses, notes: `Clonado desde ${budget.program.code} · ${budget.cohortName}`, changeNote: "Clonación de presupuesto" }) }));
       await load(created.id); setMessage("Presupuesto clonado como nuevo borrador independiente.");
     } catch (reason) { setMessage(reason instanceof Error ? reason.message : "No fue posible clonar el presupuesto."); }
@@ -788,6 +790,7 @@ export function BudgetWorkspace() {
       <div className="form-grid cols-4">
         <label>Fuente del arancel<select disabled={!editable} value={budget.program.tuitionSource ?? "PROPIO"} onChange={(event) => { const source = event.target.value as TuitionSource; if (source === "PROPIO") patchBudget({ program: { ...budget.program, tuitionSource: source } }); else applyTuitionTemplate(source); }}><option value="PROPIO">Arancel propio del programa</option><option value="PLANTILLA_DOCTORADO">Plantilla Doctoral</option><option value="PLANTILLA_MAGISTER_ACADEMICO">Plantilla Magíster Académico</option><option value="PLANTILLA_MAGISTER_PROFESIONAL">Plantilla Magíster Profesional</option></select></label>
         <label>Reconocimiento matrícula (%)<div className="percent-input"><input disabled={!editable} type="number" min="0" max="100" step="1" value={(budget.enrollmentRecognitionRate * 100).toFixed(0)} onChange={(event) => patchBudget({ enrollmentRecognitionRate: numberValue(event.target.value) / 100 })} /><span>%</span></div><small>La proporción reconocida se incorpora a ingresos; no se aplica overhead sobre este concepto.</small></label>
+        <label>Incobrabilidad (%)<div className="percent-input"><input disabled={!editable} type="number" min="0" max="100" step="0.1" value={(effectiveBadDebtRate(budget, parameters) * 100).toFixed(1)} onChange={(event) => patchBudget({ badDebtRate: Math.min(1, Math.max(0, numberValue(event.target.value) / 100)) })} /><span>%</span></div><small>Editable para esta formulación. Referencia institucional: {formatPercent(typeParameters.badDebtRate)}. Se aplica al arancel después de descuentos y modifica la base de overhead.</small></label>
         <label>Arrastre autorizado<input disabled={!editable} type="number" value={budget.authorizedInitialCarryover} onChange={(event) => patchBudget({ authorizedInitialCarryover: numberValue(event.target.value) })} /></label>
         <label>Usar plantilla
           <select disabled={!editable || !relevantTemplates.length} value={effectiveTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
@@ -842,7 +845,7 @@ export function BudgetWorkspace() {
         </div>
       </div>
 
-      <div className="notice info"><strong>Referencia institucional</strong><p>Hora de reemplazo {formatCLP(parameters.replacementHour)} · Incobrabilidad {formatPercent(typeParameters.badDebtRate)}{!overhead ? " · Los programas académicos no aplican overhead en el cálculo." : ""}</p></div>
+      <div className="notice info"><strong>Referencia institucional</strong><p>Hora de reemplazo {formatCLP(parameters.replacementHour)} · Incobrabilidad institucional {formatPercent(typeParameters.badDebtRate)} · Incobrabilidad aplicada a esta formulación {formatPercent(effectiveBadDebtRate(budget, parameters))}{!overhead ? " · Los programas académicos no aplican overhead en el cálculo." : ""}</p></div>
     </section>
 
     <section className="panel"><SectionHeading number="3" id="estudiantes" title="Estudiantes y graduación" description="Matrícula activa y estudiantes que se encuentran en etapa de graduación por semestre." /><div className="table-wrap"><table className="data-table semester-table"><thead><tr><th>Periodo</th><th>Estudiantes activos</th><th>Estudiantes en graduación</th></tr></thead><tbody>{budget.semesters.map((semester, index) => <tr key={`${semester.year}-${semester.semester}`}><th>{semester.year}-{semester.semester}S</th><InputCell label={`Activos ${semester.year}-${semester.semester}`} value={semester.activeStudents} disabled={!editable} onChange={(value) => updateSemester(index, "activeStudents", value)} /><InputCell label={`Graduación ${semester.year}-${semester.semester}`} value={semester.graduatingStudents} disabled={!editable} onChange={(value) => updateSemester(index, "graduatingStudents", value)} /></tr>)}</tbody></table></div></section>

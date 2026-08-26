@@ -182,6 +182,15 @@ function inferredGraduatingStudents(budget: CohortBudget, semester: SemesterPara
   return nonNegative(semester.activeStudents);
 }
 
+export function effectiveBadDebtRate(
+  budget: Pick<CohortBudget, "program" | "badDebtRate">,
+  parameters: InstitutionalParameters,
+): number {
+  const configured = budget.badDebtRate;
+  if (configured !== undefined && configured !== null && Number.isFinite(configured)) return clampRate(configured);
+  return clampRate(programTypeParameters(parameters, budget.program.type).badDebtRate);
+}
+
 export function overheadApplies(type: ProgramType): boolean {
   return type !== "DOCTORADO" && type !== "MAGISTER_ACADEMICO";
 }
@@ -262,7 +271,8 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
     const equivalentDenominator = annualTuition * tuitionFactor;
     const equivalentEnrollments = equivalentDenominator > 0 ? tuitionAfterBenefits / equivalentDenominator : 0;
     const roundedEquivalentStudents = Math.ceil(equivalentEnrollments);
-    const badDebt = tuitionAfterBenefits * scoped.badDebtRate;
+    const badDebtRate = effectiveBadDebtRate(budget, parameters);
+    const badDebt = tuitionAfterBenefits * badDebtRate;
     const netTuitionIncome = tuitionAfterBenefits - badDebt;
 
     const enrollmentSemesters = semesters.filter((semester) => enrollmentChargePeriods.has(periodKey(semester.year, semester.semester)));

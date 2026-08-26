@@ -1,5 +1,5 @@
 import { formatCLP, formatPercent } from "../calculations/currency";
-import { calculateBudget, resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
+import { calculateBudget, effectiveBadDebtRate, resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
 import type { BudgetResult, CohortBudget, InstitutionalParameters } from "../calculations/types";
 
 export interface NarrativeSection { heading: string; paragraphs: string[]; }
@@ -152,13 +152,14 @@ export function buildFinancialNarrative(
   const enrollmentGross = sum(result.annualFlows.map((flow) => flow.grossEnrollmentFee));
   const enrollmentRecognized = sum(result.annualFlows.map((flow) => flow.recognizedEnrollmentFee));
   const institutionalFinancing = sum(result.annualFlows.map((flow) => flow.institutionalFinancing));
+  const badDebtRate = effectiveBadDebtRate(budget, parameters);
   const externalIncome = sum(result.annualFlows.map((flow) => flow.externalIncome + flow.otherIncome));
   const groups = costGroups(result);
   const previous = history.at(-1);
 
   const antecedents = `La cohorte analizada corresponde a ${budget.program.name}, versión ${budget.programVersionLabel}, con inicio ${budget.startYear}-${budget.startSemester}S y una duración presupuestada de ${budget.durationSemesters} semestres (${periodText}). La formulación considera ${current.initialStudents} estudiante(s) inicialmente matriculados o proyectados y ${current.activeStudents} estudiante(s) vigentes en el último semestre presupuestado. El valor bruto de matrícula asciende a ${money(enrollmentGross)} durante el horizonte. Conforme al porcentaje de reconocimiento definido en la formulación, ${money(enrollmentRecognized)} se incorpora como ingreso del programa. Este ingreso no forma parte de la base de overhead.`;
 
-  const income = `Los ingresos brutos por aranceles alcanzan ${money(current.grossTuition)} para el ciclo completo. Sobre dicho monto se aplican becas y descuentos por ${money(current.discountsAndScholarships)} e incobrabilidad por ${money(current.badDebt)}. La matrícula reconocida aporta ${money(enrollmentRecognized)} a los ingresos del programa. Los ingresos extraordinarios calculados por estudiante u otras bases ascienden a ${money(externalIncome)}, mientras que el financiamiento institucional fijo registrado para el proyecto/programa alcanza ${money(institutionalFinancing)}. Como resultado, los ingresos netos presupuestados totalizan ${money(current.netIncome)}, equivalentes a ${moneyOrNA(current.incomePerStudent)} por estudiante inicial. El overhead se mantiene calculado exclusivamente sobre el arancel neto sujeto a cobro, sin incorporar matrícula reconocida ni financiamiento institucional. El detalle anual es: ${annualIncomeDetail(budget, result, parameters)}.`;
+  const income = `Los ingresos brutos por aranceles alcanzan ${money(current.grossTuition)} para el ciclo completo. Sobre dicho monto se aplican becas y descuentos por ${money(current.discountsAndScholarships)} e incobrabilidad por ${money(current.badDebt)} (${formatPercent(badDebtRate)} aplicado en esta formulación). La matrícula reconocida aporta ${money(enrollmentRecognized)} a los ingresos del programa. Los ingresos extraordinarios calculados por estudiante u otras bases ascienden a ${money(externalIncome)}, mientras que el financiamiento institucional fijo registrado para el proyecto/programa alcanza ${money(institutionalFinancing)}. Como resultado, los ingresos netos presupuestados totalizan ${money(current.netIncome)}, equivalentes a ${moneyOrNA(current.incomePerStudent)} por estudiante inicial. El overhead se mantiene calculado exclusivamente sobre el arancel neto sujeto a cobro, sin incorporar matrícula reconocida ni financiamiento institucional. El detalle anual es: ${annualIncomeDetail(budget, result, parameters)}.`;
 
   const costs = `Los costos totales del programa ascienden a ${money(groups.total)}, equivalentes a ${moneyOrNA(current.costPerStudent)} por estudiante inicial. De este total, ${money(groups.teaching)} corresponden a costos docentes, ${money(groups.academic)} a costos académicos asociados a guía o revisión de tesis, ${money(groups.administrative)} a costos administrativos y honorarios no académicos, y ${money(groups.marketing)} a difusión o captación. Los restantes ${money(groups.other)} corresponden a otros costos del modelo, incluyendo según corresponda gastos operacionales, becas y ayudas, equipamiento, overhead y otras partidas registradas.`;
 

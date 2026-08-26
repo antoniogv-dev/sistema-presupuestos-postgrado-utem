@@ -45,6 +45,7 @@ const createSchema = z.object({
   initialStudents: z.number().int().min(0),
   facultyOverheadRate: z.number().min(0).max(1),
   enrollmentRecognitionRate: z.number().min(0).max(1).default(0),
+  badDebtRate: z.number().min(0).max(1).optional().nullable(),
   programVersionLabel: z.string().trim().min(1).max(80).optional(),
   scholarshipsEnabled: z.boolean().optional(),
   deliveryModality: z.enum(["PRESENCIAL", "SEMIPRESENCIAL", "E_LEARNING"]).default("PRESENCIAL"),
@@ -155,6 +156,7 @@ export async function POST(request: Request) {
       ...input,
       facultyOverheadRate: isAcademic(program.type) ? 0 : input.facultyOverheadRate,
       enrollmentRecognitionRate: input.enrollmentRecognitionRate ?? 0,
+      badDebtRate: input.badDebtRate ?? null,
       programVersionLabel: input.programVersionLabel?.trim() || program.versionLabel || "1",
       scholarshipsEnabled: input.scholarshipsEnabled ?? (program.type !== ProgramType.MAGISTER_PROFESIONAL),
       deliveryModality: input.deliveryModality ?? "PRESENCIAL",
@@ -167,15 +169,15 @@ export async function POST(request: Request) {
         INSERT INTO "CohortBudget" (
           "id", "programId", "cohortName", "startYear", "startSemester", "durationSemesters",
           "initialStudents", "status", "workflowStage", "facultyOverheadRate",
-          "enrollmentRecognitionRate", "programVersionLabel", "scholarshipsEnabled", "deliveryModality",
+          "enrollmentRecognitionRate", "badDebtRate", "programVersionLabel", "scholarshipsEnabled", "deliveryModality",
           "authorizedInitialCarryover", "includeAuthorizedCarryover", "normalizeSharedCosts",
           "alertPotentialDuplicates", "appliedTemplateId", "appliedTemplateVersion", "notes",
           "responsibleId", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BORRADOR', 'GESTION', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BORRADOR', 'GESTION', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `).bind(
         budgetId, effectiveInput.programId, effectiveInput.cohortName, effectiveInput.startYear,
         effectiveInput.startSemester, effectiveInput.durationSemesters, effectiveInput.initialStudents,
-        effectiveInput.facultyOverheadRate, effectiveInput.enrollmentRecognitionRate,
+        effectiveInput.facultyOverheadRate, effectiveInput.enrollmentRecognitionRate, effectiveInput.badDebtRate,
         effectiveInput.programVersionLabel, effectiveInput.scholarshipsEnabled ? 1 : 0, effectiveInput.deliveryModality,
         effectiveInput.authorizedInitialCarryover, effectiveInput.includeAuthorizedCarryover ? 1 : 0,
         effectiveInput.normalizeSharedCosts ? 1 : 0, effectiveInput.alertPotentialDuplicates ? 1 : 0,

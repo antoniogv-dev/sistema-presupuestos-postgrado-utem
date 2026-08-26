@@ -308,6 +308,8 @@ export interface CohortBudget {
   workflowStage: WorkflowStage;
   facultyOverheadRate: number;
   enrollmentRecognitionRate: number;
+  /** Incobrabilidad particular de esta formulación. Si no está informada, usa la referencia institucional del tipo de programa. */
+  badDebtRate?: number;
   programVersionLabel: string;
   scholarshipsEnabled: boolean;
   deliveryModality: DeliveryModality;

@@ -112,6 +112,7 @@ const updateSchema = z.object({
   initialStudents: z.number().int().min(0).optional(),
   facultyOverheadRate: z.number().min(0).max(1).optional(),
   enrollmentRecognitionRate: z.number().min(0).max(1).optional(),
+  badDebtRate: z.number().min(0).max(1).optional().nullable(),
   programVersionLabel: z.string().trim().min(1).max(80).optional(),
   scholarshipsEnabled: z.boolean().optional(),
   deliveryModality: z.enum(["PRESENCIAL", "SEMIPRESENCIAL", "E_LEARNING"]).optional(),
@@ -229,6 +230,7 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
     if (isAcademic(effectiveProgram.type)) assign("facultyOverheadRate", 0);
     else if (header.facultyOverheadRate !== undefined) assign("facultyOverheadRate", header.facultyOverheadRate);
     if (header.enrollmentRecognitionRate !== undefined) assign("enrollmentRecognitionRate", header.enrollmentRecognitionRate);
+    if (header.badDebtRate !== undefined) assign("badDebtRate", header.badDebtRate);
     if (header.programVersionLabel !== undefined) assign("programVersionLabel", header.programVersionLabel);
     if (header.scholarshipsEnabled !== undefined) assign("scholarshipsEnabled", header.scholarshipsEnabled ? 1 : 0);
     if (header.deliveryModality !== undefined) assign("deliveryModality", header.deliveryModality);

@@ -338,6 +338,7 @@ model CohortBudget {
   workflowStage              WorkflowStage @default(GESTION)
   facultyOverheadRate        Decimal
   enrollmentRecognitionRate Decimal
+  badDebtRate               Decimal?
   programVersionLabel        String        @default("1")
   scholarshipsEnabled        Boolean       @default(true)
   deliveryModality           DeliveryModality @default(PRESENCIAL)

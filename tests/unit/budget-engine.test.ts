@@ -29,6 +29,23 @@ describe("motor financiero", () => {
     expect(first.recognizedEnrollmentFee).toBe(0);
   });
 
+  it("v11.0.5 permite ajustar la incobrabilidad por presupuesto sin alterar la referencia institucional", () => {
+    const budget = clone(demoBudget);
+    budget.badDebtRate = 0.05;
+    const flow = calculateBudget(budget, institutionalParameters).annualFlows[0];
+    expect(flow.badDebt).toBeCloseTo(flow.tuitionAfterBenefits * 0.05, 2);
+    expect(flow.overheadBase).toBeCloseTo(flow.grossTuition - flow.discounts - flow.badDebt, 2);
+    expect(institutionalParameters.byProgramType.MAGISTER_PROFESIONAL.badDebtRate).toBe(0.15);
+  });
+
+  it("v11.0.5 admite incobrabilidad cero para una formulación específica", () => {
+    const budget = clone(demoBudget);
+    budget.badDebtRate = 0;
+    const flow = calculateBudget(budget, institutionalParameters).annualFlows[0];
+    expect(flow.badDebt).toBe(0);
+    expect(flow.netTuitionIncome).toBeCloseTo(flow.tuitionAfterBenefits, 2);
+  });
+
   it("aplica overhead sólo a programas profesionales", () => {
     const professional = calculateBudget(demoBudget, institutionalParameters).annualFlows[0];
     expect(professional.centralOverhead).toBeGreaterThan(0);

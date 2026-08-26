@@ -27,3 +27,5 @@ Cloudflare aplica únicamente las migraciones pendientes y mantiene el historial
 No copie estos SQL a `prisma/migrations` y no ejecute manualmente una migración que Wrangler ya haya aplicado.
 
 - `0011_professional_annual_offering_plans.sql`: v11.0, planificación anual flexible para Magísteres Profesionales.
+
+- `0012_budget_bad_debt_rate.sql`: v11.0.5, permite ajustar la incobrabilidad por presupuesto manteniendo fallback institucional para registros históricos.

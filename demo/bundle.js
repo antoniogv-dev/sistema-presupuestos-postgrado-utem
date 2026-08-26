@@ -203,7 +203,8 @@ function calculateBudget(budget) {
     const tuitionAfterBenefits = Math.max(0, grossTuition - discounts - tuitionScholarships);
     const equivalentEnrollments = annualTuition * tuitionFactor > 0 ? tuitionAfterBenefits / (annualTuition * tuitionFactor) : 0;
     const roundedEquivalentStudents = Math.ceil(equivalentEnrollments);
-    const badDebt = tuitionAfterBenefits * typeParameters.badDebtRate;
+    const badDebtRate = Number.isFinite(Number(budget.badDebtRate)) ? Math.min(1, Math.max(0, Number(budget.badDebtRate))) : typeParameters.badDebtRate;
+    const badDebt = tuitionAfterBenefits * badDebtRate;
     const netTuitionIncome = tuitionAfterBenefits - badDebt;
     const enrollment = sum(semesters.map((semester) => safe(semester.activeStudents) * valueForYear(parameters.enrollmentFee, year) * 0.5 * safe(budget.enrollmentRecognitionRate)));
     const externalIncome = sum((budget.externalIncome || []).filter((income) => income.year === year).map((income) => safe(income.students) * safe(income.amountPerStudent)));
