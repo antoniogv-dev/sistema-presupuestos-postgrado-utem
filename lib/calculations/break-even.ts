@@ -1,4 +1,4 @@
-import { calculateBudget } from "./budget-engine";
+import { calculateBudget, effectiveBadDebtRate } from "./budget-engine";
 import type { CohortBudget, InstitutionalParameters } from "./types";
 
 export interface BreakEvenResult {
@@ -11,67 +11,60 @@ export interface BreakEvenResult {
   reached: boolean;
 }
 
-function syntheticEquivalentBudget(budget: CohortBudget, equivalentStudents: number): CohortBudget {
-  return {
-    ...structuredClone(budget),
-    scholarshipsEnabled: false,
-    discounts: [],
-    semesters: budget.semesters.map((semester) => ({
-      ...semester,
-      activeStudents: equivalentStudents,
-      // La matrícula equivalente mide capacidad de financiamiento a arancel completo.
-      // Los costos académicos ya presupuestados (por ejemplo, guía de tesis) se conservan
-      // dentro de lo razonable para no transformar el punto de equilibrio en un presupuesto distinto.
-      graduatingStudents: Math.min(semester.graduatingStudents, equivalentStudents),
-      internalTuitionScholarshipStudents: 0,
-      maintenanceScholarshipStudents: 0,
-      maintenanceScholarshipMonths: 0,
-    })),
-  };
-}
-
-function finalFlowForEquivalentStudents(
-  budget: CohortBudget,
-  parameters: InstitutionalParameters,
-  equivalentStudents: number,
-): number {
-  return calculateBudget(syntheticEquivalentBudget(budget, equivalentStudents), parameters).finalAccumulatedFlow;
-}
-
+/**
+ * Punto de equilibrio de un Magíster Profesional expresado en matrículas equivalentes.
+ *
+ * Criterio institucional v11.0.8:
+ *   Costos fijos / contribución neta de una matrícula equivalente.
+ *
+ * Costos fijos = costos totales del primer año menos overhead central y de facultad.
+ * Contribución = arancel anual × (1 - incobrabilidad) × (1 - overhead central - overhead facultad).
+ *
+ * Los descuentos no se restan nuevamente: su efecto ya está contenido en el concepto de
+ * "matrícula equivalente". La matrícula administrativa/reconocida, financiamiento institucional,
+ * otros ingresos y arrastre tampoco se utilizan para reducir este umbral, en concordancia con
+ * la fórmula institucional solicitada para el XLSX.
+ */
 export function calculateBreakEvenEquivalentEnrollments(
   budget: CohortBudget,
   parameters: InstitutionalParameters,
 ): BreakEvenResult {
   const current = calculateBudget(budget, parameters);
-  const currentEquivalentEnrollments = current.annualFlows.reduce(
-    (maximum, flow) => Math.max(maximum, flow.equivalentEnrollments),
-    0,
-  );
+  const first = current.annualFlows[0];
 
-  // Si incluso con cero matrículas equivalentes el presupuesto no es deficitario
-  // (por arrastre/otros ingresos), el mínimo requerido es cero.
-  const zeroFlow = finalFlowForEquivalentStudents(budget, parameters, 0);
-  if (zeroFlow >= 0) {
+  if (!first) {
+    return {
+      minimumEquivalentEnrollments: null,
+      minimumEquivalentEnrollmentsExact: null,
+      minimumWholeStudents: null,
+      projectedFinalFlowAtMinimum: null,
+      currentEquivalentEnrollments: 0,
+      equivalentEnrollmentGap: null,
+      reached: false,
+    };
+  }
+
+  const currentEquivalentEnrollments = first.equivalentEnrollments;
+  const badDebtRate = effectiveBadDebtRate(budget, parameters);
+  const overheadRate = Math.max(0, first.centralOverheadRate) + Math.max(0, first.facultyOverheadRate);
+  const fixedCosts = Math.max(0, Math.abs(first.totalExpenses - first.centralOverhead - first.facultyOverhead));
+  const contributionPerEquivalentEnrollment = Math.max(0, first.annualTuition)
+    * Math.max(0, 1 - badDebtRate)
+    * Math.max(0, 1 - overheadRate);
+
+  if (fixedCosts === 0) {
     return {
       minimumEquivalentEnrollments: 0,
       minimumEquivalentEnrollmentsExact: 0,
       minimumWholeStudents: 0,
-      projectedFinalFlowAtMinimum: zeroFlow,
+      projectedFinalFlowAtMinimum: 0,
       currentEquivalentEnrollments,
       equivalentEnrollmentGap: -currentEquivalentEnrollments,
       reached: true,
     };
   }
 
-  let high = 1;
-  let highFlow = finalFlowForEquivalentStudents(budget, parameters, high);
-  const maximumSearch = 10_000;
-  while (highFlow < 0 && high < maximumSearch) {
-    high *= 2;
-    highFlow = finalFlowForEquivalentStudents(budget, parameters, high);
-  }
-
-  if (highFlow < 0) {
+  if (contributionPerEquivalentEnrollment <= 0) {
     return {
       minimumEquivalentEnrollments: null,
       minimumEquivalentEnrollmentsExact: null,
@@ -83,20 +76,10 @@ export function calculateBreakEvenEquivalentEnrollments(
     };
   }
 
-  let low = 0;
-  for (let iteration = 0; iteration < 50; iteration += 1) {
-    const mid = (low + high) / 2;
-    if (finalFlowForEquivalentStudents(budget, parameters, mid) >= 0) high = mid;
-    else low = mid;
-  }
-
-  const exact = high;
-  // Las matrículas equivalentes admiten decimales porque incorporan el efecto financiero
-  // de descuentos y beneficios. Se redondea hacia arriba a dos decimales para entregar
-  // un umbral operativo que nunca deje el flujo final bajo cero y permanezca cercano a 0.
+  const exact = fixedCosts / contributionPerEquivalentEnrollment;
   const minimum = Math.ceil((exact - 1e-9) * 100) / 100;
   const minimumWholeStudents = Math.ceil(exact - 1e-9);
-  const projectedFinalFlowAtMinimum = finalFlowForEquivalentStudents(budget, parameters, minimum);
+  const projectedFinalFlowAtMinimum = minimum * contributionPerEquivalentEnrollment - fixedCosts;
 
   return {
     minimumEquivalentEnrollments: minimum,

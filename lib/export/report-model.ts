@@ -237,11 +237,11 @@ export function buildParameterReport(
   if (budget.program.type === "MAGISTER_PROFESIONAL") {
     const breakEven = calculateBreakEvenEquivalentEnrollments(budget, parameters);
     if (breakEven.minimumEquivalentEnrollments !== null) {
-      pushNumber("Punto de equilibrio", "Matrículas equivalentes mínimas", "Horizonte completo", breakEven.minimumEquivalentEnrollments, `Umbral exacto ${breakEven.minimumEquivalentEnrollmentsExact?.toLocaleString("es-CL", { maximumFractionDigits: 4 })}`);
-      pushNumber("Punto de equilibrio", "Estudiantes a arancel completo aproximados", "Horizonte completo", breakEven.minimumWholeStudents ?? 0, "Redondeo hacia arriba del umbral equivalente");
-      pushNumber("Punto de equilibrio", "Matrículas equivalentes actuales de referencia", "Horizonte completo", breakEven.currentEquivalentEnrollments);
+      pushNumber("Punto de equilibrio", "Matrículas equivalentes mínimas", "Primer año presupuestario", breakEven.minimumEquivalentEnrollments, `Costos fijos / [arancel × (1 − incobrabilidad) × (1 − overhead central − overhead facultad)]. Umbral exacto ${breakEven.minimumEquivalentEnrollmentsExact?.toLocaleString("es-CL", { maximumFractionDigits: 4 })}`);
+      pushNumber("Punto de equilibrio", "Estudiantes a arancel completo aproximados", "Primer año presupuestario", breakEven.minimumWholeStudents ?? 0, "Redondeo hacia arriba del umbral equivalente");
+      pushNumber("Punto de equilibrio", "Matrículas equivalentes actuales de referencia", "Primer año presupuestario", breakEven.currentEquivalentEnrollments, "Los descuentos inciden en esta equivalencia, no en el umbral requerido expresado en equivalentes.");
     } else {
-      pushText("Punto de equilibrio", "Resultado", "Horizonte completo", "No alcanzado dentro del rango de simulación");
+      pushText("Punto de equilibrio", "Resultado", "Primer año presupuestario", "No determinable: la contribución neta por matrícula equivalente es nula o negativa.");
     }
   }
 

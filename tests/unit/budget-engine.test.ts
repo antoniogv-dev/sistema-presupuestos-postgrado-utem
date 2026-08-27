@@ -192,13 +192,32 @@ describe("motor financiero", () => {
     expect(annual.annualDiffusion).toBe(0);
   });
 
-  it("calcula un punto de equilibrio profesional con saldo final no negativo", () => {
+  it("calcula el punto de equilibrio como costos fijos sobre contribución neta por matrícula equivalente", () => {
     const budget = clone(demoBudget);
+    const result = calculateBudget(budget, institutionalParameters);
+    const first = result.annualFlows[0];
     const breakEven = calculateBreakEvenEquivalentEnrollments(budget, institutionalParameters);
+    const badDebtRate = first.badDebt / first.tuitionAfterBenefits;
+    const fixedCosts = Math.abs(first.totalExpenses - first.centralOverhead - first.facultyOverhead);
+    const contribution = first.annualTuition * (1 - badDebtRate) * (1 - first.centralOverheadRate - first.facultyOverheadRate);
+    const exact = fixedCosts / contribution;
     expect(breakEven.reached).toBe(true);
-    expect(breakEven.minimumEquivalentEnrollments).not.toBeNull();
+    expect(breakEven.minimumEquivalentEnrollmentsExact).toBeCloseTo(exact, 8);
+    expect(breakEven.minimumEquivalentEnrollments).toBe(Math.ceil((exact - 1e-9) * 100) / 100);
+    expect(breakEven.minimumWholeStudents).toBe(Math.ceil(exact - 1e-9));
     expect(breakEven.projectedFinalFlowAtMinimum).not.toBeNull();
     expect(breakEven.projectedFinalFlowAtMinimum!).toBeGreaterThanOrEqual(0);
+  });
+
+  it("los descuentos cambian las matrículas equivalentes observadas, pero no el umbral equivalente requerido", () => {
+    const withoutDiscount = clone(demoBudget);
+    withoutDiscount.discounts = [];
+    const withDiscount = clone(demoBudget);
+    withDiscount.discounts = [{ ...withDiscount.discounts[0], percentage: 0.4, students: 10 }];
+    const a = calculateBreakEvenEquivalentEnrollments(withoutDiscount, institutionalParameters);
+    const b = calculateBreakEvenEquivalentEnrollments(withDiscount, institutionalParameters);
+    expect(a.minimumEquivalentEnrollmentsExact).toBeCloseTo(b.minimumEquivalentEnrollmentsExact!, 8);
+    expect(a.currentEquivalentEnrollments).not.toBe(b.currentEquivalentEnrollments);
   });
 
   it("permite sobrescribir por año hora directa y guía de tesis", () => {

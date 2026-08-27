@@ -221,52 +221,27 @@ function maybeProjectionFormula(base: number, next: number, adjustment: number, 
 }
 
 /**
- * Fórmula Excel trazable del punto de equilibrio para el formato institucional de dos años.
+ * Fórmula Excel institucional del punto de equilibrio de estudiantes.
  *
- * Replica la lógica económica del motor de punto de equilibrio: neutraliza descuentos y becas
- * de arancel, mantiene costos fijos/arrastre/otros ingresos y considera como variables por
- * matrícula equivalente el arancel neto de incobrabilidad y overhead, la matrícula reconocida
- * y la guía de tesis hasta el tope de estudiantes en graduación de cada año.
+ * Costos fijos = TOTAL COSTOS Y GASTOS menos el subtotal de overhead.
+ * Contribución por matrícula equivalente = arancel anual neto de incobrabilidad y overhead.
  *
- * La fórmula se construye sin LET/LAMBDA para mantener compatibilidad con versiones de Excel
- * anteriores a Microsoft 365.
+ * Los descuentos no aparecen nuevamente en el denominador porque una matrícula equivalente
+ * ya representa el efecto financiero de esos beneficios. La matrícula administrativa/reconocida
+ * y los demás ingresos no arancelarios no reducen el umbral de este indicador.
+ *
+ * Con dos filas de descuentos, la fórmula resultante es exactamente:
+ * =ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)/(Parámetros!$B$4*(1-Parámetros!$B$12)*(1-Parámetros!$B$13-Parámetros!$B$14))
+ *
+ * Si existen más descuentos, las filas de incobrabilidad y overhead se desplazan y las
+ * referencias se actualizan automáticamente sin alterar la lógica.
  */
 function breakEvenExcelFormula(
-  budget: CohortBudget,
-  flow1: BudgetResult["annualFlows"][number],
-  flow2: BudgetResult["annualFlows"][number],
-  graduationStudentsRow: number,
   badDebtParameterRow: number,
   centralOverheadParameterRow: number,
   facultyOverheadParameterRow: number,
 ): string {
-  const recognitionRate = Math.max(0, Math.min(1, budget.enrollmentRecognitionRate));
-  const n = (value: number) => Number.isFinite(value) ? String(value) : "0";
-
-  const fixedIncome1 = `('FLUJO TOTAL'!$B$7-('FLUJO TOTAL'!$B$5+'FLUJO TOTAL'!$B$6)-'FLUJO TOTAL'!$B$4*${n(recognitionRate)})`;
-  const fixedIncome2 = `('FLUJO TOTAL'!$C$7-('FLUJO TOTAL'!$C$5+'FLUJO TOTAL'!$C$6)-'FLUJO TOTAL'!$C$4*${n(recognitionRate)})`;
-  const fixedExpense1 = `('FLUJO TOTAL'!$B$37-'FLUJO TOTAL'!$B$10-'FLUJO TOTAL'!$B$36+${n(flow1.maintenanceScholarships)})`;
-  const fixedExpense2 = `('FLUJO TOTAL'!$C$37-'FLUJO TOTAL'!$C$10-'FLUJO TOTAL'!$C$36+${n(flow2.maintenanceScholarships)})`;
-  const fixedBalance = `('FLUJO TOTAL'!$B$39+${fixedIncome1}+${fixedIncome2}+${fixedExpense1}+${fixedExpense2})`;
-
-  const contribution1 = `(Parámetros!$B$4*${n(flow1.tuitionFactor)}*(1-Parámetros!$B$${badDebtParameterRow})*(1-Parámetros!$B$${centralOverheadParameterRow}-Parámetros!$B$${facultyOverheadParameterRow})+Parámetros!$B$5*${n(flow1.tuitionFactor)}*${n(recognitionRate)})`;
-  const contribution2 = `(Parámetros!$C$4*${n(flow2.tuitionFactor)}*(1-Parámetros!$C$${badDebtParameterRow})*(1-Parámetros!$C$${centralOverheadParameterRow}-Parámetros!$C$${facultyOverheadParameterRow})+Parámetros!$C$5*${n(flow2.tuitionFactor)}*${n(recognitionRate)})`;
-  const contribution = `(${contribution1}+${contribution2})`;
-
-  const graduation1 = `$B$${graduationStudentsRow}`;
-  const graduation2 = `$C$${graduationStudentsRow}`;
-  const capLow = `MIN(${graduation1},${graduation2})`;
-  const capHigh = `MAX(${graduation1},${graduation2})`;
-  const guideLow = `IF(${graduation1}<=${graduation2},Parámetros!$B$8,Parámetros!$C$8)`;
-  const guideHigh = `IF(${graduation1}<=${graduation2},Parámetros!$C$8,Parámetros!$B$8)`;
-
-  const slope0 = `(${contribution}-${guideLow}-${guideHigh})`;
-  const root0 = `((0-${fixedBalance})/${slope0})`;
-  const slope1 = `(${contribution}-${guideHigh})`;
-  const root1 = `((${capLow}*${guideLow}-${fixedBalance})/${slope1})`;
-  const root2 = `((${capLow}*${guideLow}+${capHigh}*${guideHigh}-${fixedBalance})/${contribution})`;
-
-  return `IFERROR(ROUNDUP(MAX(0,IF(${fixedBalance}>=0,0,IF(AND(${slope0}>0,${root0}<=${capLow}),${root0},IF(AND(${slope1}>0,${root1}>=${capLow},${root1}<=${capHigh}),${root1},${root2})))),2),0)`;
+  return `ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)/(Parámetros!$B$4*(1-Parámetros!$B$${badDebtParameterRow})*(1-Parámetros!$B$${centralOverheadParameterRow}-Parámetros!$B$${facultyOverheadParameterRow}))`;
 }
 
 function modalityLabel(budget: CohortBudget): string {
@@ -412,7 +387,7 @@ export async function createInstitutionalFormulaBudgetXlsx(
   s2 = setFormula(s2, `B${totalTuitionIncomeRow}`, `SUM(B${noDiscountIncomeRow}:B${discountIncomeStartRow + discountSlots - 1})`, flow1.tuitionAfterBenefits); s2 = setFormula(s2, `C${totalTuitionIncomeRow}`, `SUM(C${noDiscountIncomeRow}:C${discountIncomeStartRow + discountSlots - 1})`, flow2.tuitionAfterBenefits);
   const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, parameters);
   const equilibriumFormula = breakEvenExcelFormula(
-    budget, flow1, flow2, graduationStudentsRow, badDebtParameterRow, centralOverheadParameterRow, facultyOverheadParameterRow,
+    badDebtParameterRow, centralOverheadParameterRow, facultyOverheadParameterRow,
   );
   s2 = setFormula(s2, `B${equilibriumRow}`, equilibriumFormula, equilibrium.minimumEquivalentEnrollments ?? 0);
   s2 = setText(s2, `C${equilibriumRow}`, "matrículas equivalentes (fórmula)");
