@@ -34,7 +34,7 @@ import { applyProgramCurriculumToBudget, curriculumCourseAppliedMode, curriculum
 import { fullProgramDiscountRange, synchronizeInitialStudents, synchronizeLastSemesterGraduation } from "@/lib/budgets/form-defaults";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
-const FUNCTIONAL_RELEASE = "v11.0.8";
+const FUNCTIONAL_RELEASE = "v11.0.10";
 const COST_CATEGORIES: BudgetItem["category"][] = [
   "Otros honorarios no académicos",
   "Dirección",

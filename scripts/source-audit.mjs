@@ -257,7 +257,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v11.0.8"',
+  'FUNCTIONAL_RELEASE = "v11.0.10"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -277,8 +277,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v11.0.8") || !appShellV110.includes("1.1.8-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v11.0.8 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v11.0.10") || !appShellV110.includes("1.1.10-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v11.0.10 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -583,7 +583,7 @@ for (const marker of [
   "Toda la página quedó sincronizada con este presupuesto",
   "auditBudgetIntegrity",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v11.0.8"',
+  'FUNCTIONAL_RELEASE = "v11.0.10"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.23: falta ${marker}.`);
 }
@@ -610,7 +610,7 @@ for (const marker of [
   "setInitialStudentsForAllSemesters",
   "Punto de equilibrio",
   "Viabilidad mínima de dictación",
-  'FUNCTIONAL_RELEASE = "v11.0.8"',
+  'FUNCTIONAL_RELEASE = "v11.0.10"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
 }
@@ -811,7 +811,7 @@ for (const marker of ["curriculumCourseWeeklyDirectHours", "theoryWeeklyHours", 
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.28: falta ${marker}.`);
 }
 const budgetWorkspaceV1028 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v11.0.8"']) {
+for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v11.0.10"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.28: falta ${marker}.`);
 }
 
@@ -819,7 +819,7 @@ for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla recon
 for (const marker of ["curriculumCourseAppliedMode", 'modality === "PRESENCIAL"', 'return "PRESENCIAL"']) {
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.30: falta ${marker}.`);
 }
-for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v11.0.8"']) {
+for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v11.0.10"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.30: falta ${marker}.`);
 }
 
@@ -898,9 +898,22 @@ for (const marker of ["memorandum-presupuesto-base-v11-0-6.docx", "Para la elabo
 const institutionalXlsxV1108 = await readFile(path.join(root, "lib/export/institutional-budget-xlsx.ts"), "utf8");
 const institutionalXlsxTestV1108 = await readFile(path.join(root, "demo/tests/institutional-xlsx.test.mjs"), "utf8");
 const breakEvenV1108 = await readFile(path.join(root, "lib/calculations/break-even.ts"), "utf8");
-for (const marker of ["breakEvenExcelFormula", "ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)", "Parámetros!$B$4*(1-Parámetros!$B$${badDebtParameterRow})", "matrículas equivalentes (fórmula)", "ROUNDUP(B${equilibriumRow},0)"]) if (!institutionalXlsxV1108.includes(marker)) fail(`XLSX v11.0.8 punto de equilibrio: falta ${marker}.`);
+for (const marker of ["breakEvenExcelFormula", "ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)", "Parámetros!$B$4*(1-Parámetros!$B$${badDebtParameterRow})", "matrículas equivalentes", "ROUNDUP(B${equilibriumRow},0)"]) if (!institutionalXlsxV1108.includes(marker)) fail(`XLSX v11.0.8 punto de equilibrio: falta ${marker}.`);
 for (const marker of ["v11.0.8 exporta el punto de equilibrio como fórmula institucional de contribución neta", "ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)/(Parámetros!$B$4*(1-Parámetros!$B$12)*(1-Parámetros!$B$13-Parámetros!$B$14))", "ROUNDUP(B14,0)"]) if (!institutionalXlsxTestV1108.includes(marker)) fail(`XLSX v11.0.8 pruebas: falta ${marker}.`);
 for (const marker of ["fixedCosts", "contributionPerEquivalentEnrollment", "first.totalExpenses - first.centralOverhead - first.facultyOverhead", "1 - badDebtRate", "1 - overheadRate"]) if (!breakEvenV1108.includes(marker)) fail(`Motor v11.0.8 punto de equilibrio: falta ${marker}.`);
+
+// v11.0.9: etiquetas limpias en Flujo estudiantes; las fórmulas permanecen en B14/B15.
+if (institutionalXlsxV1108.includes("matrículas equivalentes (fórmula)")) fail("XLSX v11.0.9: no debe mostrarse (fórmula) en la etiqueta de matrículas equivalentes.");
+if (institutionalXlsxV1108.includes("estudiantes (redondeo fórmula)")) fail("XLSX v11.0.9: la etiqueta de estudiantes debe ser limpia.");
+for (const marker of ["matrículas equivalentes", "ROUNDUP(B${equilibriumRow},0)"]) if (!institutionalXlsxV1108.includes(marker)) fail(`XLSX v11.0.9 etiquetas: falta ${marker}.`);
+
+
+// v11.0.10: etiquetas exactas y limpias del punto de equilibrio en el XLSX institucional.
+const institutionalXlsxV1110 = await readFile(path.join(root, "lib/export/institutional-budget-xlsx.ts"), "utf8");
+const institutionalXlsxTestV1110 = await readFile(path.join(root, "demo/tests/institutional-xlsx.test.mjs"), "utf8");
+for (const marker of ['setText(s2, `C${equilibriumRow}`, "matrículas equivalentes")', 'setText(s2, `C${equilibriumWholeStudentsRow}`, "estudiantes")']) if (!institutionalXlsxV1110.includes(marker)) fail(`XLSX v11.0.10 etiquetas exactas: falta ${marker}.`);
+for (const forbidden of ["matrículas equivalentes (fórmula)", "estudiantes (redondeo fórmula)"]) if (institutionalXlsxV1110.includes(forbidden)) fail(`XLSX v11.0.10: no debe exportar la etiqueta ${forbidden}.`);
+for (const marker of ['inlineTextForCell(studentXml, "C14")', 'inlineTextForCell(studentXml, "C15")', '"matrículas equivalentes"', '"estudiantes"']) if (!institutionalXlsxTestV1110.includes(marker)) fail(`XLSX v11.0.10 pruebas de etiquetas: falta ${marker}.`);
 
 if (failures.length) {
   for (const message of failures) console.error(`ERROR: ${message}`);

@@ -61,6 +61,11 @@ function cachedNumber(sheet, ref) {
   assert.ok(match, `No se encontró valor cacheado ${ref}`);
   return Number(match[1]);
 }
+function inlineTextForCell(sheet, ref) {
+  const match = sheet.match(new RegExp(`<c(?=[^>]*\\br="${ref}")[^>]*>[\\s\\S]*?<is><t>([\\s\\S]*?)<\\/t><\\/is>[\\s\\S]*?<\\/c>`));
+  assert.ok(match, `No se encontró texto inline ${ref}`);
+  return match[1];
+}
 function formulaForCell(sheet, ref) {
   const match = sheet.match(new RegExp(`<c(?=[^>]*\\br="${ref}")[^>]*>[\\s\\S]*?<f(?: [^>]*)?>([\\s\\S]*?)<\\/f>[\\s\\S]*?<\\/c>`));
   assert.ok(match, `No se encontró fórmula ${ref}`);
@@ -217,6 +222,11 @@ test("v10.30 genera XLSX institucional mejorado, con malla y fórmulas coherente
   const equilibriumFormula = formulaForCell(studentXml, "B14");
   assert.equal(equilibriumFormula, "ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)/(Parámetros!$B$4*(1-Parámetros!$B$12)*(1-Parámetros!$B$13-Parámetros!$B$14))");
   assert.equal(formulaForCell(studentXml, "B15"), "ROUNDUP(B14,0)");
+  assert.ok(studentXml.includes("matrículas equivalentes"), "etiqueta de punto de equilibrio faltante");
+  assert.equal(studentXml.includes("matrículas equivalentes (fórmula)"), false, "la etiqueta no debe mostrar (fórmula)");
+  assert.equal(studentXml.includes("estudiantes (redondeo fórmula)"), false, "la etiqueta de estudiantes no debe describir la fórmula");
+  assert.equal(inlineTextForCell(studentXml, "C14"), "matrículas equivalentes", "C14 debe mostrar únicamente matrículas equivalentes");
+  assert.equal(inlineTextForCell(studentXml, "C15"), "estudiantes", "C15 debe mostrar únicamente estudiantes");
   const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, institutionalParameters);
   assert.ok(Math.abs(cachedNumber(studentXml, "B14") - (equilibrium.minimumEquivalentEnrollments ?? 0)) < 0.01, "el valor cacheado del punto de equilibrio no concilia con el motor");
   assert.ok(teachingXml.includes("Base estudiantes"), "sección de guía de tesis mejorada faltante");

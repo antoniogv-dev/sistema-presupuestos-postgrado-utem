@@ -390,9 +390,9 @@ export async function createInstitutionalFormulaBudgetXlsx(
     badDebtParameterRow, centralOverheadParameterRow, facultyOverheadParameterRow,
   );
   s2 = setFormula(s2, `B${equilibriumRow}`, equilibriumFormula, equilibrium.minimumEquivalentEnrollments ?? 0);
-  s2 = setText(s2, `C${equilibriumRow}`, "matrículas equivalentes (fórmula)");
+  s2 = setText(s2, `C${equilibriumRow}`, "matrículas equivalentes");
   s2 = setFormula(s2, `B${equilibriumWholeStudentsRow}`, `ROUNDUP(B${equilibriumRow},0)`, equilibrium.minimumWholeStudents ?? 0);
-  s2 = setText(s2, `C${equilibriumWholeStudentsRow}`, "estudiantes (redondeo fórmula)");
+  s2 = setText(s2, `C${equilibriumWholeStudentsRow}`, "estudiantes");
   files.set("xl/worksheets/sheet2.xml", encoder.encode(s2));
 
   // 3. Costo Directo de Docencia: utiliza la malla real del programa cuando está disponible.
