@@ -257,7 +257,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v11.0.6"',
+  'FUNCTIONAL_RELEASE = "v11.0.7"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -277,8 +277,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v11.0.6") || !appShellV110.includes("1.1.6-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v11.0.6 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v11.0.7") || !appShellV110.includes("1.1.7-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v11.0.7 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -583,7 +583,7 @@ for (const marker of [
   "Toda la página quedó sincronizada con este presupuesto",
   "auditBudgetIntegrity",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v11.0.6"',
+  'FUNCTIONAL_RELEASE = "v11.0.7"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.23: falta ${marker}.`);
 }
@@ -610,7 +610,7 @@ for (const marker of [
   "setInitialStudentsForAllSemesters",
   "Punto de equilibrio",
   "Viabilidad mínima de dictación",
-  'FUNCTIONAL_RELEASE = "v11.0.6"',
+  'FUNCTIONAL_RELEASE = "v11.0.7"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
 }
@@ -811,7 +811,7 @@ for (const marker of ["curriculumCourseWeeklyDirectHours", "theoryWeeklyHours", 
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.28: falta ${marker}.`);
 }
 const budgetWorkspaceV1028 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v11.0.6"']) {
+for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v11.0.7"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.28: falta ${marker}.`);
 }
 
@@ -819,7 +819,7 @@ for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla recon
 for (const marker of ["curriculumCourseAppliedMode", 'modality === "PRESENCIAL"', 'return "PRESENCIAL"']) {
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.30: falta ${marker}.`);
 }
-for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v11.0.6"']) {
+for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v11.0.7"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.30: falta ${marker}.`);
 }
 
@@ -893,6 +893,13 @@ const memorandumTestV1106 = await readFile(path.join(root, "demo/tests/memorandu
 for (const marker of ["Para la elaboración de esta proyección se tuvieron a la vista los siguientes antecedentes:", "En virtud de lo expuesto, solicito a usted revisar y, de estimarlo procedente, aprobar la proyección presupuestaria adjunta.", "recognizedEnrollmentFee", "institutionalFinancing", "effectiveBadDebtRate", "prorationDescription"]) if (!memorandumV1106.includes(marker)) fail(`Memorándum v11.0.6 institucional: falta ${marker}.`);
 if (memorandumTemplateV1106.byteLength < 20000) fail("Memorándum v11.0.6: la plantilla institucional parece incompleta.");
 for (const marker of ["memorandum-presupuesto-base-v11-0-6.docx", "Para la elaboración de esta proyección se tuvieron a la vista los siguientes antecedentes:", "En virtud de lo expuesto"]) if (!memorandumTestV1106.includes(marker)) fail(`Memorándum v11.0.6 test: falta ${marker}.`);
+
+// v11.0.7: punto de equilibrio formulado directamente en el XLSX institucional.
+const institutionalXlsxV1107 = await readFile(path.join(root, "lib/export/institutional-budget-xlsx.ts"), "utf8");
+const institutionalXlsxTestV1107 = await readFile(path.join(root, "demo/tests/institutional-xlsx.test.mjs"), "utf8");
+for (const marker of ["breakEvenExcelFormula", "IFERROR(ROUNDUP(MAX(0", "matrículas equivalentes (fórmula)", "ROUNDUP(B${equilibriumRow},0)"]) if (!institutionalXlsxV1107.includes(marker)) fail(`XLSX v11.0.7 punto de equilibrio: falta ${marker}.`);
+for (const marker of ["v11.0.7 exporta el punto de equilibrio como fórmula Excel trazable y recalculable", 'formulaForCell(studentXml, \"B14\")', "calculateBreakEvenEquivalentEnrollments"]) if (!institutionalXlsxTestV1107.includes(marker)) fail(`XLSX v11.0.7 pruebas: falta ${marker}.`);
+
 if (failures.length) {
   for (const message of failures) console.error(`ERROR: ${message}`);
   process.exit(1);

@@ -1,8 +1,18 @@
-# Sistema de Presupuestos de Postgrado UTEM — v11.0.6 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v11.0.7 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
 
+
+
+## Mejora funcional v11.0.7
+
+- **Punto de equilibrio formulado en Excel:** la celda del indicador deja de ser un valor pegado y contiene una fórmula OOXML recalculable al abrir el archivo.
+- **Trazabilidad financiera:** la fórmula usa arancel, incobrabilidad, overhead, matrícula reconocida, arrastre, costos fijos, otros ingresos y guía de tesis.
+- **Guía de tesis por tramos:** el cálculo respeta el tope de estudiantes en graduación de cada año mediante una solución lineal por tramos.
+- **Estudiantes a arancel completo:** se obtiene mediante `ROUNDUP` desde las matrículas equivalentes calculadas.
+- **Compatibilidad:** no utiliza `LET` ni `LAMBDA`, para conservar funcionamiento en versiones de Excel anteriores a Microsoft 365.
+- **Control de despliegue:** versión `v11.0.7 · 1.1.7-d1-web`.
 
 ## Mejora funcional v11.0.6
 
