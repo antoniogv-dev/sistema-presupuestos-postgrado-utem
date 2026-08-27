@@ -312,6 +312,26 @@ test("v11.0.8 reproduce un caso objetivo de 9,45 matrículas equivalentes y 10 e
   assert.equal(cachedNumber(studentXml, "B15"), 10);
 });
 
+test("v11.0.11 muestra Descuento X% en Flujo estudiantes mediante fórmula vinculada a Parámetros", async () => {
+  const labeled = structuredClone(budget);
+  labeled.discounts = [
+    { id: "disc-15", name: "Convenio funcionarios", percentage: 0.15, students: 6, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 2 },
+    { id: "disc-30", name: "Beneficio especial", percentage: 0.30, students: 9, startYear: 2027, startSemester: 1, endYear: 2028, endSemester: 2 },
+  ];
+  labeled.initialStudents = 15;
+  labeled.semesters = labeled.semesters.map((semester) => ({ ...semester, activeStudents: 15 }));
+  const labeledResult = calculateBudget(labeled, institutionalParameters);
+  const generated = await createInstitutionalFormulaBudgetXlsx(template, labeled, labeledResult, institutionalParameters);
+  const studentXml = text(unzip(generated), "xl/worksheets/sheet2.xml");
+  assert.equal(formulaForCell(studentXml, "A4"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B10)*100),&quot;%&quot;)');
+  assert.equal(formulaForCell(studentXml, "A5"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B11)*100),&quot;%&quot;)');
+  assert.equal(formulaForCell(studentXml, "A11"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B10)*100),&quot;%&quot;)');
+  assert.equal(formulaForCell(studentXml, "A12"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B11)*100),&quot;%&quot;)');
+  assert.match(studentXml, /<c r="A4"[^>]*t="str">[\s\S]*?<v>Descuento 15%<\/v>/);
+  assert.match(studentXml, /<c r="A5"[^>]*t="str">[\s\S]*?<v>Descuento 30%<\/v>/);
+  assert.equal(studentXml.includes("Ingresos arancel Descuento"), false);
+});
+
 test("v11.0.3 exporta N descuentos como filas independientes y mantiene las fórmulas conciliadas", async () => {
   const many = structuredClone(budget);
   many.initialStudents = 20;
@@ -332,7 +352,15 @@ test("v11.0.3 exporta N descuentos como filas independientes y mantiene las fór
   const flowXml = text(out, "xl/worksheets/sheet4.xml");
   for (const label of ["Funcionarios públicos", "Convenio institucional A", "Convenio institucional B", "Beneficio especial", "Beca parcial"]) {
     assert.ok(parameterXml.includes(label), `Parámetros no contiene ${label}`);
-    assert.ok(studentXml.includes(label), `Flujo estudiantes no contiene ${label}`);
+    assert.equal(studentXml.includes(label), false, `Flujo estudiantes no debe usar el nombre administrativo ${label}`);
+  }
+  for (let index = 0; index < 5; index += 1) {
+    const parameterRow = 10 + index;
+    const studentRow = 4 + index;
+    const incomeRow = 14 + index;
+    const expectedFormula = `CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B${parameterRow})*100),&quot;%&quot;)`;
+    assert.equal(formulaForCell(studentXml, `A${studentRow}`), expectedFormula, `etiqueta de descuento no vinculada a Parámetros!B${parameterRow}`);
+    assert.equal(formulaForCell(studentXml, `A${incomeRow}`), expectedFormula, `etiqueta de ingreso con descuento no vinculada a Parámetros!B${parameterRow}`);
   }
   assert.match(parameterXml, /<dimension ref="A1:C20"\/>/);
   assert.match(studentXml, /<dimension ref="A1:C21"\/>/);

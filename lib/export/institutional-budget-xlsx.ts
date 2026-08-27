@@ -132,6 +132,9 @@ function setText(sheetXml: string, ref: string, value: string): string {
 function setFormula(sheetXml: string, ref: string, formula: string, cached: number): string {
   return replaceCell(sheetXml, ref, `<f>${xml(formula)}</f><v>${Number.isFinite(cached) ? cached : 0}</v>`);
 }
+function setTextFormula(sheetXml: string, ref: string, formula: string, cached: string): string {
+  return replaceCell(sheetXml, ref, `<f>${xml(formula)}</f><v>${xml(cached)}</v>`, ` t="str"`);
+}
 function clearCell(sheetXml: string, ref: string): string { return replaceCell(sheetXml, ref, ""); }
 
 
@@ -367,13 +370,13 @@ export async function createInstitutionalFormulaBudgetXlsx(
     const students1 = discountStudents1[index] ?? 0;
     const students2 = discountStudents2[index] ?? 0;
     const rate = discount ? Math.max(0, Math.min(1, discount.percentage)) : 0;
-    const fallback = `Descuento ${index + 1}`;
-    const label = discount?.name?.trim() || (rate > 0 ? `Descuento ${(rate * 100).toLocaleString("es-CL", { maximumFractionDigits: 2 })}%` : fallback);
-    s2 = setText(s2, `A${studentRow}`, label);
+    const label = `Descuento ${(rate * 100).toLocaleString("es-CL", { maximumFractionDigits: 2 })}%`;
+    const discountLabelFormula = `CONCATENATE("Descuento ",((+Parámetros!B${parameterRow})*100),"%")`;
+    s2 = setTextFormula(s2, `A${studentRow}`, discountLabelFormula, label);
     s2 = setNumber(s2, `B${studentRow}`, students1);
     s2 = setFormula(s2, `C${studentRow}`, continuationFormula(`B${studentRow}`, students1, students2), students2);
     const incomeRow = discountIncomeStartRow + index;
-    s2 = setText(s2, `A${incomeRow}`, `Ingresos arancel ${label}`);
+    s2 = setTextFormula(s2, `A${incomeRow}`, discountLabelFormula, label);
     s2 = setFormula(s2, `B${incomeRow}`, `(B${studentRow})*Parámetros!$B$4*(1-Parámetros!$B$${parameterRow})`, students1 * override1.annualTuition * (1 - rate));
     s2 = setFormula(s2, `C${incomeRow}`, `(C${studentRow})*Parámetros!$C$4*(1-Parámetros!$C$${parameterRow})`, students2 * override2.annualTuition * (1 - rate));
   }

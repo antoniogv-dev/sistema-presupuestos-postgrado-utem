@@ -1,0 +1,9 @@
+HOTFIX_V11_0_11_XLSX_DESCUENTO_PORCENTAJE_VISIBLE.md
+README.md
+app/api/version/route.ts
+components/AppShell.tsx
+demo/tests/institutional-xlsx.test.mjs
+features/budgets/components/BudgetWorkspace.tsx
+lib/export/institutional-budget-xlsx.ts
+package.json
+scripts/source-audit.mjs
