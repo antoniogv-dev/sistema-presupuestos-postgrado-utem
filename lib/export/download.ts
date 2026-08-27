@@ -128,7 +128,7 @@ export async function downloadBudgetPdf(
   download(createFinancialReportPdf(report, parameterReport, cover, narrative), "application/pdf", humanBudgetFilename(budget, "pdf"));
 }
 
-const MEMORANDUM_TEMPLATE_URL = "/templates/memorandum-presupuesto-base-v10-31.docx?v=10.31";
+const MEMORANDUM_TEMPLATE_URL = "/templates/memorandum-presupuesto-base-v11-0-6.docx?v=11.0.6";
 async function loadMemorandumTemplate(): Promise<Uint8Array> {
   const response = await fetch(MEMORANDUM_TEMPLATE_URL, { cache: "no-store" });
   if (!response.ok) throw new Error("No fue posible cargar la plantilla institucional de memorándum.");

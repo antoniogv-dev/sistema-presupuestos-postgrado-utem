@@ -1,5 +1,5 @@
 import { formatCLP } from "../calculations/currency";
-import { resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
+import { effectiveBadDebtRate, resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
 import type { BudgetResult, CohortBudget, InstitutionalParameters } from "../calculations/types";
 
 const encoder = new TextEncoder();
@@ -96,20 +96,23 @@ function zip(files: Map<string, Uint8Array>): Uint8Array {
 }
 
 function run(text: string, bold = false): string {
-  return `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="20"/><w:szCs w:val="20"/>${bold ? "<w:b/>" : ""}<w:lang w:val="es-CL"/></w:rPr><w:t xml:space="preserve">${xml(text)}</w:t></w:r>`;
+  return `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="20"/><w:szCs w:val="20"/>${bold ? "<w:b/>" : ""}<w:lang w:val="es-CL"/></w:rPr><w:t xml:space="preserve">${xml(text)}</w:t></w:r>`;
 }
-function paragraph(parts: Array<{ text: string; bold?: boolean }> | string, options: { align?: "left" | "right" | "both" | "center"; before?: number; after?: number; line?: number; indentLeft?: number; indentHanging?: number } = {}): string {
+function paragraph(parts: Array<{ text: string; bold?: boolean }> | string, options: { align?: "left" | "right" | "both" | "center"; before?: number; after?: number; line?: number; indentLeft?: number; indentHanging?: number; keepNext?: boolean; pageBreakBefore?: boolean } = {}): string {
   const content = typeof parts === "string" ? run(parts) : parts.map((part) => run(part.text, part.bold)).join("");
   const align = options.align ?? "both";
-  const spacing = `<w:spacing w:before="${options.before ?? 0}" w:after="${options.after ?? 60}" w:line="${options.line ?? 220}" w:lineRule="auto"/>`;
+  const spacing = `<w:spacing w:before="${options.before ?? 0}" w:after="${options.after ?? 100}" w:line="${options.line ?? 220}" w:lineRule="auto"/>`;
   const indent = options.indentLeft != null ? `<w:ind w:left="${options.indentLeft}"${options.indentHanging != null ? ` w:hanging="${options.indentHanging}"` : ""}/>` : "";
-  return `<w:p><w:pPr>${spacing}<w:jc w:val="${align}"/>${indent}<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="20"/><w:szCs w:val="20"/><w:lang w:val="es-CL"/></w:rPr></w:pPr>${content}</w:p>`;
+  return `<w:p><w:pPr>${options.keepNext ? "<w:keepNext/>" : ""}${options.pageBreakBefore ? "<w:pageBreakBefore/>" : ""}${spacing}<w:jc w:val="${align}"/>${indent}<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="20"/><w:szCs w:val="20"/><w:lang w:val="es-CL"/></w:rPr></w:pPr>${content}</w:p>`;
 }
 function bullet(heading: string, body: string): string {
-  return `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:after="45" w:line="220" w:lineRule="auto"/><w:jc w:val="both"/><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:pPr>${run(`${heading}. `, true)}${run(body)}</w:p>`;
+  return `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:after="0" w:line="220" w:lineRule="auto"/><w:jc w:val="both"/><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="20"/><w:szCs w:val="20"/><w:lang w:val="es-CL"/></w:rPr></w:pPr>${run(`${heading}. `, true)}${run(body)}</w:p>`;
 }
 function tableCell(content: string, width: number, bold = false): string {
   return `<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/><w:vAlign w:val="top"/></w:tcPr>${paragraph([{ text: content, bold }], { align: "left", after: 0 })}</w:tc>`;
+}
+function titleTable(metadata: MemorandumMetadata): string {
+  return `<w:tbl><w:tblPr><w:tblW w:w="9100" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="8" w:color="777777"/><w:left w:val="single" w:sz="8" w:color="777777"/><w:bottom w:val="single" w:sz="8" w:color="777777"/><w:right w:val="single" w:sz="8" w:color="777777"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="9100"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="9100" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>${paragraph([{ text: `MEMORÁNDUM N.º ${metadata.number}`, bold: true }], { align: "center", after: 0, line: 220 })}</w:tc></w:tr></w:tbl>`;
 }
 function metadataTable(metadata: MemorandumMetadata): string {
   const rows = [
@@ -120,7 +123,7 @@ function metadataTable(metadata: MemorandumMetadata): string {
   ];
   const rowXml = rows.map(([label, value]) => {
     const lines = value.split("\n");
-    const valueParagraphs = lines.map((line) => paragraph([{ text: line, bold: true }], { align: "left", after: 0 })).join("");
+    const valueParagraphs = lines.map((line) => paragraph([{ text: line, bold: true }], { align: "left", after: 0, line: 220 })).join("");
     return `<w:tr>${tableCell(label, 1800, true)}<w:tc><w:tcPr><w:tcW w:w="7300" w:type="dxa"/><w:vAlign w:val="top"/></w:tcPr>${valueParagraphs}</w:tc></w:tr>`;
   }).join("");
   return `<w:tbl><w:tblPr><w:tblW w:w="9100" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="single" w:sz="8" w:color="555555"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="1800"/><w:gridCol w:w="7300"/></w:tblGrid>${rowXml}</w:tbl>`;
@@ -128,17 +131,62 @@ function metadataTable(metadata: MemorandumMetadata): string {
 function defaultDateText(date = new Date()): string {
   return `SANTIAGO, ${date.getDate()} DE ${MONTHS[date.getMonth()]} DE ${date.getFullYear()}`;
 }
-function typeLabel(budget: CohortBudget): string {
-  if (budget.program.type === "DOCTORADO") return "programa doctoral";
-  if (budget.program.type === "MAGISTER_ACADEMICO") return "magíster académico";
-  if (budget.program.type === "MAGISTER_PROFESIONAL") return "magíster profesional";
-  return "programa de postgrado";
-}
 function totalTeachingHours(budget: CohortBudget, year: number): number {
   return budget.semesters.filter((semester) => semester.year === year).reduce((total, semester) => total + Math.max(0, semester.directTeachingHours) + Math.max(0, semester.synchronousTeachingHours) + Math.max(0, semester.asynchronousTeachingHours), 0);
 }
-function annualList(result: BudgetResult, label: (year: number, index: number) => string): string {
-  return result.years.map((year, index) => label(year, index)).join(", ");
+function joinSpanish(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  if (parts.length === 2) return `${parts[0]} y ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")} y ${parts.at(-1)}`;
+}
+function annualMoneyPhrase(result: BudgetResult, getter: (index: number) => number): string {
+  const values = result.years.map((_, index) => Math.round(getter(index)));
+  if (values.length > 1 && values.every((value) => value === values[0])) return `${money(values[0])} en cada año`;
+  return joinSpanish(result.years.map((year, index) => `${money(values[index])} en ${year}`));
+}
+function annualStudentPhrase(result: BudgetResult, activeByYear: number[]): string {
+  if (result.years.length === 2 && activeByYear[0] === activeByYear[1]) return `${activeByYear[0]} estudiantes activos tanto en ${result.years[0]} como en ${result.years[1]}`;
+  if (result.years.length > 1 && activeByYear.every((value) => value === activeByYear[0])) return `${activeByYear[0]} estudiantes activos durante ${joinSpanish(result.years.map(String))}`;
+  return joinSpanish(result.years.map((year, index) => `${activeByYear[index]} estudiantes activos en ${year}`));
+}
+function annualFlowPhrase(result: BudgetResult): string {
+  return joinSpanish(result.years.map((year, index) => `${money(result.annualFlows[index].netFlow)} en ${year}`));
+}
+function annualAccumulatedPhrase(result: BudgetResult): string {
+  return joinSpanish(result.years.map((year, index) => `${money(result.annualFlows[index].accumulatedFlow)} al cierre de ${year}`));
+}
+function prorationDescription(budget: CohortBudget, parameters: InstitutionalParameters, result: BudgetResult): string {
+  const byYear = result.years.map((year) => {
+    const override = resolvedAnnualOverrideForYear(budget, parameters, year);
+    const parts: string[] = [];
+    if (override.directionProrated || override.directionAllocationRate < 0.999) parts.push(`Dirección de Programa al ${(override.directionAllocationRate * 100).toLocaleString("es-CL", { maximumFractionDigits: 1 })}%`);
+    if (override.assistanceProrated || override.assistanceAllocationRate < 0.999) parts.push(`Asistencia de Dirección al ${(override.assistanceAllocationRate * 100).toLocaleString("es-CL", { maximumFractionDigits: 1 })}%`);
+    if (override.otherNonAcademicProrated || override.otherNonAcademicAllocationRate < 0.999) parts.push(`otros honorarios no académicos al ${(override.otherNonAcademicAllocationRate * 100).toLocaleString("es-CL", { maximumFractionDigits: 1 })}%`);
+    return parts.length ? { year, parts } : null;
+  }).filter((item): item is { year: number; parts: string[] } => item !== null);
+  if (!byYear.length) return "Los costos de Dirección de Programa, Asistencia de Dirección y otros honorarios no académicos se imputan conforme a los valores completos definidos para la cohorte.";
+  return `${byYear.map((item) => `En ${item.year}, se aplica ${joinSpanish(item.parts)}`).join(". ")}. En los años sin prorrateo registrado, estos costos se imputan íntegramente a la cohorte.`;
+}
+function introAdjustments(budget: CohortBudget, parameters: InstitutionalParameters, result: BudgetResult): string {
+  const prorationYears = result.years.filter((year) => {
+    const override = resolvedAnnualOverrideForYear(budget, parameters, year);
+    return override.directionProrated || override.assistanceProrated || override.otherNonAcademicProrated || override.directionAllocationRate < 0.999 || override.assistanceAllocationRate < 0.999 || override.otherNonAcademicAllocationRate < 0.999;
+  });
+  const conditions: string[] = [];
+  if (prorationYears.length) conditions.push(`los prorrateos de staff registrados para ${joinSpanish(prorationYears.map(String))}`);
+  const carryover = result.annualFlows[0]?.startingCarryover ?? 0;
+  if (carryover !== 0) conditions.push(`un saldo inicial ${carryover < 0 ? "negativo" : "positivo"} de ${money(Math.abs(carryover))} proveniente del período anterior`);
+  if (!conditions.length) return "";
+  return ` Esta estimación considera ${joinSpanish(conditions)}.`;
+}
+function firstYearTeachingValues(budget: CohortBudget, firstYear: number, firstAnnual: ReturnType<typeof resolvedAnnualOverrideForYear>): string {
+  const semesters = budget.semesters.filter((semester) => semester.year === firstYear);
+  const values: string[] = [];
+  if (semesters.some((semester) => semester.directTeachingHours > 0)) values.push(`valor hora presencial de ${money(firstAnnual.directTeachingHourValue)}`);
+  if (semesters.some((semester) => semester.synchronousTeachingHours > 0)) values.push(`valor hora sincrónica de ${money(firstAnnual.synchronousTeachingHourValue)}`);
+  if (semesters.some((semester) => semester.asynchronousTeachingHours > 0)) values.push(`valor hora asincrónica de ${money(firstAnnual.asynchronousTeachingHourValue)}`);
+  if (!values.length) values.push(`valor hora de docencia de ${money(firstAnnual.directTeachingHourValue)}`);
+  return joinSpanish(values);
 }
 
 export function defaultMemorandumMetadata(budget: CohortBudget, date = new Date()): MemorandumMetadata {
@@ -161,35 +209,69 @@ export function buildMemorandumBody(budget: CohortBudget, result: BudgetResult, 
   const firstAnnual = resolvedAnnualOverrideForYear(budget, parameters, firstYear);
   const totalIncome = sum(result.annualFlows.map((flow) => flow.totalIncome));
   const totalExpenses = sum(result.annualFlows.map((flow) => flow.totalExpenses));
-  const totalResult = totalIncome - totalExpenses;
-  const totalDiscounts = sum(result.annualFlows.map((flow) => flow.discounts + flow.internalTuitionScholarships));
+  const totalResult = sum(result.annualFlows.map((flow) => flow.netFlow));
+  const totalDiscounts = sum(result.annualFlows.map((flow) => flow.discounts));
+  const totalTuitionScholarships = sum(result.annualFlows.map((flow) => flow.internalTuitionScholarships));
+  const totalBadDebt = sum(result.annualFlows.map((flow) => flow.badDebt));
   const totalMaintenance = sum(result.annualFlows.map((flow) => flow.scholarshipsAndAid));
   const totalOperational = sum(result.annualFlows.map((flow) => flow.otherExpenses + flow.equipment));
-  const totalTeaching = sum(result.annualFlows.map((flow) => flow.directTeachingCost + flow.replacementTeachingCost));
   const totalAcademic = sum(result.annualFlows.map((flow) => flow.academicHonoraria));
   const totalStaff = sum(result.annualFlows.map((flow) => flow.nonAcademicHonoraria));
   const totalOverhead = sum(result.annualFlows.map((flow) => flow.centralOverhead + flow.facultyOverhead));
+  const totalRecognizedEnrollment = sum(result.annualFlows.map((flow) => flow.recognizedEnrollmentFee));
+  const totalInstitutionalFinancing = sum(result.annualFlows.map((flow) => flow.institutionalFinancing));
+  const totalExternalIncome = sum(result.annualFlows.map((flow) => flow.externalIncome));
   const activeByYear = result.years.map((year) => {
     const periods = budget.semesters.filter((semester) => semester.year === year);
     return periods.length ? Math.max(...periods.map((semester) => semester.activeStudents)) : 0;
   });
 
-  const intro = `Junto con saludar, remito para su revisión y aprobación la proyección presupuestaria correspondiente a la cohorte ${budget.startYear} del ${budget.program.name} (${budget.program.code}), considerando su ciclo regular de ejecución durante los años ${firstYear}${lastYear !== firstYear ? ` a ${lastYear}` : ""}. Con el objeto de facilitar su revisión y dejar claramente establecidos los supuestos contenidos en la formulación, se detallan a continuación los principales criterios de cálculo y su efecto en el flujo presupuestario.`;
+  const intro = `Junto con saludar, remito a usted la proyección presupuestaria de la cohorte ${budget.startYear} del ${budget.program.name} (${budget.program.code}), correspondiente al ciclo ${firstYear}${lastYear !== firstYear ? `-${lastYear}` : ""}, para su revisión y aprobación.${introAdjustments(budget, parameters, result)} En los apartados siguientes se presentan los principales criterios utilizados y su incidencia en el flujo presupuestario proyectado.`;
 
-  const incomeText = `La formulación considera ${budget.initialStudents} estudiante(s) al inicio de la cohorte. La proyección anual de estudiantes activos es ${annualList(result, (year, index) => `${activeByYear[index]} en ${year}`)}. El arancel bruto proyectado asciende a ${annualList(result, (year, index) => `${money(result.annualFlows[index].grossTuition)} en ${year}`)}. Las becas y descuentos de arancel totalizan ${money(totalDiscounts)} durante el ciclo, mientras que la incobrabilidad proyectada alcanza ${money(sum(result.annualFlows.map((flow) => flow.badDebt)))}. Los ingresos presupuestarios efectivos, excluyendo la matrícula informativa, corresponden a ${annualList(result, (year, index) => `${money(result.annualFlows[index].totalIncome)} en ${year}`)}.`;
+  const benefitLabel = totalTuitionScholarships > 0 ? "Los descuentos y becas de arancel" : "Los descuentos de arancel";
+  const benefitTotal = totalDiscounts + totalTuitionScholarships;
+  const incomeParts = [
+    `La cohorte se proyecta con ${annualStudentPhrase(result, activeByYear)}.`,
+    `Sobre esa base, el arancel bruto estimado alcanza ${annualMoneyPhrase(result, (index) => result.annualFlows[index].grossTuition)}.`,
+    `${benefitLabel} ascienden a ${money(benefitTotal)} para el ciclo completo, mientras que la incobrabilidad proyectada llega a ${money(totalBadDebt)}.`,
+  ];
+  const hasAdditionalIncome = totalRecognizedEnrollment > 0 || totalInstitutionalFinancing > 0 || totalExternalIncome > 0;
+  if (hasAdditionalIncome) {
+    incomeParts.push(`Descontados estos conceptos, los ingresos netos por arancel se estiman en ${annualMoneyPhrase(result, (index) => result.annualFlows[index].netTuitionIncome)}.`);
+    if (totalRecognizedEnrollment > 0) incomeParts.push(`La matrícula reconocida como ingreso del programa totaliza ${money(totalRecognizedEnrollment)} durante el ciclo.`);
+    else incomeParts.push("La matrícula anual se mantiene como antecedente informativo y no forma parte de los ingresos del programa.");
+    if (totalInstitutionalFinancing > 0) incomeParts.push(`Se incorpora financiamiento institucional por ${money(totalInstitutionalFinancing)}, registrado como aporte fijo al proyecto o programa y no asociado a estudiante ni semestre.`);
+    if (totalExternalIncome > 0) incomeParts.push(`Los demás ingresos externos registrados totalizan ${money(totalExternalIncome)}.`);
+    incomeParts.push(`Considerando estas fuentes, los ingresos presupuestarios totales se proyectan en ${annualMoneyPhrase(result, (index) => result.annualFlows[index].totalIncome)}.`);
+  } else {
+    incomeParts.push(`Descontados estos conceptos, los ingresos presupuestarios efectivos, sin considerar la matrícula informativa, se estiman en ${annualMoneyPhrase(result, (index) => result.annualFlows[index].totalIncome)}.`);
+  }
+  const incomeText = incomeParts.join(" ");
 
-  const baseText = `Para ${firstYear} se utiliza un arancel anual de ${money(firstAnnual.annualTuition)}, matrícula anual de ${money(firstAnnual.annualEnrollmentFee)}, valor hora de docencia de ${money(firstAnnual.directTeachingHourValue)}, guía o revisión de tesis de ${money(firstAnnual.thesisGuidancePerGraduatingStudent)} por estudiante cuando corresponde, Dirección de Programa por ${money(firstAnnual.annualDirection)} y Asistencia de Dirección por ${money(firstAnnual.annualAssistance)}. La incobrabilidad aplicada es ${(result.annualFlows[0]?.badDebt && result.annualFlows[0]?.tuitionAfterBenefits ? (result.annualFlows[0].badDebt / result.annualFlows[0].tuitionAfterBenefits) * 100 : 0).toLocaleString("es-CL", { maximumFractionDigits: 1 })}%. Los valores de años posteriores corresponden a los parámetros efectivos registrados en la formulación.`;
+  const thesisValue = firstAnnual.thesisGuidancePerGraduatingStudent > 0 ? ` Asimismo, se incluye un valor de ${money(firstAnnual.thesisGuidancePerGraduatingStudent)} por estudiante para guía o revisión de tesis.` : "";
+  const badDebtRate = effectiveBadDebtRate(budget, parameters);
+  const baseText = `Para ${firstYear} se consideró un arancel anual de ${money(firstAnnual.annualTuition)}, una matrícula anual de ${money(firstAnnual.annualEnrollmentFee)} y ${firstYearTeachingValues(budget, firstYear, firstAnnual)}.${thesisValue} El valor anual base de Dirección de Programa corresponde a ${money(firstAnnual.annualDirection)} y el de Asistencia de Dirección a ${money(firstAnnual.annualAssistance)}. En esta cohorte se aplica una incobrabilidad del ${(badDebtRate * 100).toLocaleString("es-CL", { maximumFractionDigits: 1 })}%.`;
 
-  const teachingText = `La programación académica contempla ${annualList(result, (year) => `${totalTeachingHours(budget, year).toLocaleString("es-CL")} horas en ${year}`)}, con costos directos de docencia y reemplazo por ${annualList(result, (year, index) => `${money(result.annualFlows[index].directTeachingCost + result.annualFlows[index].replacementTeachingCost)} en ${year}`)}. Considerando además guía o revisión de tesis cuando corresponde, los honorarios académicos del ciclo ascienden a ${money(totalAcademic)}.`;
+  const teachingText = `La programación académica contempla ${joinSpanish(result.years.map((year) => `${totalTeachingHours(budget, year).toLocaleString("es-CL")} horas de docencia en ${year}`))}. Los costos directos asociados a docencia y reemplazo se estiman en ${annualMoneyPhrase(result, (index) => result.annualFlows[index].directTeachingCost + result.annualFlows[index].replacementTeachingCost)}. Al incorporar los valores asociados a guía o revisión de tesis cuando corresponde, los honorarios académicos del ciclo alcanzan un total de ${money(totalAcademic)}.`;
 
-  const staffText = `Los honorarios no académicos asociados a Dirección, Asistencia de Dirección y otros apoyos totalizan ${money(totalStaff)} en el período. Los prorrateos aplicados en cada año corresponden a las tasas efectivas registradas en la formulación. Asimismo, los overhead central y de facultad totalizan ${money(totalOverhead)} durante el ciclo y se calculan sobre la base presupuestaria definida para cada ejercicio.`;
+  const staffText = `${prorationDescription(budget, parameters, result)} Los honorarios no académicos asociados suman ${money(totalStaff)} en el ciclo. Por su parte, los overhead central y de facultad totalizan ${money(totalOverhead)}, calculados conforme a la base presupuestaria definida para cada ejercicio.`;
 
-  const aidText = totalMaintenance > 0 ? `Las becas de manutención y otras ayudas incorporadas al presupuesto representan ${money(totalMaintenance)} durante el horizonte de ejecución, de acuerdo con la cantidad de estudiantes, meses y valores mensuales registrados en cada período.` : "";
-  const operationsText = totalOperational > 0 ? `Los gastos operacionales, software, difusión, congresos o pasantías, bibliografía, pasajes, viáticos, alimentos y bebidas, equipamiento y otras partidas de operación registradas suman ${money(totalOperational)} durante el ciclo, distribuidos conforme a los años y periodicidades definidos en el presupuesto.` : "";
+  const aidText = totalMaintenance > 0 ? `Las becas de manutención y otras ayudas incorporadas al presupuesto representan ${money(totalMaintenance)} durante el ciclo, de acuerdo con la cantidad de estudiantes, meses y valores registrados para cada período.` : "";
+  const operationsText = totalOperational > 0 ? `Los gastos de operación registrados para el período, que incluyen software, difusión, congresos o pasantías, bibliografía, pasajes, viáticos, alimentos y bebidas, equipamiento y otras partidas similares, ascienden a ${money(totalOperational)} para el ciclo completo. Su distribución responde a los años y periodicidades establecidos en el presupuesto.` : "";
 
-  const resultText = `Con los supuestos actualmente contenidos en la formulación, los costos y gastos totales ascienden a ${annualList(result, (year, index) => `${money(result.annualFlows[index].totalExpenses)} en ${year}`)}, mientras que los ingresos proyectados alcanzan ${annualList(result, (year, index) => `${money(result.annualFlows[index].totalIncome)} en ${year}`)}. Los flujos netos anuales son ${annualList(result, (year, index) => `${money(result.annualFlows[index].netFlow)} en ${year}`)}. En términos acumulados, el ciclo proyecta ingresos por ${money(totalIncome)}, costos por ${money(totalExpenses)} y un resultado económico de ${money(totalResult)}. Este resultado refleja la estructura de ingresos, beneficios, costos y financiamiento registrada para este ${typeLabel(budget)}.`;
+  const resultParts: Array<{ text: string; bold?: boolean }> = [
+    { text: `Bajo estos supuestos, los costos y gastos totales se estiman en ${annualMoneyPhrase(result, (index) => result.annualFlows[index].totalExpenses)}. A su vez, los ingresos proyectados alcanzan ${annualMoneyPhrase(result, (index) => result.annualFlows[index].totalIncome)}, lo que genera flujos netos propios de la cohorte por ${annualFlowPhrase(result)}. Con ello, el resultado económico del ciclo asciende a ${money(totalResult)}.` },
+  ];
+  const carryover = result.annualFlows[0]?.startingCarryover ?? 0;
+  if (carryover !== 0) resultParts.push({ text: ` Para ${firstYear} se incorpora, además, un saldo inicial ${carryover < 0 ? "negativo" : "positivo"} de ${money(Math.abs(carryover))} proveniente del período anterior.`, bold: true });
+  if (result.annualFlows.length) {
+    let ending = ` Considerando ${carryover !== 0 ? "dicho arrastre" : "el flujo acumulado"}, el saldo acumulado proyectado llega a ${annualAccumulatedPhrase(result)}.`;
+    if (carryover < 0 && result.finalAccumulatedFlow >= 0) ending += " La proyección permite absorber el saldo inicial negativo del período anterior.";
+    if (result.finalAccumulatedFlow < 0) ending += " Al cierre del ciclo se mantiene un saldo acumulado negativo, que deberá ser considerado en la revisión financiera del programa.";
+    resultParts.push({ text: ending });
+  }
 
-  const closing = `En consideración a lo anterior, agradeceré revisar y aprobar la proyección presupuestaria que se acompaña, teniendo presentes los criterios y condiciones señalados, a fin de avanzar oportunamente con las acciones administrativas, académicas y presupuestarias requeridas para la ejecución de la cohorte ${budget.startYear} del ${budget.program.name}.`;
+  const closing = "En virtud de lo expuesto, solicito a usted revisar y, de estimarlo procedente, aprobar la proyección presupuestaria adjunta. Una vez confirmada la matrícula efectiva, será necesario actualizar el análisis financiero del programa y evaluar las medidas que correspondan para resguardar su continuidad.";
 
   const bullets = [
     bullet("Flujo de estudiantes e ingresos", incomeText),
@@ -201,18 +283,21 @@ export function buildMemorandumBody(budget: CohortBudget, result: BudgetResult, 
   ].join("");
 
   return [
-    `<w:tbl><w:tblPr><w:tblW w:w="9100" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="8" w:color="777777"/><w:left w:val="single" w:sz="8" w:color="777777"/><w:bottom w:val="single" w:sz="8" w:color="777777"/><w:right w:val="single" w:sz="8" w:color="777777"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="9100"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="9100" w:type="dxa"/></w:tcPr>${paragraph([{ text: `MEMORÁNDUM N.º ${metadata.number}`, bold: false }], { align: "left", after: 0 })}</w:tc></w:tr></w:tbl>`,
+    titleTable(metadata),
     paragraph("", { after: 70 }),
     metadataTable(metadata),
     paragraph("", { after: 80 }),
-    paragraph(metadata.greeting, { align: "left", after: 130 }),
-    paragraph(intro, { align: "both", after: 100 }),
-    paragraph("Los principales parámetros y criterios considerados son los siguientes:", { align: "left", after: 80 }),
+    paragraph(metadata.greeting, { align: "left", before: 240, after: 130 }),
+    paragraph(intro, { align: "both", before: 0, after: 100 }),
+    paragraph("Para la elaboración de esta proyección se tuvieron a la vista los siguientes antecedentes:", { align: "left", before: 100, after: 70 }),
     bullets,
-    paragraph(resultText, { align: "both", before: 60, after: 100 }),
-    paragraph(closing, { align: "both", after: 100 }),
-    paragraph("Sin otro particular, le saluda atentamente,", { align: "left", after: 80 }),
-    paragraph([{ text: metadata.senderName, bold: true }], { align: "right", after: 0 }),
+    paragraph(resultParts, { align: "both", before: 120, after: 100 }),
+    paragraph(closing, { align: "both", before: 0, after: 100, pageBreakBefore: true }),
+    paragraph("Sin otro particular, le saluda atentamente,", { align: "left", before: 120, after: 80 }),
+    paragraph("", { after: 0 }),
+    paragraph("", { after: 0 }),
+    paragraph("", { after: 0 }),
+    paragraph([{ text: metadata.senderName, bold: true }], { align: "right", after: 0, keepNext: true }),
     paragraph(metadata.senderRole, { align: "right", after: 100 }),
   ].join("");
 }

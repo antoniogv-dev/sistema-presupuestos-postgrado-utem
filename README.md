@@ -1,10 +1,15 @@
-# Sistema de Presupuestos de Postgrado UTEM — v11.0.5 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v11.0.6 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
 
 
-## Mejora funcional v11.0.5
+## Mejora funcional v11.0.6
+
+- **Memorándum institucional:** adopta como modelo oficial el Memorándum N.º 214/2026 aportado por la Escuela de Postgrado, preservando encabezado, pie, estructura administrativa, relato por antecedentes y cierre.
+- **Trazabilidad:** el texto incorpora matrícula reconocida, financiamiento institucional, incobrabilidad efectiva, prorrateos y arrastre sólo cuando existen en la formulación.
+- **Plantilla:** `public/templates/memorandum-presupuesto-base-v11-0-6.docx`.
+
 
 - **Matrícula reconocida como ingreso:** la proporción definida en `Reconocimiento matrícula (%)` se incorpora a `INGRESOS TOTAL` del programa.
 - **Overhead preservado sobre arancel:** la matrícula reconocida no aumenta la base de overhead; ésta continúa calculándose sobre arancel bruto menos descuentos e incobrabilidad.
@@ -15,7 +20,7 @@ Aplicación institucional para formular, revisar, consolidar y exportar presupue
 - **Inferencia mejorada:** el año de inicio puede obtenerse desde la primera anualidad reconocida, además de cohorte, nombre de archivo o periodos semestrales.
 - **Recuperación ante fallos parciales:** si el Borrador ya fue creado y falla una parte del detalle, el sistema conserva el presupuesto y explicita qué requiere revisión.
 - **Programa resuelto manualmente:** una selección manual válida deja de mostrarse como error de identificación.
-- **Control de despliegue:** versión `v11.0.5 · 1.1.5-d1-web`.
+- **Control de despliegue:** versión `v11.0.6 · 1.1.6-d1-web`.
 
 ## Mejora funcional v10.31
 

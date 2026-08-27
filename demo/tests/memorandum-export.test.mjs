@@ -41,10 +41,10 @@ function unzip(bytes) {
   return files;
 }
 
-test("v10.31 genera memorándum institucional trazable desde el presupuesto", async () => {
+test("v11.0.6 genera memorándum con el modelo institucional de Escuela de Postgrado", async () => {
   const budget = structuredClone(demoBudget);
   const result = calculateBudget(budget, institutionalParameters);
-  const template = new Uint8Array(readFileSync(path.join(root, "public/templates/memorandum-presupuesto-base-v10-31.docx")));
+  const template = new Uint8Array(readFileSync(path.join(root, "public/templates/memorandum-presupuesto-base-v11-0-6.docx")));
   const bytes = await createBudgetMemorandumDocx(template, budget, result, institutionalParameters);
   const files = unzip(bytes);
   assert.ok(files.has("word/header1.xml"));
@@ -53,10 +53,12 @@ test("v10.31 genera memorándum institucional trazable desde el presupuesto", as
   for (const text of [
     "MEMORÁNDUM N.º",
     budget.program.name,
+    "Para la elaboración de esta proyección se tuvieron a la vista los siguientes antecedentes:",
     "Flujo de estudiantes e ingresos",
     "Valores base y reajustes",
     "Costos académicos y docencia",
     "resultado económico",
+    "En virtud de lo expuesto, solicito a usted revisar y, de estimarlo procedente, aprobar la proyección presupuestaria adjunta.",
     "DR. JORGE RODRÍGUEZ BECERRA",
   ]) assert.ok(documentXml.includes(text), `falta ${text}`);
   assert.ok(bytes.length > 20_000);
