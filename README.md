@@ -21,18 +21,16 @@ Aplicación institucional para formular, revisar, consolidar y exportar presupue
 - **Regresión reforzada:** 10 pruebas del motor financiero v12/v12.0.1, además de las suites históricas.
 - **Control de despliegue:** versión `v12.0.1 · 2.0.1-d1-web`.
 
-## Mejora curricular v12.1.1
+## Mejora curricular v12.1.1 — docencia directa, graduación y secciones por cohorte
 
-La v12.1.1 es acumulativa sobre v12.1.0 y conserva todas las mejoras de la serie v12. Incorpora:
-
-- El presupuesto utiliza exclusivamente horas de docencia directa; las horas autónomas no se valorizan ni se proyectan.
-- Nuevo tipo curricular `GRADUACION` para Tesis, Tesis I/II, AFE, Proyecto de Graduación y actividades equivalentes.
-- Electivos, especialización y graduación permiten múltiples secciones en la malla maestra y secciones particulares por cohorte.
-- En Doctorados y Magísteres Académicos, las asignaturas de graduación toman automáticamente una sección por estudiante activo del semestre, salvo override manual del presupuesto.
-- Las secciones particulares se guardan en `courseSectionOverrides`, sin modificar la malla maestra del programa.
-- Nueva migración D1 `0014_curriculum_graduation_sections.sql`.
-- Dos baterías nuevas de pruebas: 12 casos determinísticos y 2 simulaciones de 1.000 escenarios cada una.
-- Versión técnica: `v12.1.1 · 2.1.1-d1-web`.
+- El presupuesto curricular utiliza exclusivamente horas de docencia directa; las horas autónomas no forman parte de la carga ni del costo.
+- Nuevo tipo `GRADUACION` para Tesis, AFE, proyecto/trabajo de graduación y actividades formativas equivalentes.
+- Electivos, especialización y graduación permiten múltiples secciones en el maestro del programa y ajustes particulares por cohorte.
+- En Doctorados y Magísteres Académicos, cada asignatura de graduación toma por defecto una sección por estudiante activo del semestre. El presupuesto puede sobrescribir manualmente esa cantidad.
+- Los ajustes por cohorte se persisten en `CohortBudget.curriculumSectionOverrides` y no modifican la malla maestra del programa.
+- La importación curricular reconoce automáticamente nombres asociados a Tesis/AFE y descarta las horas autónomas para efectos presupuestarios.
+- Se incorpora la migración `0014_curriculum_graduation_section_overrides.sql`.
+- Dos baterías específicas: 10 reglas determinísticas y simulación masiva de 2.500 cohortes.
 
 ## Versión consolidada v12.1.0 — UTEM Finance Light
 

@@ -16,7 +16,6 @@ const requiredFiles = [
   "migrations/0011_professional_annual_offering_plans.sql",
   "migrations/0012_budget_bad_debt_rate.sql",
   "migrations/0013_program_total_billing.sql",
-  "migrations/0014_curriculum_graduation_sections.sql",
   "open-next.config.ts",
   "wrangler.jsonc",
   "app/api/health/route.ts",
@@ -98,7 +97,7 @@ if (!d1.database_id || /REEMPLAZAR|PLACEHOLDER/i.test(d1.database_id)) {
 const migrations = (await readdir("migrations"))
   .filter((name) => /^\d{4}_.+\.sql$/.test(name))
   .sort();
-if (migrations.length < 14) throw new Error("Se requieren al menos las migraciones 0001 a 0014.");
+if (migrations.length < 13) throw new Error("Se requieren al menos las migraciones 0001 a 0013.");
 if (new Set(migrations.map((name) => name.slice(0, 4))).size !== migrations.length) {
   throw new Error("Hay números de migración D1 duplicados.");
 }

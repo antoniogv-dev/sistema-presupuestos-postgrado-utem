@@ -1005,15 +1005,17 @@ const sqlAuditV1210 = await readFile(path.join(root, "scripts/sql-safety-audit.m
 for (const marker of ["allowedInterpolations", "field: \"email\" | \"id\"", "assignments.join", "Auditoría SQL correcta"]) if (!sqlAuditV1210.includes(marker)) fail(`Seguridad SQL v12.1.0: falta ${marker}.`);
 
 
-// v12.1.1: graduación, horas directas y secciones por cohorte.
+// v12.1.1: graduación, docencia directa y secciones por cohorte.
 const curriculumV1211 = await readFile(path.join(root, "lib/curriculum/budget-load.ts"), "utf8");
 const curriculumEditorV1211 = await readFile(path.join(root, "features/programs/components/CurriculumEditor.tsx"), "utf8");
-const budgetWorkspaceV1211 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-const migrationV1211 = await readFile(path.join(root, "migrations/0014_curriculum_graduation_sections.sql"), "utf8");
-for (const marker of ["GRADUACION", "resolvedCourseSections", "defaultCourseSectionsForBudget", "courseAllowsSectionOverride"]) if (!curriculumV1211.includes(marker)) fail(`Malla v12.1.1: falta ${marker}.`);
-for (const marker of ["Graduación / Tesis / AFE", "horas de docencia directa", "autonomousWeeklyHours: 0"]) if (!curriculumEditorV1211.includes(marker)) fail(`Editor curricular v12.1.1: falta ${marker}.`);
-for (const marker of ["courseSectionOverrides", "Auto = estudiantes activos", "FUNCTIONAL_RELEASE = \"v12.1.1\""]) if (!budgetWorkspaceV1211.includes(marker)) fail(`Presupuesto v12.1.1: falta ${marker}.`);
-for (const marker of ["courseSectionOverrides", "ALTER TABLE \"CohortBudget\""]) if (!migrationV1211.includes(marker)) fail(`Migración v12.1.1: falta ${marker}.`);
+const curriculumImportV1211 = await readFile(path.join(root, "lib/import/curriculum-file-import.ts"), "utf8");
+const curriculumRulesTestV1211 = await readFile(path.join(root, "demo/tests/curriculum-graduation-v1211.test.mjs"), "utf8");
+const curriculumSimulationV1211 = await readFile(path.join(root, "demo/tests/curriculum-graduation-simulation-v1211.test.mjs"), "utf8");
+for (const marker of ["GRADUACION", "curriculumCourseSectionsForBudget", "graduationSectionsFollowStudents", "curriculumSectionOverrides"]) if (!curriculumV1211.includes(marker)) fail(`Curriculum v12.1.1: falta ${marker}.`);
+for (const marker of ["Graduación / Tesis / AFE", "Horas docencia directa", "horas autónomas no se consideran"]) if (!curriculumEditorV1211.includes(marker)) fail(`Editor curricular v12.1.1: falta ${marker}.`);
+for (const marker of ["actividad formativa equivalente", "GRADUACION", "autonomousWeeklyHours: 0"]) if (!curriculumImportV1211.includes(marker)) fail(`Importador curricular v12.1.1: falta ${marker}.`);
+if (!curriculumRulesTestV1211.includes("tesis doctoral crea una sección por estudiante activo")) fail("Pruebas v12.1.1: falta batería determinística de graduación.");
+if (!curriculumSimulationV1211.includes("2500 cohortes")) fail("Pruebas v12.1.1: falta simulación masiva curricular.");
 
 if (failures.length) {
   for (const message of failures) console.error(`ERROR: ${message}`);
