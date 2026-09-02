@@ -5,7 +5,7 @@ import type { ConsolidationGroup } from "../calculations/consolidation";
 import { createFinancialReportPdf } from "./pdf";
 import { buildFinancialReport, buildParameterReport, compactParameterReportForPdf, type FinancialReport } from "./report-model";
 import { createFinancialReportXlsx } from "./xlsx";
-import { canUseFormulaTemplate, createInstitutionalFormulaBudgetXlsx } from "./institutional-budget-xlsx";
+import { createInstitutionalFormulaBudgetXlsx, institutionalTemplateCompatibilityIssue } from "./institutional-budget-xlsx";
 import { buildFinancialNarrative, buildHistoricalCohortSnapshots } from "./financial-narrative";
 import { createBudgetMemorandumDocx } from "./memorandum";
 
@@ -90,11 +90,14 @@ export async function downloadBudgetXlsx(budget: CohortBudget, result: BudgetRes
   // La plantilla institucional histórica tiene una estructura física acotada (por ejemplo,
   // dos años presupuestarios). Si el presupuesto no cabe en ella, la descarga no se bloquea:
   // se utiliza automáticamente el XLSX general, que admite todos los años activos de la cohorte.
-  if (institutionalCandidate && canUseFormulaTemplate(budget, result)) {
-    const template = await loadInstitutionalBudgetXlsxTemplate();
-    const bytes = await createInstitutionalFormulaBudgetXlsx(template, budget, result, parameters);
-    download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
-    return;
+  if (institutionalCandidate) {
+    const compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result);
+    if (!compatibilityIssue) {
+      const template = await loadInstitutionalBudgetXlsxTemplate();
+      const bytes = await createInstitutionalFormulaBudgetXlsx(template, budget, result, parameters);
+      download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
+      return;
+    }
   }
 
   const report = buildFinancialReport(budget, result);
