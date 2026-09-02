@@ -1,6 +1,6 @@
 {
   "name": "sistema-presupuestos-postgrado-utem",
-  "version": "1.1.11-d1-web",
+  "version": "2.1.1-d1-web",
   "private": true,
   "description": "Sistema de Presupuestos de Postgrado UTEM para Cloudflare Workers y D1, desplegable desde GitHub y Cloudflare web.",
   "engines": {
@@ -29,13 +29,18 @@
     "preview:cloudflare": "npm run build:cloudflare && opennextjs-cloudflare preview",
     "verify": "npm run build:cloudflare",
     "source:audit": "node scripts/source-audit.mjs",
-    "quality:cloudflare": "npm run preflight && npm run source:audit && npm run integrity:audit && npm run typecheck && npm run lint && npm run test:engine && npm run test:institutional-xlsx && npm run test:curriculum && npm run test:form-defaults && npm run test:documents && npm run test && npm run test:standalone",
+    "quality:cloudflare": "npm run preflight && npm run source:audit && npm run integrity:audit && npm run security:sql && npm run typecheck && npm run lint && npm run test:engine && npm run test:institutional-xlsx && npm run test:billing && npm run test:finance-v12 && npm run test:cohort-v1202 && npm run test:curriculum && npm run test:curriculum-v1211 && npm run test:form-defaults && npm run test:documents && npm run test && npm run test:standalone",
     "db:validate": "prisma validate",
     "integrity:audit": "node scripts/platform-integrity-audit.mjs",
     "test:institutional-xlsx": "node --test demo/tests/institutional-xlsx.test.mjs",
     "test:curriculum": "node --test demo/tests/curriculum-import.test.mjs demo/tests/curriculum-engine.test.mjs",
     "test:form-defaults": "node --test demo/tests/v1027-form-defaults.test.mjs",
-    "test:documents": "node --test demo/tests/memorandum-export.test.mjs demo/tests/financial-narrative-v1031.test.mjs"
+    "test:documents": "node --test demo/tests/memorandum-export.test.mjs demo/tests/financial-narrative-v1031.test.mjs",
+    "test:billing": "node --test demo/tests/program-total-billing.test.mjs",
+    "test:finance-v12": "node --test demo/tests/financial-engine-v12.test.mjs demo/tests/consolidation-v1201.test.mjs demo/tests/billing-validation-v1201.test.mjs",
+    "test:cohort-v1202": "node --test demo/tests/cohort-consistency-v1202.test.mjs",
+    "security:sql": "node scripts/sql-safety-audit.mjs",
+    "test:curriculum-v1211": "node --test demo/tests/curriculum-v1211-deterministic.test.mjs demo/tests/curriculum-v1211-simulation.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "3.9.1",
@@ -62,7 +67,10 @@
     "typescript": "5.8.2",
     "vitest": "3.0.8",
     "wrangler": "4.114.0",
-    "@cloudflare/workers-types": "5.20260728.1"
+    "@cloudflare/workers-types": "5.20260728.1",
+    "tailwindcss": "3.4.17",
+    "postcss": "8.4.49",
+    "autoprefixer": "10.4.20"
   },
   "cloudflare": {
     "bindings": {

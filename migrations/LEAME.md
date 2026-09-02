@@ -29,3 +29,5 @@ No copie estos SQL a `prisma/migrations` y no ejecute manualmente una migración
 - `0011_professional_annual_offering_plans.sql`: v11.0, planificación anual flexible para Magísteres Profesionales.
 
 - `0012_budget_bad_debt_rate.sql`: v11.0.5, permite ajustar la incobrabilidad por presupuesto manteniendo fallback institucional para registros históricos.
+
+- `0013_program_total_billing.sql`: v11.1.0, incorpora arancel total del programa, matrícula anual/única/semestral, cuotas, distribución semestral del arancel y descuentos diferenciados para arancel o matrícula, manteniendo defaults de compatibilidad histórica.

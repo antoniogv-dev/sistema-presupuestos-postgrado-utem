@@ -1,4 +1,4 @@
-# Sistema de Presupuestos de Postgrado UTEM — v11.0.11 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v12.1.1 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
@@ -7,6 +7,76 @@ Aplicación institucional para formular, revisar, consolidar y exportar presupue
 
 
 
+
+
+
+
+## Auditoría correctiva v12.0.1
+
+- **Consolidación sin doble descuento:** los costos manuales marcados como compartidos se normalizan una sola vez. La parte automática del staff/operación excluye dichos costos antes de calcular duplicidad evitada.
+- **Periodicidad real en consolidación:** un costo compartido anual o semestral utiliza su monto efectivo del año, no sólo el monto unitario del registro.
+- **Validación financiera en servidor:** la distribución personalizada del arancel total debe contener exactamente todos los semestres y sumar 100 % también en la API, no sólo en la interfaz.
+- **Dashboard coherente:** el KPI `Presupuestos activos` utiliza los mismos estados del consolidado activo y no cuenta borradores.
+- **Accesibilidad visual:** se refuerza el contraste de badges neutrales en modo claro.
+- **Regresión reforzada:** 10 pruebas del motor financiero v12/v12.0.1, además de las suites históricas.
+- **Control de despliegue:** versión `v12.0.1 · 2.0.1-d1-web`.
+
+## Mejora curricular v12.1.1
+
+La v12.1.1 es acumulativa sobre v12.1.0 y conserva todas las mejoras de la serie v12. Incorpora:
+
+- El presupuesto utiliza exclusivamente horas de docencia directa; las horas autónomas no se valorizan ni se proyectan.
+- Nuevo tipo curricular `GRADUACION` para Tesis, Tesis I/II, AFE, Proyecto de Graduación y actividades equivalentes.
+- Electivos, especialización y graduación permiten múltiples secciones en la malla maestra y secciones particulares por cohorte.
+- En Doctorados y Magísteres Académicos, las asignaturas de graduación toman automáticamente una sección por estudiante activo del semestre, salvo override manual del presupuesto.
+- Las secciones particulares se guardan en `courseSectionOverrides`, sin modificar la malla maestra del programa.
+- Nueva migración D1 `0014_curriculum_graduation_sections.sql`.
+- Dos baterías nuevas de pruebas: 12 casos determinísticos y 2 simulaciones de 1.000 escenarios cada una.
+- Versión técnica: `v12.1.1 · 2.1.1-d1-web`.
+
+## Versión consolidada v12.1.0 — UTEM Finance Light
+
+La v12.1.0 integra en un único proyecto todas las mejoras funcionales, financieras, de coherencia y seguridad de la serie v12, y adopta un nuevo sistema visual light-first inspirado en plataformas fintech enterprise.
+
+- Light Mode como experiencia predeterminada; Dark Mode completo y persistente.
+- Navegación lateral blanca, compacta y jerarquizada con iconografía propia.
+- Buscador superior funcional para navegar entre módulos.
+- KPI financieros de alta densidad con cifras tabulares.
+- Panel ejecutivo con ingresos/egresos, estado del portafolio y alertas de gestión.
+- Tablas compactas, badges discretos, bordes finos, sombras mínimas y transiciones de 150 ms.
+- Conserva íntegramente el motor financiero semestral v12, arancel total, modalidades de matrícula, punto de equilibrio, malla curricular, planes anuales, exportaciones XLSX/PDF/Memorándum, consolidación, controles de coherencia y defensa SQL parametrizada.
+- `npm run security:sql` se ejecuta dentro de `quality:cloudflare` y bloquea futuras introducciones de consultas raw inseguras o nuevas interpolaciones SQL no autorizadas.
+- No requiere una nueva migración D1 respecto de v12.0.2.
+- Versión técnica: `v12.1.0 · 2.1.0-d1-web`.
+
+## Evolución estructural v12.0.0 — motor financiero semestral + diseño enterprise
+
+- **Motor financiero desacoplado:** el precio del programa, la distribución semestral, el reconocimiento anual, los costos y el flujo acumulado se procesan en capas distintas.
+- **Libro mayor semestral de ingresos:** `lib/finance/revenue-engine.ts` genera un ledger por semestre antes de cualquier agregación por año. El año calendario deja de determinar el precio académico.
+- **Motor de costos modular:** `lib/finance/cost-engine.ts` concentra docencia, guía de tesis, staff, gastos, becas y economías de escala; `budget-engine.ts` queda como orquestador.
+- **Trazabilidad de cálculo:** `BudgetResult` expone `pricing` y `revenueLedger`, permitiendo auditar cuánto arancel y matrícula se reconoce en cada semestre.
+- **Compatibilidad financiera:** una prueba snapshot verifica que un presupuesto histórico v11.1.0 mantiene exactamente sus principales resultados en v12.
+- **Programas de cualquier duración:** el mismo ledger funciona con 2 a 8 semestres, matrícula anual, única/especial o semestral y arancel anual histórico o total del programa.
+- **Design system enterprise:** Dark Mode premium por defecto (`#0B0F17` / `#111827`), modo claro opcional, azul cobalto, esmeralda financiero, carmesí para déficit, bordes ultrafinos y superficies sin sombras pesadas.
+- **Tailwind CSS incorporado:** utilidades Tailwind para jerarquía tipográfica, `tabular-nums`, tracking y microinteracciones; se conserva CSS institucional para compatibilidad de pantallas existentes.
+- **Datos financieros tabulares:** montos, porcentajes y KPIs usan cifras tabulares para evitar desplazamientos visuales.
+- **Dashboard financiero:** nueva visualización de ingresos versus egresos normalizados por año utilizando datos reales del consolidado activo, no datos simulados.
+- **Microinteracciones:** transiciones de 150 ms con curva `cubic-bezier(0.16, 1, 0.3, 1)`, sin rebotes ni sombras invasivas.
+- **Corrección de consolidado del panel:** el dashboard utiliza `institutional-active`, coherente con las agrupaciones vigentes y excluyendo borradores.
+- **Sin nueva migración D1:** v12 reutiliza la estructura de datos introducida por `0013_program_total_billing.sql`; no altera registros históricos.
+- Versión técnica: `v12.0.0 · 2.0.0-d1-web`.
+
+## Actualización mayor v11.1.0 — arancel total y modalidades de matrícula
+
+- Incorpora **Arancel total del programa** como precio maestro opcional para cohortes de 2 a 8 semestres.
+- Mantiene íntegramente **Arancel anual + Matrícula anual** para presupuestos históricos.
+- Agrega matrícula **anual**, **única / especial** y **semestral**.
+- Distribuye el arancel total proporcionalmente por semestre o mediante porcentajes personalizados que deben sumar 100 %.
+- El año calendario sólo determina el reconocimiento presupuestario; nunca redefine el precio total del programa.
+- Separa descuentos de **arancel** y de **matrícula**.
+- Agrega estructura de cobro, proyección de ingresos y comparador de modalidades en la formulación.
+- Incluye migración D1 `0013_program_total_billing.sql`.
+- Versión técnica: `v11.1.0 · 1.2.0-d1-web`.
 
 ## Mejora funcional v11.0.11
 
@@ -287,3 +357,12 @@ Prisma generate
 - `CAMBIOS_V10_11_FLUJO_EDITABLE_STAFF_COSTOS.md`
 - `VERIFICACION_V10_11.md`
 - `migrations/LEAME.md`
+
+## Corrección de endurecimiento v12.0.2
+
+- Valida en servidor que los descuentos de matrícula no superen los estudiantes activos.
+- Rechaza rangos de descuento con término anterior al inicio.
+- Exige al menos dos programas distintos en economías de escala y la participación del programa actual.
+- Impide registrar asignaturas compartidas fuera de los semestres activos de la cohorte.
+- La interfaz restringe los selectores semestrales a periodos realmente activos; por ejemplo, un programa 2027-1S de 3 semestres ofrece 2027-1S, 2027-2S y 2028-1S, nunca 2028-2S.
+- No modifica fórmulas, resultados financieros ni estructura D1; no requiere migración.

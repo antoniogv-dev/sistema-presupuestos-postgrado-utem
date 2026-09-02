@@ -14,6 +14,7 @@
   },
   "include": [
     "lib/calculations/**/*.ts",
+    "lib/finance/**/*.ts",
     "lib/annual-offerings/**/*.ts",
     "lib/curriculum/**/*.ts",
     "lib/budgets/**/*.ts",
@@ -26,6 +27,8 @@
     "lib/export/pdf.ts",
     "lib/export/institutional-budget-xlsx.ts",
     "lib/export/download.ts",
-    "lib/import/curriculum-file-import.ts"
+    "lib/import/curriculum-file-import.ts",
+    "lib/validation/billing-config.ts",
+    "lib/validation/cohort-consistency.ts"
   ]
 }

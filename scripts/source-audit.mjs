@@ -204,7 +204,7 @@ for (const marker of [
   "Versión del programa / plan",
   "Revisión interna",
   "Staff comprometido/prorrateable y overhead",
-  "Matrícula anual bruta (referencial, sin descuentos)",
+  "Matrícula anual bruta",
   "INGRESOS TOTAL",
   "Valores hora según modalidad",
   "Guía de tesis por graduando",
@@ -222,21 +222,24 @@ for (const marker of ['ADD COLUMN "annualTuition"', 'ProgramAnnualTuition']) {
 for (const marker of [
   '"Alimentos y bebidas"',
   'Arancel anual',
-  'Matrícula anual bruta (referencial, sin descuentos)',
+  'Matrícula anual bruta',
   'Gastos operacionales / Bienes y servicios',
   'Otros costos y gastos',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.9 ${marker}.`);
 }
-for (const forbidden of ['label="Descuentos matrícula"', 'label="Matrícula neta"']) {
+for (const forbidden of ['label="Matrícula neta"']) {
   if (budgetWorkspaceV108.includes(forbidden)) fail(`BudgetWorkspace.tsx: v10.9 no debe mostrar ${forbidden} en el flujo.`);
 }
 
-const engineV108 = await readFile(path.join(root, "lib/calculations/budget-engine.ts"), "utf8");
+const engineV108 = `${await readFile(path.join(root, "lib/calculations/budget-engine.ts"), "utf8")}
+${await readFile(path.join(root, "lib/finance/revenue-engine.ts"), "utf8")}
+${await readFile(path.join(root, "lib/finance/cost-engine.ts"), "utf8")}
+${await readFile(path.join(root, "lib/calculations/billing.ts"), "utf8")}`;
 for (const marker of [
   'item.periodicity === "Anual"',
   "const totalIncome = netTuitionIncome + recognizedEnrollmentFee + externalIncome + institutionalFinancing + otherIncome",
-  "const overheadBase = Math.max(0, grossTuition - discounts - badDebt)",
+  "const overheadBase = Math.max(0, revenue.grossTuition - revenue.discounts - revenue.badDebt)",
   "budget.scholarshipsEnabled",
   "directionAllocationRate",
   "annualEnrollmentFee",
@@ -252,17 +255,16 @@ if (!v110Migration.includes('WHERE COALESCE("annualTuition", 0) <= 0')) {
 }
 for (const marker of [
   '"Alimentos y bebidas"',
-  'Matrícula anual bruta (referencial, sin descuentos)',
+  'Matrícula anual bruta',
   'EditableCostFlowRow',
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v11.0.11"',
+  'FUNCTIONAL_RELEASE = "v12.1.1"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
 for (const forbidden of [
-  'label="Descuentos matrícula"',
   'label="Matrícula neta"',
   'Matrícula anual (informativa, descuentos aplicados)',
   'Honorarios académicos adicionales',
@@ -270,15 +272,15 @@ for (const forbidden of [
 ]) {
   if (budgetWorkspaceV108.includes(forbidden)) fail(`BudgetWorkspace.tsx: v10.11 no debe contener ${forbidden}.`);
 }
-if (!engineV108.includes("const enrollmentDiscounts = 0;")) {
-  fail("budget-engine.ts: la matrícula no debe recibir descuentos; enrollmentDiscounts debe ser 0.");
+if (!engineV108.includes('discount.target === "ENROLLMENT"') || !engineV108.includes("const enrollmentDiscounts = sum(")) {
+  fail("budget-engine.ts: v11.1.0 debe aplicar descuentos de matrícula sólo cuando el descuento declare target ENROLLMENT.");
 }
 if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fallback.annualTuition")) {
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v11.0.11") || !appShellV110.includes("1.1.11-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v11.0.11 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v12.1.1") || !appShellV110.includes("2.1.1-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v12.1.1 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -564,7 +566,7 @@ if (!periodsV1020.includes("getAnnualEnrollmentChargePeriods")) fail("Matrícula
 for (const marker of [
   "annualEnrollmentFee: nonNegative(stored.annualEnrollmentFee) > 0",
   "getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)",
-  "const enrollmentDiscounts = 0;",
+  'discount.target === "ENROLLMENT"',
 ]) {
   if (!engineV108.includes(marker)) fail(`Matrícula v10.21: falta ${marker}.`);
 }
@@ -583,7 +585,7 @@ for (const marker of [
   "Toda la página quedó sincronizada con este presupuesto",
   "auditBudgetIntegrity",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v11.0.11"',
+  'FUNCTIONAL_RELEASE = "v12.1.1"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.23: falta ${marker}.`);
 }
@@ -610,7 +612,7 @@ for (const marker of [
   "setInitialStudentsForAllSemesters",
   "Punto de equilibrio",
   "Viabilidad mínima de dictación",
-  'FUNCTIONAL_RELEASE = "v11.0.11"',
+  'FUNCTIONAL_RELEASE = "v12.1.1"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
 }
@@ -709,7 +711,7 @@ for (const marker of [
   'cache: "no-store"',
   "INSTITUTIONAL_TEMPLATE_SHA256",
   "PLANTILLA_INSTITUCIONAL_OBSOLETA",
-  "Un Magíster Profesional nunca cae silenciosamente al formato antiguo",
+  "Los presupuestos con arancel total usan el XLSX trazable general",
 ]) {
   if (!downloadV112.includes(marker) && !institutionalXlsxV1025.includes(marker)) fail(`XLSX v10.30: falta control anti-regresión ${marker}.`);
 }
@@ -726,7 +728,7 @@ const institutionalXlsxTestsV1103 = await readFile(path.join(root, "demo/tests/i
 if (!institutionalXlsxTestsV1103.includes("v11.0.3 exporta N descuentos como filas independientes")) fail("XLSX v11.0.3: falta prueba de múltiples descuentos.");
 
 // v11.0.4: matrícula reconocida como ingreso y financiamiento institucional fijo.
-const budgetEngineV1104 = await readFile(path.join(root, "lib/calculations/budget-engine.ts"), "utf8");
+const budgetEngineV1104 = engineV108;
 const budgetWorkspaceV1104 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
 const reportModelV1104 = await readFile(path.join(root, "lib/export/report-model.ts"), "utf8");
 for (const marker of ["institutionalFinancing", "recognizedEnrollmentFee + externalIncome + institutionalFinancing", "No incorpora matrícula reconocida ni financiamiento institucional"]) if (!budgetEngineV1104.includes(marker)) fail(`v11.0.4 motor: falta ${marker}.`);
@@ -739,7 +741,7 @@ const budgetApiCreateV1105 = await readFile(path.join(root, "app/api/budgets/rou
 const budgetApiUpdateV1105 = await readFile(path.join(root, "app/api/budgets/[budgetId]/route.ts"), "utf8");
 const budgetEngineTestsV1105 = await readFile(path.join(root, "tests/unit/budget-engine.test.ts"), "utf8");
 const migrationV1105 = await readFile(path.join(root, "migrations/0012_budget_bad_debt_rate.sql"), "utf8");
-for (const marker of ["effectiveBadDebtRate", "budget.badDebtRate", "tuitionAfterBenefits * badDebtRate"]) if (!budgetEngineV1104.includes(marker)) fail(`v11.0.6 motor: falta ${marker}.`);
+for (const marker of ["effectiveBadDebtRate", "budget.badDebtRate", "tuitionAfterBenefits * clampRate(badDebtRate)"]) if (!budgetEngineV1104.includes(marker)) fail(`v11.0.6 motor: falta ${marker}.`);
 for (const marker of ["Incobrabilidad (%)", "Editable para esta formulación", "Incobrabilidad aplicada a esta formulación"]) if (!budgetWorkspaceV1104.includes(marker)) fail(`v11.0.6 interfaz: falta ${marker}.`);
 for (const marker of ["badDebtRate: z.number().min(0).max(1)", '"badDebtRate"']) if (!budgetApiCreateV1105.includes(marker) || !budgetApiUpdateV1105.includes(marker)) fail(`v11.0.6 API: falta ${marker}.`);
 if (!reportModelV1104.includes("effectiveBadDebtRate(budget, parameters)")) fail("v11.0.6 reportes: falta incobrabilidad efectiva de la formulación.");
@@ -811,7 +813,7 @@ for (const marker of ["curriculumCourseWeeklyDirectHours", "theoryWeeklyHours", 
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.28: falta ${marker}.`);
 }
 const budgetWorkspaceV1028 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v11.0.11"']) {
+for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v12.1.1"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.28: falta ${marker}.`);
 }
 
@@ -819,7 +821,7 @@ for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla recon
 for (const marker of ["curriculumCourseAppliedMode", 'modality === "PRESENCIAL"', 'return "PRESENCIAL"']) {
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.30: falta ${marker}.`);
 }
-for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v11.0.11"']) {
+for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v12.1.1"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.30: falta ${marker}.`);
 }
 
@@ -848,7 +850,7 @@ for (const forbidden of ["Conclusión financiera", "esta Vicerrectoría aprueba"
 for (const marker of ["createNarrativeTablePageContent", "Serie histórica de cohortes aprobadas del mismo programa", "comparisonTablePages"]) {
   if (!pdfV1031.includes(marker)) fail(`PDF v10.31: falta ${marker}.`);
 }
-for (const marker of ["Supuestos económicos esenciales utilizados en la formulación", 'if (row.section === "Parámetros institucionales generales") return false', 'if (row.section === "Descuentos de arancel")']) {
+for (const marker of ["Supuestos económicos esenciales utilizados en la formulación", 'if (row.section === "Parámetros institucionales generales") return false', 'if (row.section === "Descuentos de arancel" || row.section === "Descuentos de matrícula")']) {
   if (!reportModelV1025.includes(marker)) fail(`Parámetros PDF v10.31: falta control ${marker}.`);
 }
 if (!(packageJson.scripts?.["test:documents"] ?? "").includes("memorandum-export.test.mjs")) fail("package.json v10.31: falta test:documents.");
@@ -922,6 +924,96 @@ const institutionalXlsxTestV1111 = await readFile(path.join(root, "demo/tests/in
 for (const marker of ["setTextFormula", 'CONCATENATE(\"Descuento ",((+Parámetros!B${parameterRow})*100),\"%\")', 'setTextFormula(s2, `A${studentRow}`', 'setTextFormula(s2, `A${incomeRow}`']) if (!institutionalXlsxV1111.includes(marker)) fail(`XLSX v11.0.11 descuentos visibles: falta ${marker}.`);
 if (institutionalXlsxV1111.includes('`Ingresos arancel ${label}`')) fail("XLSX v11.0.11: las filas con descuento no deben anteponer 'Ingresos arancel'.");
 for (const marker of ["v11.0.11 muestra Descuento X% en Flujo estudiantes mediante fórmula vinculada a Parámetros", 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B10)*100),&quot;%&quot;)', 'studentXml.includes("Ingresos arancel Descuento")']) if (!institutionalXlsxTestV1111.includes(marker)) fail(`XLSX v11.0.11 pruebas: falta ${marker}.`);
+
+
+// v11.1.0: arancel total del programa y modalidades de matrícula.
+const billingV1110 = await readFile(path.join(root, "lib/calculations/billing.ts"), "utf8");
+const engineV1110 = `${await readFile(path.join(root, "lib/calculations/budget-engine.ts"), "utf8")}
+${await readFile(path.join(root, "lib/finance/revenue-engine.ts"), "utf8")}
+${billingV1110}`;
+const workspaceV1110 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
+const migrationV1110 = await readFile(path.join(root, "migrations/0013_program_total_billing.sql"), "utf8");
+const billingTestV1110 = await readFile(path.join(root, "demo/tests/program-total-billing.test.mjs"), "utf8");
+for (const marker of ["PROGRAM_TOTAL", "SINGLE_SPECIAL", "SEMESTER", "normalizedTuitionDistribution", "enrollmentChargePeriodsForBudget"]) if (!billingV1110.includes(marker)) fail(`Facturación v11.1.0: falta ${marker}.`);
+for (const marker of ["tuitionDistributionShareForYear", "enrollmentDiscounts", 'discount.target === "ENROLLMENT"', "programTotalTuition"]) if (!engineV1110.includes(marker)) fail(`Motor v11.1.0: falta ${marker}.`);
+for (const marker of ["Estructura de cobro", "Arancel total del programa", "Matrícula única / especial", "Matrícula semestral", "Distribución del arancel", "Aplicar sobre"]) if (!workspaceV1110.includes(marker)) fail(`UI v11.1.0: falta ${marker}.`);
+for (const marker of ["tuitionPricingMode", "programTotalTuition", "tuitionSemesterDistribution", 'ADD COLUMN "target"']) if (!migrationV1110.includes(marker)) fail(`Migración v11.1.0: falta ${marker}.`);
+for (const marker of ["arancel total de 3 semestres", "matrícula semestral", "distribución personalizada 40/35/25", "presupuesto histórico"]) if (!billingTestV1110.includes(marker)) fail(`Pruebas v11.1.0: falta ${marker}.`);
+
+
+// v12.0.0: motor financiero semestral desacoplado y design system enterprise.
+const revenueEngineV1200 = await readFile(path.join(root, "lib/finance/revenue-engine.ts"), "utf8");
+const costEngineV1200 = await readFile(path.join(root, "lib/finance/cost-engine.ts"), "utf8");
+const budgetEngineV1200 = await readFile(path.join(root, "lib/calculations/budget-engine.ts"), "utf8");
+const typesV1200 = await readFile(path.join(root, "lib/calculations/types.ts"), "utf8");
+const financeTestsV1200 = await readFile(path.join(root, "demo/tests/financial-engine-v12.test.mjs"), "utf8");
+const cssV1200 = await readFile(path.join(root, "app/globals.css"), "utf8");
+const shellV1200 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
+const dashboardV1200 = await readFile(path.join(root, "app/page.tsx"), "utf8");
+const packageV1200 = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+for (const marker of ["SemesterRevenueLedgerLine", "buildPricingSnapshot", "calculateRevenueEngine", "tuitionUnitPrice", "recognizedEnrollmentFee"]) if (!revenueEngineV1200.includes(marker)) fail(`Motor v12 ingresos: falta ${marker}.`);
+for (const marker of ["calculateAnnualCosts", "fixedExpensesBeforeOverhead", "sharedCourseSavings", "scholarshipsAndAid"]) if (!costEngineV1200.includes(marker)) fail(`Motor v12 costos: falta ${marker}.`);
+for (const marker of ["calculateRevenueEngine", "calculateAnnualCosts", "revenueLedger: revenueEngine.semesterLedger", "pricing: revenueEngine.pricing"]) if (!budgetEngineV1200.includes(marker)) fail(`Orquestador v12: falta ${marker}.`);
+for (const marker of ["PricingTrace", "SemesterRevenueTrace", "revenueLedger: SemesterRevenueTrace[]"]) if (!typesV1200.includes(marker)) fail(`Trazabilidad v12: falta ${marker}.`);
+for (const marker of ["presupuesto histórico conserva exactamente", "ledger semestral separa precio", "iniciar en 2S cambia el año", "cuotas son forma de pago"]) if (!financeTestsV1200.includes(marker)) fail(`Pruebas v12: falta ${marker}.`);
+for (const marker of ["#0B0F17", "#111827", "#2563EB", "#10B981", "#F43F5E", "font-variant-numeric: tabular-nums", "cubic-bezier(.16,1,.3,1)", "backdrop-filter: blur(16px)"]) if (!cssV1200.includes(marker)) fail(`Design system v12: falta ${marker}.`);
+for (const marker of ["postgrado-budget-theme", "Motor v12 activo", "v12.1.1", "2.1.1-d1-web"]) if (!shellV1200.includes(marker)) fail(`AppShell v12: falta ${marker}.`);
+for (const marker of ["institutional-active", "FinancialProfileChart", "Ingresos y egresos institucionales"]) if (!dashboardV1200.includes(marker)) fail(`Dashboard v12: falta ${marker}.`);
+for (const dependency of ["tailwindcss", "postcss", "autoprefixer"]) if (!packageV1200.devDependencies?.[dependency]) fail(`Tailwind v12: falta dependencia ${dependency}.`);
+
+
+// v12.0.1: auditoría correctiva de consolidación, validación server-side y coherencia visual.
+const consolidationV1201 = await readFile(path.join(root, "lib/calculations/consolidation.ts"), "utf8");
+const billingValidationV1201 = await readFile(path.join(root, "lib/validation/billing-config.ts"), "utf8");
+const budgetApiCreateV1201 = await readFile(path.join(root, "app/api/budgets/route.ts"), "utf8");
+const budgetApiUpdateV1201 = await readFile(path.join(root, "app/api/budgets/[budgetId]/route.ts"), "utf8");
+const dashboardV1201 = await readFile(path.join(root, "app/page.tsx"), "utf8");
+const cssV1201 = await readFile(path.join(root, "app/globals.css"), "utf8");
+const consolidationTestV1201 = await readFile(path.join(root, "demo/tests/consolidation-v1201.test.mjs"), "utf8");
+const billingValidationTestV1201 = await readFile(path.join(root, "demo/tests/billing-validation-v1201.test.mjs"), "utf8");
+for (const marker of ["manualItemAmountForYear", "manualIncluded", "automaticCategories", "candidate.costType === \"Compartido con otras cohortes\""]) if (!consolidationV1201.includes(marker)) fail(`Consolidación v12.0.1: falta ${marker}.`);
+for (const marker of ["billingConfigurationIssues", "assertBillingConfiguration", "TUITION_DISTRIBUTION_INVALID", "INVALID_BILLING_CONFIGURATION"]) if (!billingValidationV1201.includes(marker)) fail(`Validación cobro v12.0.1: falta ${marker}.`);
+for (const source of [budgetApiCreateV1201, budgetApiUpdateV1201]) if (!source.includes("assertBillingConfiguration")) fail("API v12.0.1: falta validación server-side de estructura de cobro.");
+for (const marker of ["activeBudgets", '["En revisión", "Observado", "Aprobado"]', "Presupuestos activos"]) if (!dashboardV1201.includes(marker)) fail(`Dashboard v12.0.1: falta ${marker}.`);
+if (!cssV1201.includes('html[data-theme="light"] .status-badge:not(')) fail("UI v12.0.1: falta corrección de contraste de badges neutrales en modo claro.");
+for (const marker of ["se normaliza una sola vez", "periodicidad anual efectiva"]) if (!consolidationTestV1201.includes(marker)) fail(`Prueba consolidación v12.0.1: falta ${marker}.`);
+for (const marker of ["debe cubrir todos los semestres y sumar 100%", "distribución 40/35/25 es válida"]) if (!billingValidationTestV1201.includes(marker)) fail(`Prueba validación cobro v12.0.1: falta ${marker}.`);
+
+
+// v12.0.2: endurecimiento de coherencia de cohorte y periodos activos.
+const cohortConsistencyV1202 = await readFile(path.join(root, "lib/validation/cohort-consistency.ts"), "utf8");
+const budgetApiUpdateV1202 = await readFile(path.join(root, "app/api/budgets/[budgetId]/route.ts"), "utf8");
+const workspaceV1202 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
+const cohortTestV1202 = await readFile(path.join(root, "demo/tests/cohort-consistency-v1202.test.mjs"), "utf8");
+for (const marker of ["ENROLLMENT_DISCOUNT_EXCEEDS_ACTIVE", "DISCOUNT_RANGE_INVALID", "SHARED_COURSE_OUTSIDE_HORIZON", "SHARED_COURSE_PARTICIPANTS_INVALID", "SHARED_COURSE_PROGRAM_MISSING"]) if (!cohortConsistencyV1202.includes(marker)) fail(`Coherencia v12.0.2: falta ${marker}.`);
+for (const marker of ["assertCohortConsistency", 'participantProgramIds: z.array(z.string().min(1)).min(2)']) if (!budgetApiUpdateV1202.includes(marker)) fail(`API v12.0.2: falta ${marker}.`);
+if (!workspaceV1202.includes("activePeriods={result.periods}")) fail("UI v12.0.2: los selectores de periodo deben restringirse a periodos activos.");
+for (const marker of ["bloquea descuentos de matrícula", "rangos de descuento invertidos", "economía de escala exige dos programas", "fuera del horizonte académico"]) if (!cohortTestV1202.includes(marker)) fail(`Prueba v12.0.2: falta ${marker}.`);
+
+
+// v12.1.0: design system light-first consolidado.
+const shellV1210 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
+const cssV1210 = await readFile(path.join(root, "app/globals.css"), "utf8");
+const dashboardV1210 = await readFile(path.join(root, "app/page.tsx"), "utf8");
+for (const marker of ["brand-mark", "global-search", "nav-section-label", "sidebar-product-card", 'useState<"dark" | "light">("light")']) if (!shellV1210.includes(marker)) fail(`UI v12.1.0: falta ${marker}.`);
+for (const marker of ["v12.1.0 · UTEM Finance Light", "kpi-grid-five", "executive-analytics-grid", "status-donut", "premium-dashboard-grid"]) if (!cssV1210.includes(marker)) fail(`CSS v12.1.0: falta ${marker}.`);
+for (const marker of ["Ingresos consolidados", "Egresos normalizados", "Estado de presupuestos", "Aprobación del portafolio"]) if (!dashboardV1210.includes(marker)) fail(`Dashboard v12.1.0: falta ${marker}.`);
+
+
+// v12.1.0: seguridad SQL parametrizada integrada en CI.
+const sqlAuditV1210 = await readFile(path.join(root, "scripts/sql-safety-audit.mjs"), "utf8");
+for (const marker of ["allowedInterpolations", "field: \"email\" | \"id\"", "assignments.join", "Auditoría SQL correcta"]) if (!sqlAuditV1210.includes(marker)) fail(`Seguridad SQL v12.1.0: falta ${marker}.`);
+
+
+// v12.1.1: graduación, horas directas y secciones por cohorte.
+const curriculumV1211 = await readFile(path.join(root, "lib/curriculum/budget-load.ts"), "utf8");
+const curriculumEditorV1211 = await readFile(path.join(root, "features/programs/components/CurriculumEditor.tsx"), "utf8");
+const budgetWorkspaceV1211 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
+const migrationV1211 = await readFile(path.join(root, "migrations/0014_curriculum_graduation_sections.sql"), "utf8");
+for (const marker of ["GRADUACION", "resolvedCourseSections", "defaultCourseSectionsForBudget", "courseAllowsSectionOverride"]) if (!curriculumV1211.includes(marker)) fail(`Malla v12.1.1: falta ${marker}.`);
+for (const marker of ["Graduación / Tesis / AFE", "horas de docencia directa", "autonomousWeeklyHours: 0"]) if (!curriculumEditorV1211.includes(marker)) fail(`Editor curricular v12.1.1: falta ${marker}.`);
+for (const marker of ["courseSectionOverrides", "Auto = estudiantes activos", "FUNCTIONAL_RELEASE = \"v12.1.1\""]) if (!budgetWorkspaceV1211.includes(marker)) fail(`Presupuesto v12.1.1: falta ${marker}.`);
+for (const marker of ["courseSectionOverrides", "ALTER TABLE \"CohortBudget\""]) if (!migrationV1211.includes(marker)) fail(`Migración v12.1.1: falta ${marker}.`);
 
 if (failures.length) {
   for (const message of failures) console.error(`ERROR: ${message}`);
