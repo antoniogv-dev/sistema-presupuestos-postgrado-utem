@@ -8,10 +8,14 @@ export type ReviewDecision = "ENVIADO" | "VISTO_BUENO" | "OBSERVADO" | "APROBADO
 export type TemplateItemKind = "DESCUENTO" | "BECA_ARANCEL" | "BECA_MANUTENCION" | "COSTO" | "INGRESO_EXTRAORDINARIO" | "PARAMETRO_ANUAL";
 export type DeliveryModality = "PRESENCIAL" | "SEMIPRESENCIAL" | "E_LEARNING";
 export type TeachingMode = "PRESENCIAL" | "SINCRONICA" | "ASINCRONICA";
-export type CurriculumCourseKind = "OBLIGATORIA" | "ELECTIVA" | "ESPECIALIZACION" | "COMPETENCIA_GENERICA";
+export type CurriculumCourseKind = "OBLIGATORIA" | "ELECTIVA" | "ESPECIALIZACION" | "GRADUACION" | "COMPETENCIA_GENERICA";
 export type AnnualTemplateParameter = "ARANCEL" | "MATRICULA" | "BECA_MANUTENCION" | "DOCENCIA_PRESENCIAL" | "DOCENCIA_SINCRONICA" | "DOCENCIA_ASINCRONICA" | "GUIA_TESIS" | "DIRECCION" | "ASISTENCIA" | "OTROS_HONORARIOS_NO_ACADEMICOS";
 export type StudentQuantityMode = "TODOS_ACTIVOS" | "CANTIDAD";
 export type BudgetCostType = "Único de esta versión" | "Compartido con otras cohortes";
+export type TuitionPricingMode = "ANNUAL_LEGACY" | "PROGRAM_TOTAL";
+export type EnrollmentBillingMode = "ANNUAL" | "SINGLE_SPECIAL" | "SEMESTER";
+export type TuitionDistributionMode = "PROPORTIONAL" | "CUSTOM";
+export type DiscountTarget = "TUITION" | "ENROLLMENT";
 
 
 export interface ProgramCourse {
@@ -114,6 +118,7 @@ export interface SemesterParameters {
 export interface CohortDiscount {
   id: string;
   name: string;
+  target?: DiscountTarget;
   percentage: number;
   students: number;
   startYear: number;
@@ -308,6 +313,24 @@ export interface CohortBudget {
   workflowStage: WorkflowStage;
   facultyOverheadRate: number;
   enrollmentRecognitionRate: number;
+  /** Modelo histórico por año o precio total del programa académico completo. */
+  tuitionPricingMode?: TuitionPricingMode;
+  /** Modalidad de cobro de matrícula. ANNUAL conserva la regla histórica. */
+  enrollmentBillingMode?: EnrollmentBillingMode;
+  /** Precio bruto total del programa completo cuando tuitionPricingMode = PROGRAM_TOTAL. */
+  programTotalTuition?: number;
+  /** Matrícula cobrada una sola vez, al inicio del programa. */
+  singleEnrollmentFee?: number;
+  /** Matrícula cobrada en cada semestre activo. */
+  semesterEnrollmentFee?: number;
+  /** Número de cuotas del arancel. Es sólo una forma de pago y no altera el ingreso total. */
+  tuitionInstallments?: number;
+  /** Distribución temporal del arancel total entre semestres. */
+  tuitionDistributionMode?: TuitionDistributionMode;
+  /** Participaciones por semestre activo, expresadas como decimales; deben sumar 1. */
+  tuitionSemesterDistribution?: number[];
+  /** Secciones por asignatura aplicables sólo a esta cohorte; clave = id de ProgramCourse. */
+  curriculumSectionOverrides?: Record<string, number>;
   /** Incobrabilidad particular de esta formulación. Si no está informada, usa la referencia institucional del tipo de programa. */
   badDebtRate?: number;
   programVersionLabel: string;
@@ -335,10 +358,43 @@ export interface CohortBudget {
   reviewHistory: ReviewEvent[];
 }
 
+
+export interface PricingTrace {
+  pricingMode: TuitionPricingMode;
+  enrollmentBillingMode: EnrollmentBillingMode;
+  durationSemesters: number;
+  programTotalTuition: number;
+  equivalentTuitionPerSemester: number;
+  tuitionInstallments: number;
+  distribution: Array<{ index: number; year: number; semester: SemesterNumber; share: number }>;
+}
+
+export interface SemesterRevenueTrace {
+  index: number;
+  year: number;
+  semester: SemesterNumber;
+  activeStudents: number;
+  tuitionUnitPrice: number;
+  tuitionShare: number;
+  grossTuition: number;
+  tuitionDiscounts: number;
+  internalTuitionScholarships: number;
+  tuitionAfterBenefits: number;
+  badDebt: number;
+  netTuitionIncome: number;
+  enrollmentUnitPrice: number;
+  grossEnrollmentFee: number;
+  enrollmentDiscounts: number;
+  netEnrollmentFee: number;
+  recognizedEnrollmentFee: number;
+}
+
 export interface AnnualFlow {
   year: number;
   activeSemesters: number;
   tuitionFactor: number;
+  /** Participación del arancel total reconocida presupuestariamente en el año; en modo histórico conserva el factor de ciclos cobrados. */
+  tuitionDistributionShare: number;
   annualTuition: number;
   grossTuition: number;
   discounts: number;
@@ -397,6 +453,10 @@ export interface AnnualFlow {
 export interface BudgetResult {
   periods: Array<{ year: number; semester: SemesterNumber; index: number }>;
   years: number[];
+  /** Contrato de precio y distribución utilizado por el motor v12. */
+  pricing: PricingTrace;
+  /** Libro mayor semestral de ingresos previo a la agregación anual. */
+  revenueLedger: SemesterRevenueTrace[];
   annualFlows: AnnualFlow[];
   finalAccumulatedFlow: number;
   viable: boolean | null;

@@ -1,4 +1,5 @@
 import { calculateBudget } from "./budget-engine";
+import { manualItemAmountForYear } from "../finance/cost-engine";
 import type { BudgetItem, BudgetStatus, CohortBudget, DuplicateCostAlert, InstitutionalParameters, ProgramType } from "./types";
 
 export type ConsolidationScope = "ACTIVE" | "APPROVED";
@@ -77,10 +78,20 @@ export function consolidateBudgets(budgets: CohortBudget[], parameters: Institut
     const grossIncome = sum(entries.map(({ flow }) => flow.totalIncome));
     const grossExpenses = sum(entries.map(({ flow }) => flow.totalExpenses));
 
+    // La normalización automática debe operar sólo sobre los costos base del staff/operación.
+    // Los costos manuales se normalizan por separado únicamente cuando están marcados como compartidos.
+    // De esta forma un gasto manual no se descuenta dos veces del consolidado.
+    const automaticCategories: BudgetItem["category"][] = [
+      "Dirección", "Asistencia", "Asistencia de dirección", "Honorarios no académicos", "Otros honorarios no académicos",
+      "Gastos operacionales", "Bienes y servicios", "Gastos operacionales / Bienes y servicios", "Software", "Software y licencias",
+    ];
     const automaticGroups = new Map<string, number[]>();
     for (const { budget, flow } of entries) {
       if (!budget.normalizeSharedCosts) continue;
-      const amount = flow.nonAcademicHonoraria + flow.operational + flow.software;
+      const manualIncluded = sum(budget.manualItems
+        .filter((item) => automaticCategories.includes(item.category))
+        .map((item) => manualItemAmountForYear(item, budget, year)));
+      const amount = Math.max(0, flow.nonAcademicHonoraria + flow.operational + flow.software - manualIncluded);
       const current = automaticGroups.get(budget.program.id) ?? [];
       current.push(amount);
       automaticGroups.set(budget.program.id, current);
@@ -90,10 +101,12 @@ export function consolidateBudgets(budgets: CohortBudget[], parameters: Institut
     const manualGroups = new Map<string, number[]>();
     for (const { budget } of entries) {
       if (!budget.normalizeSharedCosts) continue;
-      for (const item of budget.manualItems.filter((candidate) => candidate.year === year && candidate.costType === "Compartido con otras cohortes")) {
+      for (const item of budget.manualItems.filter((candidate) => candidate.costType === "Compartido con otras cohortes")) {
+        const amount = manualItemAmountForYear(item, budget, year);
+        if (amount <= 0) continue;
         const key = `${budget.program.id}|${year}|${item.category}|${normalizedName(item.name)}`;
         const current = manualGroups.get(key) ?? [];
-        current.push(item.amount);
+        current.push(amount);
         manualGroups.set(key, current);
       }
     }

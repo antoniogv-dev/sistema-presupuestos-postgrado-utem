@@ -9,6 +9,7 @@ const kindLabels: Record<CurriculumCourseKind, string> = {
   OBLIGATORIA: "Obligatoria",
   ELECTIVA: "Electivo",
   ESPECIALIZACION: "Especialización",
+  GRADUACION: "Asignatura de graduación / Tesis / AFE",
   COMPETENCIA_GENERICA: "Competencia genérica",
 };
 const uid = () => `course-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -38,7 +39,7 @@ export function CurriculumEditor({
   function update(index: number, patch: Partial<ProgramCourse>, recomputeDirect = false) {
     onChange(courses.map((course, i) => {
       if (i !== index) return course;
-      const next = { ...course, ...patch };
+      const next = { ...course, ...patch, autonomousWeeklyHours: 0 };
       if (recomputeDirect) next.directWeeklyHours = next.theoryWeeklyHours + next.laboratoryWeeklyHours + next.workshopWeeklyHours;
       if (next.kind === "OBLIGATORIA" || next.kind === "COMPETENCIA_GENERICA") next.sections = 1;
       if (next.kind === "COMPETENCIA_GENERICA") { next.sharedWithProgramIds = []; next.allocationRate = 1; }
@@ -53,7 +54,7 @@ export function CurriculumEditor({
     try {
       const analysis = await analyzeCurriculumFile(file);
       if (courses.length && !window.confirm(`Se detectaron ${analysis.courses.length} registros en “${analysis.sheetName}”. ¿Reemplazar la malla actualmente editada?`)) return;
-      const imported = analysis.courses.map((course, position) => ({ ...course, id: uid(), position }));
+      const imported = analysis.courses.map((course, position) => ({ ...course, autonomousWeeklyHours: 0, id: uid(), position }));
       onChange(imported);
       onMessage(`Malla importada al formulario: ${imported.length} registros · confianza ${Math.round(analysis.confidence * 100)}%. Presione “Guardar modificaciones” para persistirla en D1 antes de aplicarla a un presupuesto. ${analysis.warnings.join(" ")}`.trim());
     } catch (reason) {
@@ -74,17 +75,17 @@ export function CurriculumEditor({
         <button className="button secondary" type="button" onClick={() => add("OBLIGATORIA")}>+ Obligatoria</button>
         <button className="button secondary" type="button" onClick={() => add("ELECTIVA")}>+ Electivo</button>
         <button className="button secondary" type="button" onClick={() => add("ESPECIALIZACION")}>+ Especialización</button>
+        <button className="button secondary" type="button" onClick={() => add("GRADUACION")}>+ Graduación / Tesis / AFE</button>
         <button className="button secondary" type="button" onClick={() => add("COMPETENCIA_GENERICA")}>+ Competencia genérica</button>
       </div>
     </div>
     <div className="curriculum-summary"><strong>{payable.length}</strong> asignaturas valorizables · <strong>{generic.length}</strong> competencias genéricas · <strong>{totalSct.toLocaleString("es-CL")}</strong> SCT registrados</div>
     {!courses.length ? <div className="notice warning"><strong>Malla requerida</strong><p>Para crear un programa nuevo debe incorporar al menos una asignatura o competencia genérica, manualmente o mediante importación.</p></div> : null}
     <div className="table-wrap curriculum-table-wrap"><table className="data-table curriculum-table"><thead><tr>
-      <th>Sem.</th><th>Código</th><th>Asignatura</th><th>Tipo</th><th>Semanas</th><th>Secciones</th><th>Teoría</th><th>Lab.</th><th>Taller</th><th>Trabajo directo</th><th>Autónomo</th><th>Total semanal</th><th>Horas pedagógicas</th><th>Horas cronológicas</th><th>SCT</th><th>Docencia</th><th>Factor async.</th><th>Compartida con</th><th>% imputado</th><th>Requisitos</th><th>Acción</th>
+      <th>Sem.</th><th>Código</th><th>Asignatura</th><th>Tipo</th><th>Semanas</th><th>Secciones</th><th>Teoría</th><th>Lab.</th><th>Taller</th><th>Horas docencia directa</th><th>Horas directas/sem.</th><th>Horas directas periodo</th><th>SCT</th><th>Docencia</th><th>Factor async.</th><th>Compartida con</th><th>% imputado</th><th>Requisitos</th><th>Acción</th>
     </tr></thead><tbody>{courses.length ? courses.map((course, index) => {
-      const totalWeekly = course.directWeeklyHours + course.autonomousWeeklyHours;
+      const totalWeekly = course.directWeeklyHours;
       const pedagogical = totalWeekly * course.weeks;
-      const chronological = pedagogical * 0.75;
       const effectiveDirect = course.kind === "COMPETENCIA_GENERICA" ? 0 : course.directWeeklyHours * (course.teachingMode === "ASINCRONICA" ? course.asynchronousRateFactor : 1);
       return <tr key={course.id} className={course.kind === "COMPETENCIA_GENERICA" ? "curriculum-generic-row" : ""}>
         <td><input aria-label={`Semestre ${index + 1}`} type="number" min="1" max={Math.max(16, durationSemesters)} value={course.semester} onChange={(event) => update(index, { semester: Number(event.target.value) || 1 })} /></td>
@@ -97,8 +98,7 @@ export function CurriculumEditor({
         <td><input type="number" min="0" step="0.5" value={course.laboratoryWeeklyHours} onChange={(event) => update(index, { laboratoryWeeklyHours: Number(event.target.value) || 0 }, true)} /></td>
         <td><input type="number" min="0" step="0.5" value={course.workshopWeeklyHours} onChange={(event) => update(index, { workshopWeeklyHours: Number(event.target.value) || 0 }, true)} /></td>
         <td><input type="number" min="0" step="0.5" value={course.directWeeklyHours} onChange={(event) => update(index, { directWeeklyHours: Number(event.target.value) || 0 })} /></td>
-        <td><input type="number" min="0" step="0.5" value={course.autonomousWeeklyHours} onChange={(event) => update(index, { autonomousWeeklyHours: Number(event.target.value) || 0 })} /></td>
-        <td className="numeric">{totalWeekly.toLocaleString("es-CL")}</td><td className="numeric">{pedagogical.toLocaleString("es-CL")}</td><td className="numeric">{chronological.toLocaleString("es-CL")}</td>
+        <td className="numeric">{totalWeekly.toLocaleString("es-CL")}</td><td className="numeric">{pedagogical.toLocaleString("es-CL")}</td>
         <td><input type="number" min="0" step="0.5" value={course.sctCredits} onChange={(event) => update(index, { sctCredits: Number(event.target.value) || 0 })} /></td>
         <td><select disabled={course.kind === "COMPETENCIA_GENERICA"} value={course.teachingMode} onChange={(event) => update(index, { teachingMode: event.target.value as TeachingMode })}><option value="SINCRONICA">Sincrónica</option><option value="ASINCRONICA">Asincrónica</option><option value="PRESENCIAL">Presencial</option></select></td>
         <td><div className="percent-input"><input disabled={course.kind === "COMPETENCIA_GENERICA" || course.teachingMode !== "ASINCRONICA"} type="number" min="0" max="100" step="1" value={(course.asynchronousRateFactor * 100).toFixed(0)} onChange={(event) => update(index, { asynchronousRateFactor: Math.min(1, Math.max(0, Number(event.target.value) / 100)) })} /><span>%</span></div></td>
@@ -107,7 +107,7 @@ export function CurriculumEditor({
         <td><input value={course.prerequisites ?? ""} onChange={(event) => update(index, { prerequisites: event.target.value })} /></td>
         <td><button className="text-button danger-text" type="button" onClick={() => remove(index)}>Quitar</button></td>
       </tr>;
-    }) : <tr><td colSpan={21}>No se han incorporado asignaturas.</td></tr>}</tbody></table></div>
-    <div className="notice info"><strong>Regla curricular y financiera</strong><p>Las asignaturas obligatorias trabajan con una sección. Electivos y cursos de especialización pueden registrar varias secciones. Las competencias genéricas se registran en la malla y en el Excel, pero no generan costo docente. Las asignaturas asincrónicas valorizan sus horas directas con el factor indicado; por ejemplo, 50% sobre una hora base de $30.000 equivale a $15.000 por hora. Las asignaturas compartidas distribuyen el costo según el porcentaje imputado.</p></div>
+    }) : <tr><td colSpan={19}>No se han incorporado asignaturas.</td></tr>}</tbody></table></div>
+    <div className="notice info"><strong>Regla curricular y financiera</strong><p>Sólo las horas de docencia directa alimentan el presupuesto; las horas autónomas no se consideran en este módulo. Las asignaturas obligatorias trabajan con una sección. Electivos, especialización y asignaturas de graduación (Tesis/AFE) pueden registrar varias secciones. Las competencias genéricas se registran en la malla y en el Excel, pero no generan costo docente. Las asignaturas asincrónicas valorizan sus horas directas con el factor indicado; por ejemplo, 50% sobre una hora base de $30.000 equivale a $15.000 por hora. Las asignaturas compartidas distribuyen el costo según el porcentaje imputado.</p></div>
   </div>;
 }

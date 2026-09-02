@@ -23,7 +23,7 @@ const curriculumCourseSchema = z.object({
   code: z.string().trim().max(50).optional().nullable(),
   name: z.string().trim().min(2).max(300),
   semester: z.number().int().min(1).max(16),
-  kind: z.enum(["OBLIGATORIA", "ELECTIVA", "ESPECIALIZACION", "COMPETENCIA_GENERICA"]),
+  kind: z.enum(["OBLIGATORIA", "ELECTIVA", "ESPECIALIZACION", "GRADUACION", "COMPETENCIA_GENERICA"]),
   weeks: z.number().int().min(1).max(30).default(18),
   sections: z.number().int().min(1).max(20).default(1),
   theoryWeeklyHours: z.number().min(0).max(100).default(0),
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
       `).bind(
         d1Id("course"), programId, course.code || null, course.name, course.semester, course.kind, course.weeks, (course.kind === "OBLIGATORIA" || course.kind === "COMPETENCIA_GENERICA") ? 1 : course.sections,
-        course.theoryWeeklyHours, course.laboratoryWeeklyHours, course.workshopWeeklyHours, course.directWeeklyHours, course.autonomousWeeklyHours,
+        course.theoryWeeklyHours, course.laboratoryWeeklyHours, course.workshopWeeklyHours, course.directWeeklyHours, 0,
         course.teachingMode, course.asynchronousRateFactor, d1Json(course.sharedWithProgramIds), course.allocationRate, course.sctCredits, course.prerequisites || null, position,
       ));
     }

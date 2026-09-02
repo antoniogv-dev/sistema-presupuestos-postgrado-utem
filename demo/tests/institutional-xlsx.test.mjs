@@ -2,17 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { inflateRawSync } from "node:zlib";
 import { createHash } from "node:crypto";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
-const { demoBudget, institutionalParameters, programs } = await import(path.join(root, ".engine-build/lib/demo-data.js"));
-const { calculateBudget } = await import(path.join(root, ".engine-build/lib/calculations/budget-engine.js"));
-const { calculateBreakEvenEquivalentEnrollments } = await import(path.join(root, ".engine-build/lib/calculations/break-even.js"));
-const { applyProgramCurriculumToBudget } = await import(path.join(root, ".engine-build/lib/curriculum/budget-load.js"));
-const { createInstitutionalFormulaBudgetXlsx, canUseFormulaTemplate } = await import(path.join(root, ".engine-build/lib/export/institutional-budget-xlsx.js"));
+const { demoBudget, institutionalParameters, programs } = await import(pathToFileURL(path.join(root, ".engine-build/lib/demo-data.js")).href);
+const { calculateBudget } = await import(pathToFileURL(path.join(root, ".engine-build/lib/calculations/budget-engine.js")).href);
+const { calculateBreakEvenEquivalentEnrollments } = await import(pathToFileURL(path.join(root, ".engine-build/lib/calculations/break-even.js")).href);
+const { applyProgramCurriculumToBudget } = await import(pathToFileURL(path.join(root, ".engine-build/lib/curriculum/budget-load.js")).href);
+const { createInstitutionalFormulaBudgetXlsx, canUseFormulaTemplate } = await import(pathToFileURL(path.join(root, ".engine-build/lib/export/institutional-budget-xlsx.js")).href);
 
 const templatePath = path.join(root, "public/templates/presupuesto-profesional-formula-base-v10-30.xlsx");
 const template = new Uint8Array(readFileSync(templatePath));

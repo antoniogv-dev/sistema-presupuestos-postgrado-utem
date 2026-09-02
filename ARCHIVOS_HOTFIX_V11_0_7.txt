@@ -6,3 +6,5 @@ components/AppShell.tsx
 package.json
 README.md
 HOTFIX_V11_0_7_XLSX_FORMULA_PUNTO_EQUILIBRIO.md
+features/budgets/components/BudgetWorkspace.tsx
+LEAME_CORRECCION_BUILD_V11_0_7.md

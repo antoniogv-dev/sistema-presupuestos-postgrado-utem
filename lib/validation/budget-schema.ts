@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { billingConfigurationIssues } from "./billing-config";
 
 const percentage = z.number().min(0).max(1);
 const nonNegativeInteger = z.number().int().min(0);
@@ -26,6 +27,7 @@ export const semesterParametersSchema = z.object({
 export const cohortDiscountSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
+  target: z.enum(["TUITION", "ENROLLMENT"]).default("TUITION"),
   percentage,
   students: nonNegativeInteger,
   startYear: z.number().int(),
@@ -90,6 +92,15 @@ export const cohortBudgetSchema = z.object({
   initialStudents: nonNegativeInteger,
   facultyOverheadRate: percentage,
   enrollmentRecognitionRate: percentage,
+  tuitionPricingMode: z.enum(["ANNUAL_LEGACY", "PROGRAM_TOTAL"]).default("ANNUAL_LEGACY"),
+  enrollmentBillingMode: z.enum(["ANNUAL", "SINGLE_SPECIAL", "SEMESTER"]).default("ANNUAL"),
+  programTotalTuition: nonNegativeInteger.default(0),
+  singleEnrollmentFee: nonNegativeInteger.default(0),
+  semesterEnrollmentFee: nonNegativeInteger.default(0),
+  tuitionInstallments: z.number().int().min(1).max(120).default(1),
+  tuitionDistributionMode: z.enum(["PROPORTIONAL", "CUSTOM"]).default("PROPORTIONAL"),
+  tuitionSemesterDistribution: z.array(percentage).max(8).default([]),
+  badDebtRate: percentage.nullable().optional(),
   programVersionLabel: z.string().trim().min(1).max(80),
   scholarshipsEnabled: z.boolean(),
   deliveryModality: z.enum(["PRESENCIAL", "SEMIPRESENCIAL", "E_LEARNING"]).default("PRESENCIAL"),
@@ -109,12 +120,15 @@ export const cohortBudgetSchema = z.object({
       context.addIssue({ code: z.ZodIssueCode.custom, path: ["semesters", index, "graduatingStudents"], message: "Los estudiantes en graduación superan los estudiantes activos." });
     }
     const discountStudents = budget.discounts
-      .filter((discount) => semester.year * 2 + semester.semester >= discount.startYear * 2 + discount.startSemester && semester.year * 2 + semester.semester <= discount.endYear * 2 + discount.endSemester)
+      .filter((discount) => discount.target !== "ENROLLMENT" && semester.year * 2 + semester.semester >= discount.startYear * 2 + discount.startSemester && semester.year * 2 + semester.semester <= discount.endYear * 2 + discount.endSemester)
       .reduce((acc, discount) => acc + discount.students, 0);
     const scholarshipStudents = budget.scholarshipsEnabled ? semester.internalTuitionScholarshipStudents : 0;
     if (discountStudents + scholarshipStudents > semester.activeStudents) {
       context.addIssue({ code: z.ZodIssueCode.custom, path: ["semesters", index, "internalTuitionScholarshipStudents"], message: "Descuentos y becas de arancel superan los estudiantes activos." });
     }
+  }
+  for (const issue of billingConfigurationIssues(budget)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["tuitionPricingMode"], message: issue.message });
   }
 });
 

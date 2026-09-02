@@ -1,0 +1,11 @@
+lib/export/institutional-budget-xlsx.ts
+demo/tests/institutional-xlsx.test.mjs
+package.json
+app/api/version/route.ts
+components/AppShell.tsx
+features/budgets/components/BudgetWorkspace.tsx
+scripts/source-audit.mjs
+README.md
+HOTFIX_V11_0_9_ETIQUETAS_PUNTO_EQUILIBRIO.md
+VERIFICACION_V11_0_9.md
+ARCHIVOS_HOTFIX_V11_0_9.txt

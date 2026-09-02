@@ -156,6 +156,7 @@ function semesterFromLevel(value: CellValue | undefined): number | null {
 function kindFrom(name: string, semester: number | null, direct: number, code: string): CurriculumCourseKind {
   const key = normalize(name);
   if (semester == null || (direct === 0 && /^(humm|fitm)/i.test(code))) return "COMPETENCIA_GENERICA";
+  if (/\btesis\b|actividad formativa equivalente|\bafe\b|proyecto de graduacion|trabajo de graduacion/.test(key)) return "GRADUACION";
   if (key.includes("electivo")) return "ELECTIVA";
   if (key.includes("especializacion") || key.includes("especialidad")) return "ESPECIALIZACION";
   return "OBLIGATORIA";
@@ -171,7 +172,7 @@ function analyzeSheet(sheet: SheetMatrix): CurriculumImportAnalysis | null {
   // las horas en cero.  Se prueban ventanas de 1 a 3 filas y se combinan sus
   // etiquetas por columna antes de identificar cada campo.
   let best: { row: number; depth: number; score: number; headers: string[]; keys: string[] } | null = null;
-  const preferredKeys = ["semester", "code", "name", "weeks", "theory", "lab", "workshop", "direct", "autonomous", "sections", "sct", "requirements"];
+  const preferredKeys = ["semester", "code", "name", "weeks", "theory", "lab", "workshop", "direct", "sections", "sct", "requirements"];
   for (let start = 0; start < sheet.rows.length; start += 1) {
     for (let depth = 1; depth <= 3 && start + depth <= sheet.rows.length; depth += 1) {
       const headers = combineHeaderRows(sheet.rows, start, depth);
@@ -203,7 +204,7 @@ function analyzeSheet(sheet: SheetMatrix): CurriculumImportAnalysis | null {
       code: code || undefined, name, semester: finalSemester, kind,
       weeks: Math.max(1, Math.round(cols.weeks >= 0 ? (num(row[cols.weeks]) ?? 18) : 18)), sections,
       theoryWeeklyHours: theory, laboratoryWeeklyHours: lab, workshopWeeklyHours: workshop, directWeeklyHours: direct,
-      autonomousWeeklyHours: Math.max(0, cols.autonomous >= 0 ? (num(row[cols.autonomous]) ?? 0) : 0), teachingMode: mode,
+      autonomousWeeklyHours: 0, teachingMode: mode,
       asynchronousRateFactor: clamp(factor ?? 0.5, 0, 1), sharedWithProgramIds: [], allocationRate: 1,
       sctCredits: Math.max(0, cols.sct >= 0 ? (num(row[cols.sct]) ?? 0) : 0), prerequisites: cols.requirements >= 0 ? text(row[cols.requirements]) || undefined : undefined,
       position: courses.length,

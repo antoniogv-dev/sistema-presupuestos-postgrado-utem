@@ -83,7 +83,7 @@ async function loadInstitutionalBudgetXlsxTemplate(): Promise<Uint8Array> {
 }
 
 export async function downloadBudgetXlsx(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters) {
-  if (budget.program.type === "MAGISTER_PROFESIONAL") {
+  if (budget.program.type === "MAGISTER_PROFESIONAL" && budget.tuitionPricingMode !== "PROGRAM_TOTAL" && !budget.discounts.some((discount) => discount.target === "ENROLLMENT")) {
     const compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result);
     if (compatibilityIssue) throw new Error(compatibilityIssue);
     const template = await loadInstitutionalBudgetXlsxTemplate();
@@ -91,7 +91,7 @@ export async function downloadBudgetXlsx(budget: CohortBudget, result: BudgetRes
     download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
     return;
   }
-  // Otros tipos de programa mantienen la exportación trazable general. Un Magíster Profesional nunca cae silenciosamente al formato antiguo.
+  // Los presupuestos con arancel total usan el XLSX trazable general, porque la plantilla institucional histórica está estructurada por arancel anual. Los profesionales en modo legado mantienen esa plantilla sin cambios.
   const report = buildFinancialReport(budget, result);
   const parameterReport = buildParameterReport(budget, result, parameters);
   download(createFinancialReportXlsx(report, parameterReport), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", humanBudgetFilename(budget, "xlsx"));

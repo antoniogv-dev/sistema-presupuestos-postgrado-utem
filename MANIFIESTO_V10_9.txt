@@ -1,0 +1,19 @@
+Sistema de Presupuestos de Postgrado UTEM
+Release: v10.9
+Versión: 1.0.19-d1-web
+Base: v10.8 estable
+
+Cambios principales:
+- categoría Alimentos y bebidas;
+- todas las familias de costos y gastos visibles en flujo;
+- eliminación de filas Descuentos matrícula y Matrícula neta;
+- matrícula consolidada en una línea informativa con descuentos aplicados;
+- arancel anual editable/persistente por año activo;
+- migración 0005 incremental y backfill de arancel;
+- exportaciones alineadas al nuevo flujo.
+
+Controles preservados:
+- PBKDF2 100_000;
+- prisma generate sin --no-engine;
+- D1 binding DB;
+- autenticación interna y roles v10.7/v10.8.

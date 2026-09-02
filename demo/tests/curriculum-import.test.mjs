@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
-const { analyzeCurriculumMatrix } = await import(path.join(root, ".engine-build/lib/import/curriculum-file-import.js"));
+const { analyzeCurriculumMatrix } = await import(pathToFileURL(path.join(root, ".engine-build/lib/import/curriculum-file-import.js")).href);
 
 const rows = [
   ["PLAN DE ESTUDIOS MAGISTER EN TERRITORIO"],

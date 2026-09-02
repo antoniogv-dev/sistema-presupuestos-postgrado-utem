@@ -107,7 +107,10 @@ export function buildHistoricalCohortSnapshots(
 function annualIncomeDetail(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters): string {
   return result.annualFlows.map((flow) => {
     const annual = resolvedAnnualOverrideForYear(budget, parameters, flow.year);
-    return `${flow.year}: arancel ${money(annual.annualTuition)} por estudiante, arancel bruto ${money(flow.grossTuition)}, descuentos y becas ${money(flow.discounts + flow.internalTuitionScholarships)}, incobrabilidad ${money(flow.badDebt)} e ingresos netos ${money(flow.totalIncome)}`;
+    const tuitionBasis = budget.tuitionPricingMode === "PROGRAM_TOTAL"
+      ? `participación ${(flow.tuitionDistributionShare * 100).toLocaleString("es-CL", { maximumFractionDigits: 2 })}% del arancel total de ${money(budget.programTotalTuition ?? 0)}`
+      : `arancel ${money(annual.annualTuition)} por estudiante`;
+    return `${flow.year}: ${tuitionBasis}, arancel bruto ${money(flow.grossTuition)}, descuentos y becas ${money(flow.discounts + flow.internalTuitionScholarships)}, incobrabilidad ${money(flow.badDebt)} e ingresos netos ${money(flow.totalIncome)}`;
   }).join("; ");
 }
 
@@ -157,7 +160,10 @@ export function buildFinancialNarrative(
   const groups = costGroups(result);
   const previous = history.at(-1);
 
-  const antecedents = `La cohorte analizada corresponde a ${budget.program.name}, versión ${budget.programVersionLabel}, con inicio ${budget.startYear}-${budget.startSemester}S y una duración presupuestada de ${budget.durationSemesters} semestres (${periodText}). La formulación considera ${current.initialStudents} estudiante(s) inicialmente matriculados o proyectados y ${current.activeStudents} estudiante(s) vigentes en el último semestre presupuestado. El valor bruto de matrícula asciende a ${money(enrollmentGross)} durante el horizonte. Conforme al porcentaje de reconocimiento definido en la formulación, ${money(enrollmentRecognized)} se incorpora como ingreso del programa. Este ingreso no forma parte de la base de overhead.`;
+  const pricingContext = budget.tuitionPricingMode === "PROGRAM_TOTAL"
+    ? `El precio académico se define como un arancel total del programa de ${money(budget.programTotalTuition ?? 0)}, distribuido presupuestariamente entre los semestres sin alterar dicho precio.`
+    : "La formulación conserva la estructura histórica de arancel anual.";
+  const antecedents = `La cohorte analizada corresponde a ${budget.program.name}, versión ${budget.programVersionLabel}, con inicio ${budget.startYear}-${budget.startSemester}S y una duración presupuestada de ${budget.durationSemesters} semestres (${periodText}). ${pricingContext} La formulación considera ${current.initialStudents} estudiante(s) inicialmente matriculados o proyectados y ${current.activeStudents} estudiante(s) vigentes en el último semestre presupuestado. El valor bruto de matrícula asciende a ${money(enrollmentGross)} durante el horizonte. Conforme al porcentaje de reconocimiento definido en la formulación, ${money(enrollmentRecognized)} se incorpora como ingreso del programa. Este ingreso no forma parte de la base de overhead.`;
 
   const income = `Los ingresos brutos por aranceles alcanzan ${money(current.grossTuition)} para el ciclo completo. Sobre dicho monto se aplican becas y descuentos por ${money(current.discountsAndScholarships)} e incobrabilidad por ${money(current.badDebt)} (${formatPercent(badDebtRate)} aplicado en esta formulación). La matrícula reconocida aporta ${money(enrollmentRecognized)} a los ingresos del programa. Los ingresos extraordinarios calculados por estudiante u otras bases ascienden a ${money(externalIncome)}, mientras que el financiamiento institucional fijo registrado para el proyecto/programa alcanza ${money(institutionalFinancing)}. Como resultado, los ingresos netos presupuestados totalizan ${money(current.netIncome)}, equivalentes a ${moneyOrNA(current.incomePerStudent)} por estudiante inicial. El overhead se mantiene calculado exclusivamente sobre el arancel neto sujeto a cobro, sin incorporar matrícula reconocida ni financiamiento institucional. El detalle anual es: ${annualIncomeDetail(budget, result, parameters)}.`;
 

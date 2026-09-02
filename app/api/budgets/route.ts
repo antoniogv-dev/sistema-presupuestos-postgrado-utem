@@ -4,6 +4,7 @@ import { apiError, hasAnyAccess, requireApiIdentity } from "@/lib/auth/api-acces
 import { d1Id, d1Json, runD1Batch } from "@/lib/database/d1-atomic";
 import { getPrismaClient } from "@/lib/database/prisma";
 import { d1Database } from "@/lib/runtime-env";
+import { assertBillingConfiguration } from "@/lib/validation/billing-config";
 
 const annualOverrideSchema = z.object({
   year: z.number().int().min(2000).max(2100),
@@ -45,6 +46,15 @@ const createSchema = z.object({
   initialStudents: z.number().int().min(0),
   facultyOverheadRate: z.number().min(0).max(1),
   enrollmentRecognitionRate: z.number().min(0).max(1).default(0),
+  tuitionPricingMode: z.enum(["ANNUAL_LEGACY", "PROGRAM_TOTAL"]).default("ANNUAL_LEGACY"),
+  enrollmentBillingMode: z.enum(["ANNUAL", "SINGLE_SPECIAL", "SEMESTER"]).default("ANNUAL"),
+  programTotalTuition: z.number().int().nonnegative().default(0),
+  singleEnrollmentFee: z.number().int().nonnegative().default(0),
+  semesterEnrollmentFee: z.number().int().nonnegative().default(0),
+  tuitionInstallments: z.number().int().min(1).max(120).default(1),
+  tuitionDistributionMode: z.enum(["PROPORTIONAL", "CUSTOM"]).default("PROPORTIONAL"),
+  tuitionSemesterDistribution: z.array(z.number().min(0).max(1)).max(8).default([]),
+  curriculumSectionOverrides: z.record(z.string(), z.number().int().min(0).max(500)).default({}),
   badDebtRate: z.number().min(0).max(1).optional().nullable(),
   programVersionLabel: z.string().trim().min(1).max(80).optional(),
   scholarshipsEnabled: z.boolean().optional(),
@@ -156,11 +166,28 @@ export async function POST(request: Request) {
       ...input,
       facultyOverheadRate: isAcademic(program.type) ? 0 : input.facultyOverheadRate,
       enrollmentRecognitionRate: input.enrollmentRecognitionRate ?? 0,
+      tuitionPricingMode: input.tuitionPricingMode ?? "ANNUAL_LEGACY",
+      enrollmentBillingMode: input.enrollmentBillingMode ?? "ANNUAL",
+      programTotalTuition: input.programTotalTuition ?? 0,
+      singleEnrollmentFee: input.singleEnrollmentFee ?? 0,
+      semesterEnrollmentFee: input.semesterEnrollmentFee ?? 0,
+      tuitionInstallments: input.tuitionInstallments ?? 1,
+      tuitionDistributionMode: input.tuitionDistributionMode ?? "PROPORTIONAL",
+      tuitionSemesterDistribution: input.tuitionSemesterDistribution ?? [],
+      curriculumSectionOverrides: input.curriculumSectionOverrides ?? {},
       badDebtRate: input.badDebtRate ?? null,
       programVersionLabel: input.programVersionLabel?.trim() || program.versionLabel || "1",
       scholarshipsEnabled: input.scholarshipsEnabled ?? (program.type !== ProgramType.MAGISTER_PROFESIONAL),
       deliveryModality: input.deliveryModality ?? "PRESENCIAL",
     };
+    assertBillingConfiguration({
+      tuitionPricingMode: effectiveInput.tuitionPricingMode,
+      programTotalTuition: effectiveInput.programTotalTuition,
+      tuitionInstallments: effectiveInput.tuitionInstallments,
+      tuitionDistributionMode: effectiveInput.tuitionDistributionMode,
+      tuitionSemesterDistribution: effectiveInput.tuitionSemesterDistribution,
+      durationSemesters: effectiveInput.durationSemesters,
+    });
     const budgetId = d1Id("budget");
     const versionId = d1Id("budget-version");
     const database = d1Database();
@@ -169,15 +196,20 @@ export async function POST(request: Request) {
         INSERT INTO "CohortBudget" (
           "id", "programId", "cohortName", "startYear", "startSemester", "durationSemesters",
           "initialStudents", "status", "workflowStage", "facultyOverheadRate",
-          "enrollmentRecognitionRate", "badDebtRate", "programVersionLabel", "scholarshipsEnabled", "deliveryModality",
+          "enrollmentRecognitionRate", "tuitionPricingMode", "enrollmentBillingMode", "programTotalTuition",
+          "singleEnrollmentFee", "semesterEnrollmentFee", "tuitionInstallments", "tuitionDistributionMode", "tuitionSemesterDistribution", "curriculumSectionOverrides",
+          "badDebtRate", "programVersionLabel", "scholarshipsEnabled", "deliveryModality",
           "authorizedInitialCarryover", "includeAuthorizedCarryover", "normalizeSharedCosts",
           "alertPotentialDuplicates", "appliedTemplateId", "appliedTemplateVersion", "notes",
           "responsibleId", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BORRADOR', 'GESTION', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BORRADOR', 'GESTION', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `).bind(
         budgetId, effectiveInput.programId, effectiveInput.cohortName, effectiveInput.startYear,
         effectiveInput.startSemester, effectiveInput.durationSemesters, effectiveInput.initialStudents,
-        effectiveInput.facultyOverheadRate, effectiveInput.enrollmentRecognitionRate, effectiveInput.badDebtRate,
+        effectiveInput.facultyOverheadRate, effectiveInput.enrollmentRecognitionRate, effectiveInput.tuitionPricingMode,
+        effectiveInput.enrollmentBillingMode, effectiveInput.programTotalTuition, effectiveInput.singleEnrollmentFee,
+        effectiveInput.semesterEnrollmentFee, effectiveInput.tuitionInstallments, effectiveInput.tuitionDistributionMode,
+        d1Json(effectiveInput.tuitionSemesterDistribution), d1Json(effectiveInput.curriculumSectionOverrides), effectiveInput.badDebtRate,
         effectiveInput.programVersionLabel, effectiveInput.scholarshipsEnabled ? 1 : 0, effectiveInput.deliveryModality,
         effectiveInput.authorizedInitialCarryover, effectiveInput.includeAuthorizedCarryover ? 1 : 0,
         effectiveInput.normalizeSharedCosts ? 1 : 0, effectiveInput.alertPotentialDuplicates ? 1 : 0,

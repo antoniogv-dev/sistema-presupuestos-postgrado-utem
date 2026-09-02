@@ -56,6 +56,15 @@ export type ApiBudgetRecord = {
   workflowStage: CohortBudget["workflowStage"];
   facultyOverheadRate: string | number;
   enrollmentRecognitionRate: string | number;
+  tuitionPricingMode?: CohortBudget["tuitionPricingMode"] | string | null;
+  enrollmentBillingMode?: CohortBudget["enrollmentBillingMode"] | string | null;
+  programTotalTuition?: string | number | null;
+  singleEnrollmentFee?: string | number | null;
+  semesterEnrollmentFee?: string | number | null;
+  tuitionInstallments?: string | number | null;
+  tuitionDistributionMode?: CohortBudget["tuitionDistributionMode"] | string | null;
+  tuitionSemesterDistribution?: string | number[] | null;
+  curriculumSectionOverrides?: string | Record<string, number> | null;
   badDebtRate?: string | number | null;
   programVersionLabel?: string | null;
   scholarshipsEnabled?: boolean | number;
@@ -100,6 +109,25 @@ export const numberValue = (value: unknown): number =>
 
 const optionalNumberValue = (value: unknown): number =>
   value === null || value === undefined ? Number.NaN : numberValue(value);
+
+function numberArrayValue(value: unknown): number[] {
+  if (Array.isArray(value)) return value.map(numberValue);
+  if (typeof value === "string" && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.map(numberValue) : [];
+    } catch { return []; }
+  }
+  return [];
+}
+
+
+function numberRecordValue(value: unknown): Record<string, number> {
+  let parsed = value;
+  if (typeof value === "string" && value.trim()) { try { parsed = JSON.parse(value); } catch { return {}; } }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  return Object.fromEntries(Object.entries(parsed as Record<string, unknown>).map(([key, item]) => [key, Math.max(0, Math.round(numberValue(item)))]));
+}
 
 function canonicalCostCategory(value: unknown): CohortBudget["manualItems"][number]["category"] {
   const category = String(value ?? "Otros costos y gastos");
@@ -174,7 +202,7 @@ export function toProgram(record: ApiProgram): Program {
     laboratoryWeeklyHours: Math.max(0, numberValue(item.laboratoryWeeklyHours)),
     workshopWeeklyHours: Math.max(0, numberValue(item.workshopWeeklyHours)),
     directWeeklyHours: Math.max(0, numberValue(item.directWeeklyHours)),
-    autonomousWeeklyHours: Math.max(0, numberValue(item.autonomousWeeklyHours)),
+    autonomousWeeklyHours: 0,
     teachingMode: String(item.teachingMode ?? "SINCRONICA") as "PRESENCIAL" | "SINCRONICA" | "ASINCRONICA",
     asynchronousRateFactor: Math.max(0, Math.min(1, numberValue(item.asynchronousRateFactor ?? 0.5))),
     sharedWithProgramIds: Array.isArray(item.sharedWithProgramIds) ? item.sharedWithProgramIds.map(String) : [],
@@ -334,6 +362,15 @@ export function toBudget(record: ApiBudgetRecord): CohortBudget {
     workflowStage: record.workflowStage,
     facultyOverheadRate: numberValue(record.facultyOverheadRate),
     enrollmentRecognitionRate: numberValue(record.enrollmentRecognitionRate),
+    tuitionPricingMode: record.tuitionPricingMode === "PROGRAM_TOTAL" ? "PROGRAM_TOTAL" : "ANNUAL_LEGACY",
+    enrollmentBillingMode: record.enrollmentBillingMode === "SINGLE_SPECIAL" || record.enrollmentBillingMode === "SEMESTER" ? record.enrollmentBillingMode : "ANNUAL",
+    programTotalTuition: numberValue(record.programTotalTuition),
+    singleEnrollmentFee: numberValue(record.singleEnrollmentFee),
+    semesterEnrollmentFee: numberValue(record.semesterEnrollmentFee),
+    tuitionInstallments: Math.max(1, Math.round(numberValue(record.tuitionInstallments) || 1)),
+    tuitionDistributionMode: record.tuitionDistributionMode === "CUSTOM" ? "CUSTOM" : "PROPORTIONAL",
+    tuitionSemesterDistribution: numberArrayValue(record.tuitionSemesterDistribution),
+    curriculumSectionOverrides: numberRecordValue(record.curriculumSectionOverrides),
     badDebtRate: optionalNumberValue(record.badDebtRate),
     programVersionLabel: record.programVersionLabel?.trim() || record.program.versionLabel?.trim() || "1",
     scholarshipsEnabled: record.scholarshipsEnabled === undefined ? record.program.type !== "MAGISTER_PROFESIONAL" : Boolean(record.scholarshipsEnabled),
@@ -355,6 +392,7 @@ export function toBudget(record: ApiBudgetRecord): CohortBudget {
     discounts: (record.discounts ?? []).map((item) => ({
       id: String(item.id),
       name: String(item.name),
+      target: String(item.target ?? "TUITION") === "ENROLLMENT" ? "ENROLLMENT" : "TUITION",
       percentage: numberValue(item.percentage),
       students: numberValue(item.students),
       startYear: numberValue(item.startYear),

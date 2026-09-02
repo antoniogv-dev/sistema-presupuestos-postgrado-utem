@@ -1,5 +1,6 @@
 import { effectiveBadDebtRate, resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
 import { calculateBreakEvenEquivalentEnrollments } from "../calculations/break-even";
+import { normalizedTuitionDistribution } from "../calculations/billing";
 import type { BudgetResult, CohortBudget, InstitutionalParameters } from "../calculations/types";
 
 export type ReportRowTone = "income" | "expense" | "section" | "result" | "plain";
@@ -50,7 +51,8 @@ export function buildFinancialReport(budget: CohortBudget, result: BudgetResult)
     years: result.years,
     generatedAt: new Date().toISOString(),
     rows: [
-      { label: "Matrícula anual bruta (referencial, sin descuentos)", values: positive("grossEnrollmentFee"), tone: "income", valueKind: "currency" },
+      { label: budget.enrollmentBillingMode === "SINGLE_SPECIAL" ? "Matrícula única / especial bruta" : budget.enrollmentBillingMode === "SEMESTER" ? "Matrícula semestral bruta" : "Matrícula anual bruta", values: positive("grossEnrollmentFee"), tone: "income", valueKind: "currency" },
+      ...(f.some((flow) => flow.enrollmentDiscounts > 0) ? [{ label: "Descuentos matrícula", values: negative("enrollmentDiscounts"), tone: "income" as const, valueKind: "currency" as const }] : []),
       ...(budget.enrollmentRecognitionRate > 0 ? [{ label: "Matrícula reconocida (ingreso del programa)", values: positive("recognizedEnrollmentFee"), tone: "income" as const, valueKind: "currency" as const }] : []),
       { label: "Arancel bruto", values: positive("grossTuition"), tone: "income", valueKind: "currency" },
       { label: "Descuentos arancel", values: negative("discounts"), tone: "income", valueKind: "currency" },
@@ -169,6 +171,23 @@ export function buildParameterReport(
   pushText("Identificación", "Fecha de creación", "General", budget.createdAt);
   pushText("Identificación", "Última actualización", "General", budget.updatedAt ?? "No informada");
   pushText("Identificación", "Fuente del arancel", "General", budget.program.tuitionSource ?? "PROPIO");
+  pushText("Estructura de cobro", "Modelo de arancel", "General", budget.tuitionPricingMode === "PROGRAM_TOTAL" ? "Arancel total del programa" : "Arancel anual (compatibilidad)");
+  pushText("Estructura de cobro", "Modalidad de matrícula", "General", budget.enrollmentBillingMode === "SINGLE_SPECIAL" ? "Matrícula única / especial" : budget.enrollmentBillingMode === "SEMESTER" ? "Matrícula semestral" : "Matrícula anual");
+  if (budget.tuitionPricingMode === "PROGRAM_TOTAL") {
+    pushCurrency("Estructura de cobro", "Arancel total del programa", "Programa completo", budget.programTotalTuition ?? 0);
+    pushCurrency("Estructura de cobro", "Arancel equivalente por semestre", "Referencial", (budget.programTotalTuition ?? 0) / Math.max(1, budget.durationSemesters));
+    pushNumber("Estructura de cobro", "Número de cuotas del arancel", "Programa completo", budget.tuitionInstallments ?? 1);
+    pushText("Estructura de cobro", "Distribución presupuestaria", "General", budget.tuitionDistributionMode === "CUSTOM" ? "Personalizada" : "Proporcional por semestre");
+    normalizedTuitionDistribution(budget).forEach((period, index) => {
+      pushPercent("Estructura de cobro", `Distribución semestre ${index + 1}`, periodLabel(period.year, period.semester), period.share);
+      pushCurrency("Estructura de cobro", `Arancel por estudiante · semestre ${index + 1}`, periodLabel(period.year, period.semester), (budget.programTotalTuition ?? 0) * period.share);
+    });
+  }
+  if (budget.enrollmentBillingMode === "SINGLE_SPECIAL") pushCurrency("Estructura de cobro", "Matrícula única / especial", "Programa completo", budget.singleEnrollmentFee ?? 0);
+  if (budget.enrollmentBillingMode === "SEMESTER") {
+    pushCurrency("Estructura de cobro", "Matrícula por semestre", "Cada semestre activo", budget.semesterEnrollmentFee ?? 0);
+    pushCurrency("Estructura de cobro", "Matrícula total por estudiante", "Programa completo", (budget.semesterEnrollmentFee ?? 0) * budget.durationSemesters);
+  }
   pushText("Identificación", "Plantilla aplicada", "General", budget.appliedTemplateCode ?? "Sin plantilla", budget.appliedTemplateVersion ? `Versión ${budget.appliedTemplateVersion}` : undefined);
   pushText("Identificación", "Observaciones generales", "General", budget.notes?.trim() || "Sin observaciones");
 
@@ -190,8 +209,9 @@ export function buildParameterReport(
     const year = flow.year;
     const annual = resolvedAnnualOverrideForYear(budget, parameters, year);
     const section = "Parámetros anuales";
-    pushCurrency(section, "Arancel anual por estudiante", String(year), annual.annualTuition, "Valor efectivo usado para calcular el arancel bruto");
-    pushCurrency(section, "Matrícula anual por estudiante", String(year), annual.annualEnrollmentFee, budget.enrollmentRecognitionRate > 0 ? `Sin descuentos; ${(budget.enrollmentRecognitionRate * 100).toLocaleString("es-CL", { maximumFractionDigits: 1 })}% se reconoce como ingreso y no integra la base de overhead` : "Referencial; sin descuentos y sin reconocimiento como ingreso");
+    if (budget.tuitionPricingMode !== "PROGRAM_TOTAL") pushCurrency(section, "Arancel anual por estudiante", String(year), annual.annualTuition, "Valor efectivo usado para calcular el arancel bruto en modo histórico");
+    else pushPercent(section, "Participación del arancel total reconocida en el año", String(year), flow.tuitionDistributionShare, "Distribución temporal; no modifica el precio total del programa");
+    if ((budget.enrollmentBillingMode ?? "ANNUAL") === "ANNUAL") pushCurrency(section, "Matrícula anual por estudiante", String(year), annual.annualEnrollmentFee, budget.enrollmentRecognitionRate > 0 ? `${(budget.enrollmentRecognitionRate * 100).toLocaleString("es-CL", { maximumFractionDigits: 1 })}% de la matrícula neta se reconoce como ingreso y no integra la base de overhead` : "Matrícula anual sin reconocimiento como ingreso");
     if (budget.program.type === "MAGISTER_PROFESIONAL") {
       pushCurrency(section, "Valor hora docencia sincrónica", String(year), annual.synchronousTeachingHourValue, "Valor hora único visible para la modalidad profesional");
     } else {
@@ -231,15 +251,15 @@ export function buildParameterReport(
     pushPercent(section, "Overhead central", String(year), annual.centralOverheadRate);
     pushPercent(section, "Overhead facultad", String(year), annual.facultyOverheadRate);
     pushNumber(section, "Semestres activos en el año", String(year), flow.activeSemesters);
-    pushNumber(section, "Factor de arancel anual", String(year), flow.tuitionFactor, "0,5 por semestre activo");
+    pushNumber(section, budget.tuitionPricingMode === "PROGRAM_TOTAL" ? "Participación anual del arancel total" : "Factor de arancel anual", String(year), flow.tuitionFactor, budget.tuitionPricingMode === "PROGRAM_TOTAL" ? "Participación del precio total reconocida presupuestariamente en el año" : "Ciclos anuales cobrados");
   }
 
   if (budget.program.type === "MAGISTER_PROFESIONAL") {
     const breakEven = calculateBreakEvenEquivalentEnrollments(budget, parameters);
     if (breakEven.minimumEquivalentEnrollments !== null) {
-      pushNumber("Punto de equilibrio", "Matrículas equivalentes mínimas", "Primer año presupuestario", breakEven.minimumEquivalentEnrollments, `Costos fijos / [arancel × (1 − incobrabilidad) × (1 − overhead central − overhead facultad)]. Umbral exacto ${breakEven.minimumEquivalentEnrollmentsExact?.toLocaleString("es-CL", { maximumFractionDigits: 4 })}`);
-      pushNumber("Punto de equilibrio", "Estudiantes a arancel completo aproximados", "Primer año presupuestario", breakEven.minimumWholeStudents ?? 0, "Redondeo hacia arriba del umbral equivalente");
-      pushNumber("Punto de equilibrio", "Matrículas equivalentes actuales de referencia", "Primer año presupuestario", breakEven.currentEquivalentEnrollments, "Los descuentos inciden en esta equivalencia, no en el umbral requerido expresado en equivalentes.");
+      pushNumber("Punto de equilibrio", "Matrículas equivalentes mínimas", budget.tuitionPricingMode === "PROGRAM_TOTAL" ? "Programa completo" : "Primer año presupuestario", breakEven.minimumEquivalentEnrollments, `Costos fijos / [arancel × (1 − incobrabilidad) × (1 − overhead central − overhead facultad)]. Umbral exacto ${breakEven.minimumEquivalentEnrollmentsExact?.toLocaleString("es-CL", { maximumFractionDigits: 4 })}`);
+      pushNumber("Punto de equilibrio", "Estudiantes a arancel completo aproximados", budget.tuitionPricingMode === "PROGRAM_TOTAL" ? "Programa completo" : "Primer año presupuestario", breakEven.minimumWholeStudents ?? 0, "Redondeo hacia arriba del umbral equivalente");
+      pushNumber("Punto de equilibrio", "Matrículas equivalentes actuales de referencia", budget.tuitionPricingMode === "PROGRAM_TOTAL" ? "Programa completo" : "Primer año presupuestario", breakEven.currentEquivalentEnrollments, "Los descuentos inciden en esta equivalencia, no en el umbral requerido expresado en equivalentes.");
     } else {
       pushText("Punto de equilibrio", "Resultado", "Primer año presupuestario", "No determinable: la contribución neta por matrícula equivalente es nula o negativa.");
     }
@@ -270,19 +290,19 @@ export function buildParameterReport(
     pushText(section, "Observaciones del periodo", period, semester.notes?.trim() || "Sin observaciones");
   }
 
-  // Descuentos de arancel: cada registro, vigencia, cantidad y observación.
+  // Descuentos: cada registro identifica explícitamente si afecta arancel o matrícula.
   if (budget.discounts.length === 0) {
-    pushText("Descuentos de arancel", "Descuentos registrados", "General", "Sin descuentos");
+    pushText("Descuentos", "Descuentos registrados", "General", "Sin descuentos");
   } else {
     budget.discounts.forEach((discount, index) => {
       const label = `Descuento ${index + 1}: ${discount.name}`;
       const period = `${periodLabel(discount.startYear, discount.startSemester)} a ${periodLabel(discount.endYear, discount.endSemester)}`;
       pushPercent(
-        "Descuentos de arancel",
+        discount.target === "ENROLLMENT" ? "Descuentos de matrícula" : "Descuentos de arancel",
         label,
         period,
         discount.percentage,
-        appendDetail(`${discount.students} estudiante(s)`, "Aplicado exclusivamente al arancel", discount.note ? `Nota: ${discount.note}` : undefined, discount.originTemplateItemKey ? `Origen plantilla: ${discount.originTemplateItemKey}` : undefined),
+        appendDetail(`${discount.students} estudiante(s)`, discount.target === "ENROLLMENT" ? "Aplicado a matrícula" : "Aplicado a arancel", discount.note ? `Nota: ${discount.note}` : undefined, discount.originTemplateItemKey ? `Origen plantilla: ${discount.originTemplateItemKey}` : undefined),
       );
     });
   }
@@ -393,6 +413,11 @@ function rowHasMeaningfulInformation(row: ParameterReportRow): boolean {
 
   if (row.section === "Parámetros institucionales generales") return false;
 
+  if (row.section === "Estructura de cobro") {
+    if (typeof row.value === "number") return Number.isFinite(row.value) && Math.abs(row.value) > 0.000001;
+    return hasActualText(row.value);
+  }
+
   if (row.section === "Parámetros anuales") {
     if (!PDF_PRIMARY_PARAMETERS.has(row.parameter)) return false;
     if (typeof row.value === "number") {
@@ -405,7 +430,7 @@ function rowHasMeaningfulInformation(row: ParameterReportRow): boolean {
   // Los descuentos concretos son un supuesto central del ingreso y se conservan sólo
   // cuando existen. No se repiten cargas semestrales, punto de equilibrio ni costos
   // manuales porque ya están explicados en el relato y en el flujo.
-  if (row.section === "Descuentos de arancel") {
+  if (row.section === "Descuentos de arancel" || row.section === "Descuentos de matrícula") {
     if (typeof row.value === "number") return Math.abs(row.value) > 0.000001;
     return hasActualText(row.value);
   }

@@ -1,4 +1,5 @@
 import { getActivePeriods, getActiveYears } from "../calculations/periods";
+import { billingConfigurationIssues } from "./billing-config";
 import type { BudgetTemplate, CohortBudget, Program } from "../calculations/types";
 
 export type BudgetIntegritySeverity = "error" | "warning";
@@ -9,7 +10,10 @@ export type BudgetIntegrityCode =
   | "SEMESTER_RANGE_MISMATCH"
   | "ANNUAL_RANGE_MISMATCH"
   | "PROFESSIONAL_SCHOLARSHIP_MISMATCH"
-  | "ACADEMIC_OVERHEAD_MISMATCH";
+  | "ACADEMIC_OVERHEAD_MISMATCH"
+  | "PROGRAM_TOTAL_TUITION_INVALID"
+  | "TUITION_DISTRIBUTION_INVALID"
+  | "TUITION_INSTALLMENTS_INVALID";
 
 export interface BudgetIntegrityIssue {
   code: BudgetIntegrityCode;
@@ -111,6 +115,14 @@ export function auditBudgetIntegrity(
       code: "ACADEMIC_OVERHEAD_MISMATCH",
       severity: "warning",
       message: "El programa académico/doctoral conserva overhead de facultad, aunque la regla vigente lo excluye del cálculo.",
+    });
+  }
+
+  for (const billingIssue of billingConfigurationIssues(budget)) {
+    issues.push({
+      code: billingIssue.code,
+      severity: "error",
+      message: billingIssue.message,
     });
   }
 

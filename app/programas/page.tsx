@@ -112,7 +112,7 @@ function formFromRecord(record: ApiProgram, years: number[]): ProgramForm {
       kind: String(item.kind ?? "OBLIGATORIA") as ProgramCourse["kind"],
       weeks: Math.max(1, Math.round(numberValue(item.weeks) || 18)),
       sections: Math.max(1, Math.round(numberValue(item.sections) || 1)),
-      theoryWeeklyHours: Math.max(0, numberValue(item.theoryWeeklyHours)), laboratoryWeeklyHours: Math.max(0, numberValue(item.laboratoryWeeklyHours)), workshopWeeklyHours: Math.max(0, numberValue(item.workshopWeeklyHours)), directWeeklyHours: Math.max(0, numberValue(item.directWeeklyHours)), autonomousWeeklyHours: Math.max(0, numberValue(item.autonomousWeeklyHours)),
+      theoryWeeklyHours: Math.max(0, numberValue(item.theoryWeeklyHours)), laboratoryWeeklyHours: Math.max(0, numberValue(item.laboratoryWeeklyHours)), workshopWeeklyHours: Math.max(0, numberValue(item.workshopWeeklyHours)), directWeeklyHours: Math.max(0, numberValue(item.directWeeklyHours)), autonomousWeeklyHours: 0,
       teachingMode: String(item.teachingMode ?? "SINCRONICA") as ProgramCourse["teachingMode"], asynchronousRateFactor: Math.max(0, Math.min(1, numberValue(item.asynchronousRateFactor ?? 0.5))),
       sharedWithProgramIds: Array.isArray(item.sharedWithProgramIds) ? item.sharedWithProgramIds.map(String) : [], allocationRate: Math.max(0, Math.min(1, numberValue(item.allocationRate ?? 1))), sctCredits: Math.max(0, numberValue(item.sctCredits)), prerequisites: typeof item.prerequisites === "string" ? item.prerequisites : "", position: Math.max(0, Math.round(numberValue(item.position ?? index))),
     })),
@@ -248,7 +248,7 @@ export default function ProgramsPage() {
         costCenter: form.costCenter || null,
         versionLabel: form.versionLabel.trim() || "1",
         annualTuitions: tuitionValues,
-        curriculumCourses: form.curriculumCourses.map((course, position) => ({ ...course, position })),
+        curriculumCourses: form.curriculumCourses.map((course, position) => ({ ...course, autonomousWeeklyHours: 0, position })),
       };
       const programResponse = await fetch(form.id ? `/api/programs/${form.id}` : "/api/programs", {
         method: form.id ? "PUT" : "POST",

@@ -239,7 +239,7 @@ export function buildMemorandumBody(budget: CohortBudget, result: BudgetResult, 
   if (hasAdditionalIncome) {
     incomeParts.push(`Descontados estos conceptos, los ingresos netos por arancel se estiman en ${annualMoneyPhrase(result, (index) => result.annualFlows[index].netTuitionIncome)}.`);
     if (totalRecognizedEnrollment > 0) incomeParts.push(`La matrícula reconocida como ingreso del programa totaliza ${money(totalRecognizedEnrollment)} durante el ciclo.`);
-    else incomeParts.push("La matrícula anual se mantiene como antecedente informativo y no forma parte de los ingresos del programa.");
+    else incomeParts.push("La matrícula se mantiene como antecedente informativo y no forma parte de los ingresos del programa.");
     if (totalInstitutionalFinancing > 0) incomeParts.push(`Se incorpora financiamiento institucional por ${money(totalInstitutionalFinancing)}, registrado como aporte fijo al proyecto o programa y no asociado a estudiante ni semestre.`);
     if (totalExternalIncome > 0) incomeParts.push(`Los demás ingresos externos registrados totalizan ${money(totalExternalIncome)}.`);
     incomeParts.push(`Considerando estas fuentes, los ingresos presupuestarios totales se proyectan en ${annualMoneyPhrase(result, (index) => result.annualFlows[index].totalIncome)}.`);
@@ -250,7 +250,10 @@ export function buildMemorandumBody(budget: CohortBudget, result: BudgetResult, 
 
   const thesisValue = firstAnnual.thesisGuidancePerGraduatingStudent > 0 ? ` Asimismo, se incluye un valor de ${money(firstAnnual.thesisGuidancePerGraduatingStudent)} por estudiante para guía o revisión de tesis.` : "";
   const badDebtRate = effectiveBadDebtRate(budget, parameters);
-  const baseText = `Para ${firstYear} se consideró un arancel anual de ${money(firstAnnual.annualTuition)}, una matrícula anual de ${money(firstAnnual.annualEnrollmentFee)} y ${firstYearTeachingValues(budget, firstYear, firstAnnual)}.${thesisValue} El valor anual base de Dirección de Programa corresponde a ${money(firstAnnual.annualDirection)} y el de Asistencia de Dirección a ${money(firstAnnual.annualAssistance)}. En esta cohorte se aplica una incobrabilidad del ${(badDebtRate * 100).toLocaleString("es-CL", { maximumFractionDigits: 1 })}%.`;
+  const pricingBase = budget.tuitionPricingMode === "PROGRAM_TOTAL"
+    ? `un arancel total del programa de ${money(budget.programTotalTuition ?? 0)}, distribuido entre ${budget.durationSemesters} semestres, y una modalidad de matrícula ${budget.enrollmentBillingMode === "SINGLE_SPECIAL" ? "única / especial" : budget.enrollmentBillingMode === "SEMESTER" ? "semestral" : "anual"}`
+    : `un arancel anual de ${money(firstAnnual.annualTuition)} y una matrícula anual de ${money(firstAnnual.annualEnrollmentFee)}`;
+  const baseText = `Para ${firstYear} se consideró ${pricingBase}, junto con ${firstYearTeachingValues(budget, firstYear, firstAnnual)}.${thesisValue} El valor anual base de Dirección de Programa corresponde a ${money(firstAnnual.annualDirection)} y el de Asistencia de Dirección a ${money(firstAnnual.annualAssistance)}. En esta cohorte se aplica una incobrabilidad del ${(badDebtRate * 100).toLocaleString("es-CL", { maximumFractionDigits: 1 })}%.`;
 
   const teachingText = `La programación académica contempla ${joinSpanish(result.years.map((year) => `${totalTeachingHours(budget, year).toLocaleString("es-CL")} horas de docencia en ${year}`))}. Los costos directos asociados a docencia y reemplazo se estiman en ${annualMoneyPhrase(result, (index) => result.annualFlows[index].directTeachingCost + result.annualFlows[index].replacementTeachingCost)}. Al incorporar los valores asociados a guía o revisión de tesis cuando corresponde, los honorarios académicos del ciclo alcanzan un total de ${money(totalAcademic)}.`;
 

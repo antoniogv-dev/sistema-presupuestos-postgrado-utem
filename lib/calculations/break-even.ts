@@ -1,4 +1,5 @@
 import { calculateBudget, effectiveBadDebtRate } from "./budget-engine";
+import { isProgramTotalPricing } from "./billing";
 import type { CohortBudget, InstitutionalParameters } from "./types";
 
 export interface BreakEvenResult {
@@ -44,13 +45,27 @@ export function calculateBreakEvenEquivalentEnrollments(
     };
   }
 
-  const currentEquivalentEnrollments = first.equivalentEnrollments;
+  const programTotalMode = isProgramTotalPricing(budget);
+  const currentEquivalentEnrollments = programTotalMode
+    ? (Math.max(0, budget.programTotalTuition ?? 0) > 0
+      ? current.annualFlows.reduce((total, flow) => total + flow.tuitionAfterBenefits, 0) / Math.max(0, budget.programTotalTuition ?? 0)
+      : 0)
+    : first.equivalentEnrollments;
   const badDebtRate = effectiveBadDebtRate(budget, parameters);
-  const overheadRate = Math.max(0, first.centralOverheadRate) + Math.max(0, first.facultyOverheadRate);
-  const fixedCosts = Math.max(0, Math.abs(first.totalExpenses - first.centralOverhead - first.facultyOverhead));
-  const contributionPerEquivalentEnrollment = Math.max(0, first.annualTuition)
-    * Math.max(0, 1 - badDebtRate)
-    * Math.max(0, 1 - overheadRate);
+  const fixedCosts = programTotalMode
+    ? current.annualFlows.reduce((total, flow) => total + Math.max(0, flow.totalExpenses - flow.centralOverhead - flow.facultyOverhead), 0)
+    : Math.max(0, Math.abs(first.totalExpenses - first.centralOverhead - first.facultyOverhead));
+  const contributionPerEquivalentEnrollment = programTotalMode
+    ? current.annualFlows.reduce((total, flow) => {
+      const share = Math.max(0, flow.tuitionDistributionShare);
+      const overheadRate = Math.max(0, flow.centralOverheadRate) + Math.max(0, flow.facultyOverheadRate);
+      return total + Math.max(0, budget.programTotalTuition ?? 0) * share
+        * Math.max(0, 1 - badDebtRate)
+        * Math.max(0, 1 - overheadRate);
+    }, 0)
+    : Math.max(0, first.annualTuition)
+      * Math.max(0, 1 - badDebtRate)
+      * Math.max(0, 1 - (Math.max(0, first.centralOverheadRate) + Math.max(0, first.facultyOverheadRate)));
 
   if (fixedCosts === 0) {
     return {

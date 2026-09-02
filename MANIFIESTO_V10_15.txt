@@ -1,0 +1,4 @@
+v10.15 / 1.0.25-d1-web
+XLSX: primera hoja Presupuesto completo con flujo + parámetros completos.
+PDF: A4 vertical completo, portada sin recorte, flujo y parámetros verticales.
+Sin migración D1 nueva.

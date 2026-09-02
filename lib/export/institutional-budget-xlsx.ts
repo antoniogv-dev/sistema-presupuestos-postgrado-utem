@@ -252,6 +252,8 @@ function modalityLabel(budget: CohortBudget): string {
 }
 export function institutionalTemplateCompatibilityIssue(budget: CohortBudget, result: BudgetResult): string | null {
   if (budget.program.type !== "MAGISTER_PROFESIONAL") return "El formato Excel institucional mejorado se utiliza para Magísteres Profesionales.";
+  if (budget.tuitionPricingMode === "PROGRAM_TOTAL") return "El modelo de arancel total del programa utiliza la exportación XLSX trazable general; la plantilla institucional histórica conserva la lógica de arancel anual.";
+  if (budget.discounts.some((discount) => discount.target === "ENROLLMENT")) return "Los descuentos de matrícula requieren la exportación XLSX trazable general; la plantilla institucional histórica sólo representa descuentos de arancel.";
   if (result.years.length !== 2) return "El formato Excel institucional mejorado requiere exactamente dos años presupuestarios.";
   const payable = payableCurriculumCourses(budget.program).length;
   const generic = genericCurriculumCourses(budget.program).length;

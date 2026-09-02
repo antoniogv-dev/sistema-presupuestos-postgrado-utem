@@ -4,6 +4,8 @@ import { apiError, hasAccess, requireApiIdentity } from "@/lib/auth/api-access";
 import { d1Id, d1Json, runD1Batch } from "@/lib/database/d1-atomic";
 import { getPrismaClient } from "@/lib/database/prisma";
 import { d1Database } from "@/lib/runtime-env";
+import { assertBillingConfiguration } from "@/lib/validation/billing-config";
+import { assertCohortConsistency } from "@/lib/validation/cohort-consistency";
 
 const semesterSchema = z.object({
   year: z.number().int().min(2000).max(2100),
@@ -28,6 +30,7 @@ const semesterSchema = z.object({
 const discountSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1),
+  target: z.enum(["TUITION", "ENROLLMENT"]).default("TUITION"),
   percentage: z.number().min(0).max(1),
   students: z.number().int().min(0),
   startYear: z.number().int(),
@@ -99,7 +102,7 @@ const sharedCourseSchema = z.object({
   semester: z.union([z.literal(1), z.literal(2)]),
   teachingMode: z.enum(["PRESENCIAL", "SINCRONICA", "ASINCRONICA"]),
   hours: z.number().min(0),
-  participantProgramIds: z.array(z.string().min(1)).min(1),
+  participantProgramIds: z.array(z.string().min(1)).min(2),
   allocationRate: z.number().min(0).max(1),
   note: z.string().optional(),
 });
@@ -112,6 +115,15 @@ const updateSchema = z.object({
   initialStudents: z.number().int().min(0).optional(),
   facultyOverheadRate: z.number().min(0).max(1).optional(),
   enrollmentRecognitionRate: z.number().min(0).max(1).optional(),
+  tuitionPricingMode: z.enum(["ANNUAL_LEGACY", "PROGRAM_TOTAL"]).optional(),
+  enrollmentBillingMode: z.enum(["ANNUAL", "SINGLE_SPECIAL", "SEMESTER"]).optional(),
+  programTotalTuition: z.number().int().nonnegative().optional(),
+  singleEnrollmentFee: z.number().int().nonnegative().optional(),
+  semesterEnrollmentFee: z.number().int().nonnegative().optional(),
+  tuitionInstallments: z.number().int().min(1).max(120).optional(),
+  tuitionDistributionMode: z.enum(["PROPORTIONAL", "CUSTOM"]).optional(),
+  tuitionSemesterDistribution: z.array(z.number().min(0).max(1)).max(8).optional(),
+  curriculumSectionOverrides: z.record(z.string(), z.number().int().min(0).max(500)).optional(),
   badDebtRate: z.number().min(0).max(1).optional().nullable(),
   programVersionLabel: z.string().trim().min(1).max(80).optional(),
   scholarshipsEnabled: z.boolean().optional(),
@@ -137,6 +149,26 @@ function json(value: unknown) {
 }
 function isAcademic(type: ProgramType) {
   return type === ProgramType.DOCTORADO || type === ProgramType.MAGISTER_ACADEMICO;
+}
+
+function numberArrayFromStoredJson(value: string | null | undefined): number[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map((item) => Number(item)).filter(Number.isFinite) : [];
+  } catch {
+    return [];
+  }
+}
+function stringArrayFromStoredJson(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((item) => String(item)).filter(Boolean);
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
 }
 type D1BindValue = string | number | null;
 
@@ -185,6 +217,9 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
       include: {
         program: { select: { type: true } },
         versions: { orderBy: { number: "desc" }, take: 1 },
+        semesterPeriods: { include: { parameters: true }, orderBy: { position: "asc" } },
+        discounts: true,
+        sharedCourses: true,
       },
     });
     if (!current) throw new Error("NOT_FOUND");
@@ -211,6 +246,66 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
         throw new Error("TEMPLATE_PROGRAM_MISMATCH");
       }
     }
+    assertBillingConfiguration({
+      tuitionPricingMode: header.tuitionPricingMode ?? current.tuitionPricingMode,
+      programTotalTuition: header.programTotalTuition ?? Number(current.programTotalTuition),
+      tuitionInstallments: header.tuitionInstallments ?? current.tuitionInstallments,
+      tuitionDistributionMode: header.tuitionDistributionMode ?? current.tuitionDistributionMode,
+      tuitionSemesterDistribution: header.tuitionSemesterDistribution ?? numberArrayFromStoredJson(current.tuitionSemesterDistribution),
+      durationSemesters: header.durationSemesters ?? current.durationSemesters,
+    });
+    const effectiveSemesters = semesters ?? current.semesterPeriods.map((period) => ({
+      year: period.year,
+      semester: period.semester as 1 | 2,
+      position: period.position,
+      activeStudents: period.parameters?.activeStudents ?? 0,
+      graduatingStudents: period.parameters?.graduatingStudents ?? 0,
+      directTeachingHours: Number(period.parameters?.directTeachingHours ?? 0),
+      synchronousTeachingHours: Number(period.parameters?.synchronousTeachingHours ?? 0),
+      asynchronousTeachingHours: Number(period.parameters?.asynchronousTeachingHours ?? 0),
+      replacementTeachingHours: Number(period.parameters?.replacementTeachingHours ?? 0),
+      electiveSubjects: period.parameters?.electiveSubjects ?? 0,
+      electiveSections: period.parameters?.electiveSections ?? 0,
+      specializedCourses: period.parameters?.specializedCourses ?? 0,
+      specializedSections: period.parameters?.specializedSections ?? 0,
+      internalTuitionScholarshipStudents: period.parameters?.internalTuitionScholarshipStudents ?? 0,
+      internalTuitionScholarshipCoverage: Number(period.parameters?.internalTuitionScholarshipCoverage ?? 1),
+      maintenanceScholarshipStudents: period.parameters?.maintenanceScholarshipStudents ?? 0,
+      maintenanceScholarshipMonths: period.parameters?.maintenanceScholarshipMonths ?? 0,
+      notes: period.parameters?.notes ?? null,
+    }));
+    const effectiveDiscounts = discounts ?? current.discounts.map((discount) => ({
+      name: discount.name,
+      target: discount.target === "ENROLLMENT" ? "ENROLLMENT" as const : "TUITION" as const,
+      percentage: Number(discount.percentage),
+      students: discount.students,
+      startYear: discount.startYear,
+      startSemester: discount.startSemester as 1 | 2,
+      endYear: discount.endYear,
+      endSemester: discount.endSemester as 1 | 2,
+      note: discount.note ?? undefined,
+      originTemplateItemKey: discount.originTemplateItemKey ?? undefined,
+    }));
+    const effectiveSharedCourses = sharedCourses ?? current.sharedCourses.map((rule) => ({
+      courseName: rule.courseName,
+      year: rule.year,
+      semester: rule.semester as 1 | 2,
+      teachingMode: rule.teachingMode as "PRESENCIAL" | "SINCRONICA" | "ASINCRONICA",
+      hours: Number(rule.hours),
+      participantProgramIds: stringArrayFromStoredJson(rule.participantProgramIds),
+      allocationRate: Number(rule.allocationRate),
+      note: rule.note ?? undefined,
+    }));
+    assertCohortConsistency({
+      programId: current.programId,
+      startYear: header.startYear ?? current.startYear,
+      startSemester: (header.startSemester ?? current.startSemester) as 1 | 2,
+      durationSemesters: header.durationSemesters ?? current.durationSemesters,
+      scholarshipsEnabled: header.scholarshipsEnabled ?? current.scholarshipsEnabled,
+      semesters: effectiveSemesters,
+      discounts: effectiveDiscounts,
+      sharedCourses: effectiveSharedCourses,
+    });
     const nextVersion = (current.versions[0]?.number ?? 0) + 1;
     const nextStatus = current.status === BudgetStatus.OBSERVADO ? BudgetStatus.BORRADOR : current.status;
     const database = d1Database();
@@ -230,6 +325,15 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
     if (isAcademic(effectiveProgram.type)) assign("facultyOverheadRate", 0);
     else if (header.facultyOverheadRate !== undefined) assign("facultyOverheadRate", header.facultyOverheadRate);
     if (header.enrollmentRecognitionRate !== undefined) assign("enrollmentRecognitionRate", header.enrollmentRecognitionRate);
+    if (header.tuitionPricingMode !== undefined) assign("tuitionPricingMode", header.tuitionPricingMode);
+    if (header.enrollmentBillingMode !== undefined) assign("enrollmentBillingMode", header.enrollmentBillingMode);
+    if (header.programTotalTuition !== undefined) assign("programTotalTuition", header.programTotalTuition);
+    if (header.singleEnrollmentFee !== undefined) assign("singleEnrollmentFee", header.singleEnrollmentFee);
+    if (header.semesterEnrollmentFee !== undefined) assign("semesterEnrollmentFee", header.semesterEnrollmentFee);
+    if (header.tuitionInstallments !== undefined) assign("tuitionInstallments", header.tuitionInstallments);
+    if (header.tuitionDistributionMode !== undefined) assign("tuitionDistributionMode", header.tuitionDistributionMode);
+    if (header.tuitionSemesterDistribution !== undefined) assign("tuitionSemesterDistribution", d1Json(header.tuitionSemesterDistribution));
+    if (header.curriculumSectionOverrides !== undefined) assign("curriculumSectionOverrides", d1Json(header.curriculumSectionOverrides));
     if (header.badDebtRate !== undefined) assign("badDebtRate", header.badDebtRate);
     if (header.programVersionLabel !== undefined) assign("programVersionLabel", header.programVersionLabel);
     if (header.scholarshipsEnabled !== undefined) assign("scholarshipsEnabled", header.scholarshipsEnabled ? 1 : 0);
@@ -300,13 +404,14 @@ export async function PUT(request: Request, context: { params: Promise<{ budgetI
         statements.push(
           database.prepare(`
             INSERT INTO "CohortDiscount" (
-              "id", "budgetId", "discountTypeId", "name", "percentage", "students",
+              "id", "budgetId", "discountTypeId", "name", "target", "percentage", "students",
               "startYear", "startSemester", "endYear", "endSemester", "note", "originTemplateItemKey"
-            ) VALUES (?, ?, 'discount-configurable', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, 'discount-configurable', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             d1Id("discount"),
             budgetId,
             discount.name,
+            discount.target,
             discount.percentage,
             discount.students,
             discount.startYear,

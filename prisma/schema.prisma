@@ -88,6 +88,7 @@ enum CurriculumCourseKind {
   OBLIGATORIA
   ELECTIVA
   ESPECIALIZACION
+  GRADUACION
   COMPETENCIA_GENERICA
 }
 
@@ -338,6 +339,15 @@ model CohortBudget {
   workflowStage              WorkflowStage @default(GESTION)
   facultyOverheadRate        Decimal
   enrollmentRecognitionRate Decimal
+  tuitionPricingMode        String        @default("ANNUAL_LEGACY")
+  enrollmentBillingMode     String        @default("ANNUAL")
+  programTotalTuition       BigInt        @default(0)
+  singleEnrollmentFee       BigInt        @default(0)
+  semesterEnrollmentFee     BigInt        @default(0)
+  tuitionInstallments       Int           @default(1)
+  tuitionDistributionMode   String        @default("PROPORTIONAL")
+  tuitionSemesterDistribution String?
+  curriculumSectionOverrides String        @default("{}")
   badDebtRate               Decimal?
   programVersionLabel        String        @default("1")
   scholarshipsEnabled        Boolean       @default(true)
@@ -473,6 +483,7 @@ model CohortDiscount {
   name          String
   percentage    Decimal
   students      Int
+  target        String       @default("TUITION")
   startYear     Int
   startSemester Int
   endYear       Int

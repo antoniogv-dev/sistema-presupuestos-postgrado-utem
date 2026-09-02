@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../..");
-const mod=await import(path.join(root,".engine-build/lib/curriculum/budget-load.js"));
-const { demoBudget }=await import(path.join(root,".engine-build/lib/demo-data.js"));
-const { analyzeCurriculumMatrix }=await import(path.join(root,".engine-build/lib/import/curriculum-file-import.js"));
+const mod=await import(pathToFileURL(path.join(root,".engine-build/lib/curriculum/budget-load.js")).href);
+const { demoBudget }=await import(pathToFileURL(path.join(root,".engine-build/lib/demo-data.js")).href);
+const { analyzeCurriculumMatrix }=await import(pathToFileURL(path.join(root,".engine-build/lib/import/curriculum-file-import.js")).href);
 const { applyProgramCurriculumToBudget, curriculumCourseSectionsForBudget, curriculumCourseEffectiveHours }=mod;
 function course(id,kind,semester=1,patch={}){return {id,code:id.toUpperCase(),name:id,semester,kind,weeks:18,sections:1,theoryWeeklyHours:0,laboratoryWeeklyHours:0,workshopWeeklyHours:0,directWeeklyHours:4,autonomousWeeklyHours:999,teachingMode:"PRESENCIAL",asynchronousRateFactor:.5,sharedWithProgramIds:[],allocationRate:1,sctCredits:4,position:0,...patch}}
 function budget(type,courses,students=[10,10,10,10],overrides={}){const b=structuredClone(demoBudget);b.program.type=type;b.program.curriculumCourses=courses;b.durationSemesters=students.length;b.semesters=b.semesters.slice(0,students.length).map((s,i)=>({...s,activeStudents:students[i],directTeachingHours:0,synchronousTeachingHours:0,asynchronousTeachingHours:0}));b.curriculumSectionOverrides=overrides;b.deliveryModality="PRESENCIAL";return b}

@@ -1,4 +1,7 @@
 import { getActivePeriods, getActiveYears, getAnnualEnrollmentChargePeriods, isPeriodWithinRange, periodKey } from "./periods";
+import { rawTuitionDistributionTotal } from "./billing";
+import { calculateRevenueEngine } from "../finance/revenue-engine";
+import { calculateAnnualCosts } from "../finance/cost-engine";
 import type {
   AnnualFlow,
   BudgetAnnualOverride,
@@ -198,18 +201,29 @@ export function overheadApplies(type: ProgramType): boolean {
 export function validateBudget(budget: CohortBudget): string[] {
   const warnings: string[] = [];
   for (const semester of budget.semesters) {
-    const discounts = budget.discounts
-      .filter((discount) => isPeriodWithinRange(semester.year, semester.semester, discount.startYear, discount.startSemester, discount.endYear, discount.endSemester))
+    const tuitionDiscountStudents = budget.discounts
+      .filter((discount) => discount.target !== "ENROLLMENT" && isPeriodWithinRange(semester.year, semester.semester, discount.startYear, discount.startSemester, discount.endYear, discount.endSemester))
       .reduce((acc, discount) => acc + discount.students, 0);
-    if (discounts > semester.activeStudents) warnings.push(`${semester.year}-${semester.semester}: los descuentos superan los estudiantes activos.`);
-    if (budget.scholarshipsEnabled && discounts + semester.internalTuitionScholarshipStudents > semester.activeStudents) {
-      warnings.push(`${semester.year}-${semester.semester}: descuentos y becas internas superan los estudiantes activos.`);
+    const enrollmentDiscountStudents = budget.discounts
+      .filter((discount) => discount.target === "ENROLLMENT" && isPeriodWithinRange(semester.year, semester.semester, discount.startYear, discount.startSemester, discount.endYear, discount.endSemester))
+      .reduce((acc, discount) => acc + discount.students, 0);
+    if (tuitionDiscountStudents > semester.activeStudents) warnings.push(`${semester.year}-${semester.semester}: los descuentos de arancel superan los estudiantes activos.`);
+    if (enrollmentDiscountStudents > semester.activeStudents) warnings.push(`${semester.year}-${semester.semester}: los descuentos de matrícula superan los estudiantes activos.`);
+    if (budget.scholarshipsEnabled && tuitionDiscountStudents + semester.internalTuitionScholarshipStudents > semester.activeStudents) {
+      warnings.push(`${semester.year}-${semester.semester}: descuentos de arancel y becas internas superan los estudiantes activos.`);
     }
     if (nonNegative(semester.graduatingStudents) > nonNegative(semester.activeStudents)) {
       warnings.push(`${semester.year}-${semester.semester}: los estudiantes en graduación superan los estudiantes activos.`);
     }
   }
   if (budget.enrollmentRecognitionRate < 0 || budget.enrollmentRecognitionRate > 1) warnings.push("El reconocimiento de matrícula debe estar entre 0 % y 100 %.");
+  if (budget.tuitionPricingMode === "PROGRAM_TOTAL") {
+    if (nonNegative(budget.programTotalTuition) <= 0) warnings.push("El arancel total del programa debe ser mayor que cero.");
+    if ((budget.tuitionInstallments ?? 1) < 1) warnings.push("El número de cuotas del arancel debe ser al menos 1.");
+    if (budget.tuitionDistributionMode === "CUSTOM" && Math.abs(rawTuitionDistributionTotal(budget) - 1) > 0.0001) {
+      warnings.push("La distribución personalizada del arancel debe sumar exactamente 100 %.");
+    }
+  }
   for (const item of budget.annualOverrides ?? []) {
     for (const [label, rate] of [
       ["prorrateo de dirección", item.directionAllocationRate],
@@ -236,205 +250,83 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
   const years = getActiveYears(periods);
   const semesterMap = new Map(budget.semesters.map((semester) => [periodKey(semester.year, semester.semester), semester]));
   const warnings = validateBudget(budget);
-  const scoped = programTypeParameters(parameters, budget.program.type);
   let previousAccumulated = budget.includeAuthorizedCarryover ? budget.authorizedInitialCarryover : 0;
 
-  const enrollmentChargePeriods = new Set(
-    getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
-      .map((period) => periodKey(period.year, period.semester)),
-  );
+  // Motor v12: primero se construye el contrato de precio y el libro mayor semestral
+  // de ingresos. El año calendario sólo agrega el reconocimiento presupuestario;
+  // nunca determina el precio total del programa.
+  const annualOverrides = new Map(years.map((year) => [year, resolvedAnnualOverrideForYear(budget, parameters, year)]));
+  const overrideForYear = (year: number) => annualOverrides.get(year) ?? resolvedAnnualOverrideForYear(budget, parameters, year);
+  const revenueEngine = calculateRevenueEngine(budget, overrideForYear, effectiveBadDebtRate(budget, parameters));
 
   const annualFlows: AnnualFlow[] = years.map((year, yearIndex) => {
     const yearPeriods = periods.filter((period) => period.year === year);
     const semesters = yearPeriods.map((period) => semesterMap.get(periodKey(period.year, period.semester))).filter(Boolean) as SemesterParameters[];
-    const override = resolvedAnnualOverrideForYear(budget, parameters, year);
-    const annualTuition = nonNegative(override.annualTuition);
-    // v11.0: arancel anual por ciclo académico de la cohorte. Se cobra en el primer semestre
-    // de cada ciclo de hasta dos semestres, evitando fracciones de estudiantes y cobros extra
-    // para cohortes que comienzan en 2S.
-    const tuitionChargePeriods = new Set(
-      getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
-        .map((period) => periodKey(period.year, period.semester)),
-    );
-    const tuitionSemesters = semesters.filter((semester) => tuitionChargePeriods.has(periodKey(semester.year, semester.semester)));
-    const tuitionFactor = tuitionSemesters.length;
+    const override = overrideForYear(year);
+    const revenue = revenueEngine.annualByYear.get(year);
+    if (!revenue) throw new Error(`El motor financiero no generó el reconocimiento de ingresos para ${year}.`);
 
-    const grossTuition = sum(tuitionSemesters.map((semester) => nonNegative(semester.activeStudents) * annualTuition));
-    const discounts = sum(tuitionSemesters.flatMap((semester) => budget.discounts
-      .filter((discount) => isPeriodWithinRange(semester.year, semester.semester, discount.startYear, discount.startSemester, discount.endYear, discount.endSemester))
-      .map((discount) => nonNegative(discount.students) * annualTuition * clampRate(discount.percentage))));
-    const internalTuitionScholarships = budget.scholarshipsEnabled ? sum(tuitionSemesters.map((semester) =>
-      nonNegative(semester.internalTuitionScholarshipStudents) * annualTuition * clampRate(semester.internalTuitionScholarshipCoverage),
-    )) : 0;
-
-    const tuitionAfterBenefits = Math.max(0, grossTuition - discounts - internalTuitionScholarships);
-    const equivalentDenominator = annualTuition * tuitionFactor;
-    const equivalentEnrollments = equivalentDenominator > 0 ? tuitionAfterBenefits / equivalentDenominator : 0;
-    const roundedEquivalentStudents = Math.ceil(equivalentEnrollments);
-    const badDebtRate = effectiveBadDebtRate(budget, parameters);
-    const badDebt = tuitionAfterBenefits * badDebtRate;
-    const netTuitionIncome = tuitionAfterBenefits - badDebt;
-
-    const enrollmentSemesters = semesters.filter((semester) => enrollmentChargePeriods.has(periodKey(semester.year, semester.semester)));
-    const grossEnrollmentFee = sum(enrollmentSemesters.map((semester) => nonNegative(semester.activeStudents) * nonNegative(override.annualEnrollmentFee)));
-    // Los descuentos de cohorte se aplican exclusivamente al arancel.
-    // La matrícula es un valor anual informativo y no recibe descuentos.
-    const enrollmentDiscounts = 0;
-    const netEnrollmentFee = grossEnrollmentFee;
-    const recognizedEnrollmentFee = grossEnrollmentFee * clampRate(budget.enrollmentRecognitionRate);
-
-    // Los ingresos externos ordinarios conservan su lógica por estudiante. El financiamiento
-    // institucional es un aporte fijo al proyecto/programa: se registra una sola vez en el año
-    // indicado y no depende de semestre ni cantidad de estudiantes.
-    const institutionalFinancing = sum(budget.externalIncome
-      .filter((income) => income.year === year && income.type === "Financiamiento institucional")
-      .map((income) => nonNegative(income.amountPerStudent)));
-    const externalIncome = sum(budget.externalIncome
-      .filter((income) => income.year === year && income.type !== "Financiamiento institucional")
-      .map((income) => nonNegative(income.students) * nonNegative(income.amountPerStudent)));
-    const otherIncome = 0;
-    // La fracción reconocida de matrícula sí financia el programa. Por criterio institucional
-    // conservador, ni la matrícula reconocida ni el financiamiento institucional amplían la base
-    // de overhead, la cual continúa circunscrita al arancel neto sujeto a cobro.
-    const totalIncome = netTuitionIncome + recognizedEnrollmentFee + externalIncome + institutionalFinancing + otherIncome;
-
-    const grossPresentialTeachingCost = sum(semesters.map((semester) => nonNegative(semester.directTeachingHours) * nonNegative(override.directTeachingHourValue)));
-    const grossSynchronousTeachingCost = sum(semesters.map((semester) => nonNegative(semester.synchronousTeachingHours) * nonNegative(override.synchronousTeachingHourValue)));
-    const grossAsynchronousTeachingCost = sum(semesters.map((semester) => nonNegative(semester.asynchronousTeachingHours) * nonNegative(override.asynchronousTeachingHourValue)));
-    // Una economía de escala sólo tiene efecto financiero cuando participan efectivamente
-    // dos o más programas. Las reglas incompletas pueden guardarse como borrador, pero no
-    // generan ahorro hasta cumplir esa condición.
-    const validSharedCourseRules = (budget.sharedCourses ?? []).filter((rule) =>
-      rule.year === year && new Set(rule.participantProgramIds).size >= 2 && rule.allocationRate > 0,
-    );
-    const sharedCourseSavings = validSharedCourseRules.reduce((total, rule) => {
-      const rate = rule.teachingMode === "SINCRONICA" ? override.synchronousTeachingHourValue : rule.teachingMode === "ASINCRONICA" ? override.asynchronousTeachingHourValue : override.directTeachingHourValue;
-      return total + nonNegative(rule.hours) * nonNegative(rate) * (1 - clampRate(rule.allocationRate));
-    }, 0);
-    const presentialSavings = validSharedCourseRules.filter((rule) => rule.teachingMode === "PRESENCIAL").reduce((total, rule) => total + nonNegative(rule.hours) * nonNegative(override.directTeachingHourValue) * (1 - clampRate(rule.allocationRate)), 0);
-    const synchronousSavings = validSharedCourseRules.filter((rule) => rule.teachingMode === "SINCRONICA").reduce((total, rule) => total + nonNegative(rule.hours) * nonNegative(override.synchronousTeachingHourValue) * (1 - clampRate(rule.allocationRate)), 0);
-    const asynchronousSavings = validSharedCourseRules.filter((rule) => rule.teachingMode === "ASINCRONICA").reduce((total, rule) => total + nonNegative(rule.hours) * nonNegative(override.asynchronousTeachingHourValue) * (1 - clampRate(rule.allocationRate)), 0);
-    const presentialTeachingCost = Math.max(0, grossPresentialTeachingCost - presentialSavings);
-    const synchronousTeachingCost = Math.max(0, grossSynchronousTeachingCost - synchronousSavings);
-    const asynchronousTeachingCost = Math.max(0, grossAsynchronousTeachingCost - asynchronousSavings);
-    // En programas profesionales la malla puede combinar docencia presencial/sincrónica
-    // y asincrónica por asignatura. Todas las componentes valorizables forman parte del
-    // costo docente. Para programas académicos/doctorales se conserva la regla histórica.
-    const directTeachingCost = budget.program.type === "MAGISTER_PROFESIONAL"
-      ? presentialTeachingCost + synchronousTeachingCost + asynchronousTeachingCost
-      : (budget.deliveryModality === "PRESENCIAL" ? presentialTeachingCost : synchronousTeachingCost + asynchronousTeachingCost);
-    const replacementTeachingCost = sum(semesters.map((semester) => nonNegative(semester.replacementTeachingHours) * parameters.replacementHour));
-    const graduatingStudents = Math.max(0, ...semesters.map((semester) => {
-      const explicit = semester.graduatingStudents;
-      return explicit === undefined ? inferredGraduatingStudents(budget, semester) : nonNegative(explicit);
-    }));
-    const thesisGuidanceCost = graduatingStudents * nonNegative(override.thesisGuidancePerGraduatingStudent);
-    // No existe una línea separada de "honorarios académicos adicionales":
-    // los costos académicos son docencia directa, reemplazo y guía de tesis.
-    const academicHonoraria = directTeachingCost + replacementTeachingCost + thesisGuidanceCost;
-    const thesisStudents = Math.max(0, ...semesters.map((semester) => thesisStudentsForSemester(budget, semester)));
-
-    const directionBase = nonNegative(override.annualDirection) * (override.directionProrated ? clampRate(override.directionAllocationRate) : 1);
-    const assistanceBase = nonNegative(override.annualAssistance) * (override.assistanceProrated ? clampRate(override.assistanceAllocationRate) : 1);
-    const otherNonAcademicBase = nonNegative(override.annualOtherNonAcademicHonoraria)
-      * (override.otherNonAcademicProrated ? clampRate(override.otherNonAcademicAllocationRate) : 1);
-    const direction = directionBase + sumManualItems(budget, year, ["Dirección"]);
-    const assistance = assistanceBase + sumManualItems(budget, year, ["Asistencia", "Asistencia de dirección"]);
-    const otherNonAcademicHonoraria = otherNonAcademicBase
-      + sumManualItems(budget, year, ["Honorarios no académicos", "Otros honorarios no académicos"]);
-    // "Honorarios no académicos" es subtotal del staff, no un ítem independiente.
-    const nonAcademicHonoraria = direction + assistance + otherNonAcademicHonoraria;
-
-    const operational = nonNegative(override.annualOperational)
-      + sumManualItems(budget, year, ["Gastos operacionales", "Bienes y servicios", "Gastos operacionales / Bienes y servicios"]);
-    const software = nonNegative(override.annualSoftware)
-      + sumManualItems(budget, year, ["Software", "Software y licencias"]);
-    const diffusion = nonNegative(override.annualDiffusion) + sumManualItems(budget, year, ["Difusión"]);
-    const maintenanceScholarships = (budget.scholarshipsEnabled ? sum(semesters.map((semester) =>
-      nonNegative(semester.maintenanceScholarshipStudents)
-      * nonNegative(semester.maintenanceScholarshipMonths)
-      * nonNegative(override.maintenanceScholarshipMonthlyValue),
-    )) : 0) + sumManualItems(budget, year, ["Becas de manutención"]);
-    const otherScholarshipsAndAid = sumManualItems(budget, year, ["Becas y ayudas"]);
-    const scholarshipsAndAid = maintenanceScholarships + otherScholarshipsAndAid;
-    const equipment = sumManualItems(budget, year, ["Equipamiento"]);
-    const congressesInternships = nonNegative(override.annualCongressesInternships)
-      + sumManualItems(budget, year, ["Congresos", "Pasantías", "Congresos y pasantías"]);
-    const booksPublications = nonNegative(override.annualBooksPublications)
-      + sumManualItems(budget, year, ["Libros y publicaciones"]);
-    const travelFreight = nonNegative(override.annualTravelFreight)
-      + sumManualItems(budget, year, ["Pasajes y fletes"]);
-    const perDiem = nonNegative(override.annualPerDiem)
-      + sumManualItems(budget, year, ["Viáticos"]);
-    const foodBeverages = nonNegative(override.annualFoodBeverages)
-      + sumManualItems(budget, year, ["Alimentos y bebidas"]);
-    const otherCosts = nonNegative(override.annualOtherCosts)
-      + sumManualItems(budget, year, ["Otros", "Otros costos y gastos", "Honorarios académicos"]);
-    // Subtotal de otros gastos: costos administrativos/operacionales distintos de
-    // honorarios, equipamiento, becas/ayudas y overhead.
-    const otherExpenses = operational + software + diffusion + congressesInternships
-      + booksPublications + travelFreight + perDiem + foodBeverages + otherCosts;
-
-    // Base de overhead: sólo arancel bruto - descuentos de arancel - incobrables.
-    // No incorpora matrícula reconocida ni financiamiento institucional.
-    const overheadBase = Math.max(0, grossTuition - discounts - badDebt);
+    const costs = calculateAnnualCosts(budget, year, semesters, override, parameters);
+    // Política institucional: overhead sólo sobre arancel bruto menos descuentos de
+    // arancel e incobrabilidad. No incorpora matrícula reconocida ni financiamiento institucional.
+    const overheadBase = Math.max(0, revenue.grossTuition - revenue.discounts - revenue.badDebt);
     const centralOverheadRate = overheadApplies(budget.program.type) ? clampRate(override.centralOverheadRate) : 0;
     const facultyOverheadRate = overheadApplies(budget.program.type) ? clampRate(override.facultyOverheadRate) : 0;
     const centralOverhead = overheadBase * centralOverheadRate;
     const facultyOverhead = overheadBase * facultyOverheadRate;
-    const totalExpenses = academicHonoraria + nonAcademicHonoraria + otherExpenses
-      + equipment + scholarshipsAndAid + centralOverhead + facultyOverhead;
-    const netFlow = totalIncome - totalExpenses;
+    const totalExpenses = costs.fixedExpensesBeforeOverhead + centralOverhead + facultyOverhead;
+    const netFlow = revenue.totalIncome - totalExpenses;
     const startingCarryover = yearIndex === 0 ? (budget.includeAuthorizedCarryover ? budget.authorizedInitialCarryover : 0) : previousAccumulated;
     const accumulatedFlow = startingCarryover + netFlow;
-    const operatingMargin = totalIncome !== 0 ? netFlow / totalIncome : null;
+    const operatingMargin = revenue.totalIncome !== 0 ? netFlow / revenue.totalIncome : null;
     previousAccumulated = accumulatedFlow;
 
     return {
       year,
-      activeSemesters: semesters.length,
-      tuitionFactor,
-      annualTuition,
-      grossTuition,
-      discounts,
-      internalTuitionScholarships,
-      tuitionAfterBenefits,
-      equivalentEnrollments,
-      roundedEquivalentStudents,
-      badDebt,
-      netTuitionIncome,
-      grossEnrollmentFee,
-      enrollmentDiscounts,
-      netEnrollmentFee,
-      recognizedEnrollmentFee,
-      externalIncome,
-      institutionalFinancing,
-      otherIncome,
-      totalIncome,
-      directTeachingCost,
-      synchronousTeachingCost,
-      asynchronousTeachingCost,
-      sharedCourseSavings,
-      replacementTeachingCost,
-      thesisGuidanceCost,
-      academicHonoraria,
-      otherNonAcademicHonoraria,
-      nonAcademicHonoraria,
-      direction,
-      assistance,
-      operational,
-      software,
-      diffusion,
-      maintenanceScholarships,
-      scholarshipsAndAid,
-      equipment,
-      otherExpenses,
-      congressesInternships,
-      booksPublications,
-      travelFreight,
-      perDiem,
-      foodBeverages,
-      otherCosts,
+      activeSemesters: revenue.activeSemesters,
+      tuitionFactor: revenue.tuitionFactor,
+      tuitionDistributionShare: revenue.tuitionDistributionShare,
+      annualTuition: revenue.annualTuition,
+      grossTuition: revenue.grossTuition,
+      discounts: revenue.discounts,
+      internalTuitionScholarships: revenue.internalTuitionScholarships,
+      tuitionAfterBenefits: revenue.tuitionAfterBenefits,
+      equivalentEnrollments: revenue.equivalentEnrollments,
+      roundedEquivalentStudents: revenue.roundedEquivalentStudents,
+      badDebt: revenue.badDebt,
+      netTuitionIncome: revenue.netTuitionIncome,
+      grossEnrollmentFee: revenue.grossEnrollmentFee,
+      enrollmentDiscounts: revenue.enrollmentDiscounts,
+      netEnrollmentFee: revenue.netEnrollmentFee,
+      recognizedEnrollmentFee: revenue.recognizedEnrollmentFee,
+      externalIncome: revenue.externalIncome,
+      institutionalFinancing: revenue.institutionalFinancing,
+      otherIncome: revenue.otherIncome,
+      totalIncome: revenue.totalIncome,
+      directTeachingCost: costs.directTeachingCost,
+      synchronousTeachingCost: costs.synchronousTeachingCost,
+      asynchronousTeachingCost: costs.asynchronousTeachingCost,
+      sharedCourseSavings: costs.sharedCourseSavings,
+      replacementTeachingCost: costs.replacementTeachingCost,
+      thesisGuidanceCost: costs.thesisGuidanceCost,
+      academicHonoraria: costs.academicHonoraria,
+      otherNonAcademicHonoraria: costs.otherNonAcademicHonoraria,
+      nonAcademicHonoraria: costs.nonAcademicHonoraria,
+      direction: costs.direction,
+      assistance: costs.assistance,
+      operational: costs.operational,
+      software: costs.software,
+      diffusion: costs.diffusion,
+      maintenanceScholarships: costs.maintenanceScholarships,
+      scholarshipsAndAid: costs.scholarshipsAndAid,
+      equipment: costs.equipment,
+      otherExpenses: costs.otherExpenses,
+      congressesInternships: costs.congressesInternships,
+      booksPublications: costs.booksPublications,
+      travelFreight: costs.travelFreight,
+      perDiem: costs.perDiem,
+      foodBeverages: costs.foodBeverages,
+      otherCosts: costs.otherCosts,
       centralOverhead,
       overheadBase,
       centralOverheadRate,
@@ -444,8 +336,8 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
       netFlow,
       startingCarryover,
       accumulatedFlow,
-      thesisStudents,
-      graduatingStudents,
+      thesisStudents: costs.thesisStudents,
+      graduatingStudents: costs.graduatingStudents,
       operatingMargin,
     };
   });
@@ -459,6 +351,8 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
   return {
     periods,
     years,
+    pricing: revenueEngine.pricing,
+    revenueLedger: revenueEngine.semesterLedger,
     annualFlows,
     finalAccumulatedFlow,
     viable,
@@ -467,3 +361,4 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
     warnings,
   };
 }
+
