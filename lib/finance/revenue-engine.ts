@@ -1,5 +1,5 @@
 import { enrollmentChargePeriodsForBudget, enrollmentFeeForPeriod, isProgramTotalPricing, normalizedTuitionDistribution } from "../calculations/billing";
-import { getActivePeriods, getAnnualEnrollmentChargePeriods, isPeriodWithinRange, periodKey } from "../calculations/periods";
+import { getActivePeriods, getAnnualTuitionChargePeriods, isPeriodWithinRange, periodKey } from "../calculations/periods";
 import type { BudgetAnnualOverride, CohortBudget, PricingTrace, SemesterNumber, SemesterRevenueTrace } from "../calculations/types";
 
 const sum = (values: number[]) => values.reduce((acc, value) => acc + value, 0);
@@ -74,7 +74,7 @@ export function buildPricingSnapshot(
   const distribution = programTotalMode
     ? normalizedTuitionDistribution(budget)
     : getActivePeriods(budget.startYear, budget.startSemester, budget.durationSemesters).map((period) => ({ ...period, share: 0 }));
-  const legacyTotal = getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
+  const legacyTotal = getAnnualTuitionChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
     .reduce((total, period) => total + nonNegative(annualOverrideForYear(period.year).annualTuition), 0);
   const programTotalTuition = programTotalMode ? nonNegative(budget.programTotalTuition) : legacyTotal;
   return {
@@ -97,7 +97,7 @@ export function calculateRevenueEngine(
   const semesterMap = new Map(budget.semesters.map((semester) => [periodKey(semester.year, semester.semester), semester]));
   const pricing = buildPricingSnapshot(budget, annualOverrideForYear);
   const programTotalMode = pricing.pricingMode === "PROGRAM_TOTAL";
-  const tuitionChargePeriods = new Set(getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
+  const tuitionChargePeriods = new Set(getAnnualTuitionChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
     .map((period) => periodKey(period.year, period.semester)));
   const enrollmentChargePeriods = new Set(enrollmentChargePeriodsForBudget(budget)
     .map((period) => periodKey(period.year, period.semester)));
