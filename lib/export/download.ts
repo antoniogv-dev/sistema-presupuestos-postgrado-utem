@@ -7,7 +7,8 @@ import { buildFinancialReport, buildParameterReport, compactParameterReportForPd
 import { createFinancialReportXlsx } from "./xlsx";
 import { createInstitutionalFormulaBudgetXlsx, institutionalTemplateCompatibilityIssue } from "./institutional-budget-xlsx";
 import { extendInstitutionalBudgetXlsx } from "./institutional-budget-multiyear";
-import { normalizeInstitutionalAnnualEnrollment } from "./institutional-budget-enrollment-normalizer";
+import { normalizeInstitutionalEnrollmentBilling } from "./institutional-budget-enrollment-normalizer";
+import { extendInstitutionalStaffProration } from "./institutional-budget-staff-multiyear";
 import { buildFinancialNarrative, buildHistoricalCohortSnapshots } from "./financial-narrative";
 import { createBudgetMemorandumDocx } from "./memorandum";
 
@@ -119,9 +120,11 @@ export async function downloadBudgetXlsx(
     if (result.years.length > 2) {
       bytes = await extendInstitutionalBudgetXlsx(bytes, budget, result, parameters);
     }
-    // Regla institucional de matrícula anual: una matrícula completa al inicio de cada
-    // bloque de dos semestres. Un inicio en 2S no divide estudiantes ni matrícula por 0,5.
-    bytes = await normalizeInstitutionalAnnualEnrollment(bytes, budget, result, parameters);
+    // Matrícula parametrizable sin fraccionar estudiantes por año calendario.
+    bytes = await normalizeInstitutionalEnrollmentBilling(bytes, budget, result, parameters);
+    // El prorrateo de Dirección, Asistencia y Otros honorarios se extiende también
+    // a cada año adicional activo (por ejemplo, 2028-1S en una cohorte 2026-2S de 4 semestres).
+    bytes = await extendInstitutionalStaffProration(bytes, budget, result, parameters);
     download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
     return;
   }
