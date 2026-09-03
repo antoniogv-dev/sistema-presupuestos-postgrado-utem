@@ -127,7 +127,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="product-status-dot" aria-hidden="true" />
           <div><strong>Motor financiero v12</strong><small>Ledger semestral · D1</small></div>
         </div>
-        <div className="sidebar-footer"><span>v12.1.1</span><small>Suite consolidada · 2.1.1-d1-web</small></div>
+        <div className="sidebar-footer"><span>v12.1.2</span><small>Suite consolidada · 2.1.2-d1-web</small></div>
       </aside>
       {open ? <button className="backdrop" onClick={() => setOpen(false)} aria-label="Cerrar menú" /> : null}
       <div className="main-area">

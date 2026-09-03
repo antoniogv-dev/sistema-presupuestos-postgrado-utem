@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
-const { fullProgramDiscountRange, synchronizeInitialStudents, synchronizeLastSemesterGraduation } = await import(pathToFileURL(path.join(root, ".engine-build/lib/budgets/form-defaults.js")).href);
+const { fullProgramDiscountRange, synchronizeInitialStudents, synchronizeLastSemesterGraduation } = await import(path.join(root, ".engine-build/lib/budgets/form-defaults.js"));
 
 function semester(year, term, active = 3, graduating = 0) {
   return { year, semester: term, activeStudents: active, graduatingStudents: graduating, directTeachingHours: 0, synchronousTeachingHours: 0, asynchronousTeachingHours: 0, replacementTeachingHours: 0, electiveSubjects: 0, electiveSections: 0, specializedCourses: 0, specializedSections: 0, internalTuitionScholarshipStudents: 0, internalTuitionScholarshipCoverage: 1, maintenanceScholarshipStudents: 0, maintenanceScholarshipMonths: 0 };

@@ -1,4 +1,4 @@
-import { getActivePeriods, getAnnualEnrollmentChargePeriods, getAnnualTuitionChargePeriods, periodKey } from "./periods";
+import { getActivePeriods, getAnnualEnrollmentChargePeriods, periodKey } from "./periods";
 import type { CohortBudget, SemesterNumber } from "./types";
 
 export interface TuitionDistributionPeriod {
@@ -70,7 +70,7 @@ export function grossEnrollmentPerStudentForProgram(budget: CohortBudget, annual
 
 export function grossTuitionPerStudentForProgram(budget: CohortBudget, annualTuitionByYear: (year: number) => number): number {
   if (isProgramTotalPricing(budget)) return finiteNonNegative(budget.programTotalTuition);
-  return getAnnualTuitionChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
+  return getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
     .reduce((total, period) => total + finiteNonNegative(annualTuitionByYear(period.year)), 0);
 }
 

@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
-const { demoBudget, institutionalParameters, programs } = await import(pathToFileURL(path.join(root, ".engine-build/lib/demo-data.js")).href);
-const { applyProgramCurriculumToBudget } = await import(pathToFileURL(path.join(root, ".engine-build/lib/curriculum/budget-load.js")).href);
-const { calculateBudget, defaultAnnualOverrideForYear } = await import(pathToFileURL(path.join(root, ".engine-build/lib/calculations/budget-engine.js")).href);
+const { demoBudget, institutionalParameters, programs } = await import(path.join(root, ".engine-build/lib/demo-data.js"));
+const { applyProgramCurriculumToBudget } = await import(path.join(root, ".engine-build/lib/curriculum/budget-load.js"));
+const { calculateBudget, defaultAnnualOverrideForYear } = await import(path.join(root, ".engine-build/lib/calculations/budget-engine.js"));
 
 function course(patch = {}) {
   return { id: "c1", code: "CURR001", name: "Asignatura", semester: 1, kind: "OBLIGATORIA", weeks: 18, sections: 1, theoryWeeklyHours: 2, laboratoryWeeklyHours: 0, workshopWeeklyHours: 2, directWeeklyHours: 4, autonomousWeeklyHours: 4, teachingMode: "SINCRONICA", asynchronousRateFactor: 0.5, sharedWithProgramIds: [], allocationRate: 1, sctCredits: 4, position: 0, ...patch };

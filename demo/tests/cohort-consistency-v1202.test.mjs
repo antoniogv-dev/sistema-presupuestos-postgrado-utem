@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const { cohortConsistencyIssues, activePeriodKeys } = await import(pathToFileURL(path.join(root, ".engine-build/lib/validation/cohort-consistency.js")).href);
+const { cohortConsistencyIssues, activePeriodKeys } = await import(path.join(root, ".engine-build/lib/validation/cohort-consistency.js"));
 
 const base = () => ({
   programId: "program-a",

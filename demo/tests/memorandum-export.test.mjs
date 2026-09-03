@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const { demoBudget, institutionalParameters } = await import(pathToFileURL(path.join(root, ".engine-build/lib/demo-data.js")).href);
-const { calculateBudget } = await import(pathToFileURL(path.join(root, ".engine-build/lib/calculations/budget-engine.js")).href);
-const { createBudgetMemorandumDocx } = await import(pathToFileURL(path.join(root, ".engine-build/lib/export/memorandum.js")).href);
+const { demoBudget, institutionalParameters } = await import(path.join(root, ".engine-build/lib/demo-data.js"));
+const { calculateBudget } = await import(path.join(root, ".engine-build/lib/calculations/budget-engine.js"));
+const { createBudgetMemorandumDocx } = await import(path.join(root, ".engine-build/lib/export/memorandum.js"));
 
 function u16(view, offset) { return view.getUint16(offset, true); }
 function u32(view, offset) { return view.getUint32(offset, true); }

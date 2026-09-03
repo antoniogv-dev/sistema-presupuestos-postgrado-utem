@@ -34,22 +34,6 @@ export function getAnnualEnrollmentChargePeriods(
   return getActivePeriods(startYear, startSemester, durationSemesters).filter((period) => period.index % 2 === 0);
 }
 
-export function getAnnualTuitionChargePeriods(
-  startYear: number,
-  startSemester: SemesterNumber,
-  durationSemesters: number,
-): ActivePeriod[] {
-  // El arancel anual se reconoce una vez por cada año calendario en que la cohorte
-  // mantiene actividad. En cohortes que comienzan en 2S, esto permite reconocer
-  // también el último 1S, que cae en un tercer año calendario para programas de 4 semestres.
-  const seenYears = new Set<number>();
-  return getActivePeriods(startYear, startSemester, durationSemesters).filter((period) => {
-    if (seenYears.has(period.year)) return false;
-    seenYears.add(period.year);
-    return true;
-  });
-}
-
 export function getActiveYears(periods: ActivePeriod[]): number[] {
   return [...new Set(periods.map((period) => period.year))].sort((a, b) => a - b);
 }

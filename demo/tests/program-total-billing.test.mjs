@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const { calculateBudget } = await import(pathToFileURL(path.join(root, ".engine-build/lib/calculations/budget-engine.js")).href);
-const { normalizedTuitionDistribution } = await import(pathToFileURL(path.join(root, ".engine-build/lib/calculations/billing.js")).href);
-const { demoBudget, institutionalParameters } = await import(pathToFileURL(path.join(root, ".engine-build/lib/demo-data.js")).href);
+const { calculateBudget } = await import(path.join(root, ".engine-build/lib/calculations/budget-engine.js"));
+const { normalizedTuitionDistribution } = await import(path.join(root, ".engine-build/lib/calculations/billing.js"));
+const { demoBudget, institutionalParameters } = await import(path.join(root, ".engine-build/lib/demo-data.js"));
 
 function threeSemester(startSemester = 1) {
   const b = structuredClone(demoBudget);
