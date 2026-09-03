@@ -1,6 +1,7 @@
 import type { BudgetResult, CohortBudget, InstitutionalParameters, SemesterParameters } from "../calculations/types";
 import { resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
-import { getAnnualEnrollmentChargePeriods, getAnnualTuitionChargePeriods } from "../calculations/periods";
+import { enrollmentChargePeriodsForBudget, enrollmentFeeForPeriod } from "../calculations/billing";
+import { getAnnualTuitionChargePeriods } from "../calculations/periods";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -143,10 +144,6 @@ function tuitionChargeSemesterForYear(budget: CohortBudget, year: number): Semes
   const period = getAnnualTuitionChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters).find((item) => item.year === year);
   return period ? semesterForPeriod(budget, period.year, period.semester) : undefined;
 }
-function enrollmentChargeSemesterForYear(budget: CohortBudget, year: number): SemesterParameters | undefined {
-  const period = getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters).find((item) => item.year === year);
-  return period ? semesterForPeriod(budget, period.year, period.semester) : undefined;
-}
 function tuitionStudentsForYear(budget: CohortBudget, year: number): number {
   return Math.max(0, tuitionChargeSemesterForYear(budget, year)?.activeStudents ?? 0);
 }
@@ -154,11 +151,31 @@ function discountStudentsForTuitionYear(budget: CohortBudget, year: number, disc
   const semester = tuitionChargeSemesterForYear(budget, year);
   return semester && discountApplies(discount, semester) ? Math.max(0, discount.students) : 0;
 }
-function enrollmentStudentsForYear(budget: CohortBudget, year: number, grossEnrollmentFee: number, annualEnrollmentFee: number): number {
-  const semester = enrollmentChargeSemesterForYear(budget, year);
-  if (!semester) return 0;
-  if (annualEnrollmentFee > 0 && grossEnrollmentFee > 0) return grossEnrollmentFee / annualEnrollmentFee;
-  return Math.max(0, semester.activeStudents);
+function enrollmentChargeSemestersForYear(budget: CohortBudget, year: number): SemesterParameters[] {
+  return enrollmentChargePeriodsForBudget(budget)
+    .filter((period) => period.year === year)
+    .map((period) => semesterForPeriod(budget, period.year, period.semester))
+    .filter((semester): semester is SemesterParameters => Boolean(semester));
+}
+function enrollmentBillingUnitsForYear(budget: CohortBudget, year: number): number {
+  // ANNUAL: estudiantes cobrados una vez en el semestre que inicia cada bloque bienal.
+  // SEMESTER: suma estudiantes-semestre, porque existe un cobro completo en cada semestre activo.
+  // SINGLE_SPECIAL: estudiantes cobrados una sola vez al inicio de la cohorte.
+  return enrollmentChargeSemestersForYear(budget, year)
+    .reduce((total, semester) => total + Math.max(0, semester.activeStudents), 0);
+}
+function enrollmentUnitPriceForYear(
+  budget: CohortBudget,
+  year: number,
+  grossEnrollmentFee: number,
+  annualEnrollmentFee: number,
+): number {
+  const periods = enrollmentChargePeriodsForBudget(budget).filter((period) => period.year === year);
+  if (!periods.length) return 0;
+  const units = enrollmentBillingUnitsForYear(budget, year);
+  if (units > 0 && grossEnrollmentFee > 0) return grossEnrollmentFee / units;
+  const first = periods[0];
+  return enrollmentFeeForPeriod(budget, first.year, first.semester, annualEnrollmentFee);
 }
 function rowLayout(budget: CohortBudget) {
   const discounts = exportableDiscounts(budget);
@@ -179,23 +196,29 @@ function rowLayout(budget: CohortBudget) {
 }
 
 /**
- * Normaliza la hoja "Flujo estudiantes" del formato institucional validado.
- * La matrícula anual se cobra completa una vez al inicio de cada bloque de dos semestres
- * (por ejemplo, 2026-2S y 2027-2S para una cohorte 2026-2S de cuatro semestres).
- * Los estudiantes no se prorratean por 0,5 por caer en un año calendario parcial.
+ * Normaliza la matrícula del formato institucional validado sin cambiar su estructura.
+ *
+ * - ANNUAL: una matrícula completa al inicio de cada bloque de dos semestres.
+ * - SEMESTER: una matrícula completa en cada semestre activo.
+ * - SINGLE_SPECIAL: una matrícula única/total al inicio del programa.
+ *
+ * Ninguna modalidad divide estudiantes por 0,5 debido a que el año calendario sea parcial.
  */
-export async function normalizeInstitutionalAnnualEnrollment(
+export async function normalizeInstitutionalEnrollmentBilling(
   workbookBytes: Uint8Array,
   budget: CohortBudget,
   result: BudgetResult,
   parameters: InstitutionalParameters,
 ): Promise<Uint8Array> {
   const files = await unzipPackage(workbookBytes);
-  const sheetName = "xl/worksheets/sheet2.xml";
-  if (!files.has(sheetName)) throw new Error("XLSX institucional incompleto: falta la hoja Flujo estudiantes.");
+  const parameterSheetName = "xl/worksheets/sheet1.xml";
+  const studentSheetName = "xl/worksheets/sheet2.xml";
+  if (!files.has(parameterSheetName)) throw new Error("XLSX institucional incompleto: falta la hoja Parámetros.");
+  if (!files.has(studentSheetName)) throw new Error("XLSX institucional incompleto: falta la hoja Flujo estudiantes.");
 
   const rows = rowLayout(budget);
-  let sheet = decoder.decode(files.get(sheetName)!);
+  let parameterSheet = decoder.decode(files.get(parameterSheetName)!);
+  let studentSheet = decoder.decode(files.get(studentSheetName)!);
 
   for (let index = 0; index < result.years.length; index += 1) {
     const year = result.years[index];
@@ -208,28 +231,36 @@ export async function normalizeInstitutionalAnnualEnrollment(
     const tuitionStudents = tuitionStudentsForYear(budget, year);
     const noDiscount = Math.max(0, tuitionStudents - discounted);
 
-    sheet = setNumber(sheet, `${col}3`, noDiscount);
+    studentSheet = setNumber(studentSheet, `${col}3`, noDiscount);
     for (let discountIndex = 0; discountIndex < rows.discountSlots; discountIndex += 1) {
       const studentRow = rows.studentDiscountStartRow + discountIndex;
       const parameterRow = rows.parameterDiscountStartRow + discountIndex;
       const incomeRow = rows.discountIncomeStartRow + discountIndex;
       const students = discountStudents[discountIndex] ?? 0;
       const rate = rows.discounts[discountIndex] ? Math.max(0, Math.min(1, rows.discounts[discountIndex].percentage)) : 0;
-      sheet = setNumber(sheet, `${col}${studentRow}`, students);
-      sheet = setFormula(sheet, `${col}${incomeRow}`, `(${col}${studentRow})*Parámetros!$${col}$4*(1-Parámetros!$${col}$${parameterRow})`, students * override.annualTuition * (1 - rate));
+      studentSheet = setNumber(studentSheet, `${col}${studentRow}`, students);
+      studentSheet = setFormula(studentSheet, `${col}${incomeRow}`, `(${col}${studentRow})*Parámetros!$${col}$4*(1-Parámetros!$${col}$${parameterRow})`, students * override.annualTuition * (1 - rate));
     }
 
-    sheet = setFormula(sheet, `${col}${rows.totalStudentsRow}`, `SUM(${col}3:${col}${rows.studentDiscountStartRow + rows.discountSlots - 1})`, tuitionStudents);
+    studentSheet = setFormula(studentSheet, `${col}${rows.totalStudentsRow}`, `SUM(${col}3:${col}${rows.studentDiscountStartRow + rows.discountSlots - 1})`, tuitionStudents);
     const equivalentFormula = [`${col}3`, ...Array.from({ length: rows.discountSlots }, (_, discountIndex) => `${col}${rows.studentDiscountStartRow + discountIndex}*(1-Parámetros!${col}${rows.parameterDiscountStartRow + discountIndex})`)].join("+");
-    sheet = setFormula(sheet, `${col}${rows.equivalentStudentsRow}`, equivalentFormula, flow.equivalentEnrollments);
-    sheet = setNumber(sheet, `${col}${rows.graduationStudentsRow}`, flow.graduatingStudents);
+    studentSheet = setFormula(studentSheet, `${col}${rows.equivalentStudentsRow}`, equivalentFormula, flow.equivalentEnrollments);
+    studentSheet = setNumber(studentSheet, `${col}${rows.graduationStudentsRow}`, flow.graduatingStudents);
 
-    const enrollmentStudents = enrollmentStudentsForYear(budget, year, flow.grossEnrollmentFee, override.annualEnrollmentFee);
-    sheet = setFormula(sheet, `${col}${rows.enrollmentIncomeRow}`, `${enrollmentStudents}*Parámetros!$${col}$5`, flow.grossEnrollmentFee);
-    sheet = setFormula(sheet, `${col}${rows.noDiscountIncomeRow}`, `(${col}3)*Parámetros!$${col}$4`, noDiscount * override.annualTuition);
-    sheet = setFormula(sheet, `${col}${rows.totalTuitionIncomeRow}`, `SUM(${col}${rows.noDiscountIncomeRow}:${col}${rows.discountIncomeStartRow + rows.discountSlots - 1})`, flow.tuitionAfterBenefits);
+    const enrollmentUnits = enrollmentBillingUnitsForYear(budget, year);
+    const enrollmentUnitPrice = enrollmentUnitPriceForYear(budget, year, flow.grossEnrollmentFee, override.annualEnrollmentFee);
+    // La fila 5 de Parámetros representa el valor unitario aplicable a la modalidad elegida
+    // en cada año: anual, por semestre o único/total. En años sin cobro queda en cero.
+    parameterSheet = setNumber(parameterSheet, `${col}5`, enrollmentUnitPrice);
+    studentSheet = setFormula(studentSheet, `${col}${rows.enrollmentIncomeRow}`, `${enrollmentUnits}*Parámetros!$${col}$5`, flow.grossEnrollmentFee);
+    studentSheet = setFormula(studentSheet, `${col}${rows.noDiscountIncomeRow}`, `(${col}3)*Parámetros!$${col}$4`, noDiscount * override.annualTuition);
+    studentSheet = setFormula(studentSheet, `${col}${rows.totalTuitionIncomeRow}`, `SUM(${col}${rows.noDiscountIncomeRow}:${col}${rows.discountIncomeStartRow + rows.discountSlots - 1})`, flow.tuitionAfterBenefits);
   }
 
-  files.set(sheetName, encoder.encode(sheet));
+  files.set(parameterSheetName, encoder.encode(parameterSheet));
+  files.set(studentSheetName, encoder.encode(studentSheet));
   return zip(files);
 }
+
+// Alias conservado para no romper consumidores anteriores; ahora normaliza las tres modalidades.
+export const normalizeInstitutionalAnnualEnrollment = normalizeInstitutionalEnrollmentBilling;
