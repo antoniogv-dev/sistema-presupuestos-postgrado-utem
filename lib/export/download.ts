@@ -76,15 +76,6 @@ async function loadInstitutionalBudgetXlsxTemplate(): Promise<Uint8Array> {
   return bytes;
 }
 
-export type BudgetXlsxExportMode = "INSTITUTIONAL" | "GENERAL_MULTIYEAR" | "GENERAL_FALLBACK";
-
-export interface BudgetXlsxDownloadResult {
-  mode: BudgetXlsxExportMode;
-  years: number[];
-  compatibilityIssue?: string;
-  fallbackReason?: string;
-}
-
 function downloadGeneralBudgetXlsx(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters) {
   const report = buildFinancialReport(budget, result);
   const parameterReport = buildParameterReport(budget, result, parameters);
@@ -99,36 +90,28 @@ export async function downloadBudgetXlsx(
   budget: CohortBudget,
   result: BudgetResult,
   parameters: InstitutionalParameters,
-): Promise<BudgetXlsxDownloadResult> {
+): Promise<void> {
   // Los presupuestos con arancel total usan el XLSX trazable general.
   const institutionalCandidate = budget.program.type === "MAGISTER_PROFESIONAL"
     && budget.tuitionPricingMode !== "PROGRAM_TOTAL"
     && !budget.discounts.some((discount) => discount.target === "ENROLLMENT");
 
-  let compatibilityIssue: string | undefined;
-  let fallbackReason: string | undefined;
-
   if (institutionalCandidate) {
-    compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result) ?? undefined;
+    const compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result);
     if (!compatibilityIssue) {
       try {
         const template = await loadInstitutionalBudgetXlsxTemplate();
         const bytes = await createInstitutionalFormulaBudgetXlsx(template, budget, result, parameters);
         download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
-        return { mode: "INSTITUTIONAL", years: [...result.years] };
-      } catch (reason) {
-        fallbackReason = reason instanceof Error ? reason.message : "La plantilla institucional no pudo generarse.";
+        return;
+      } catch {
+        // Si la plantilla institucional falla, se continúa con el XLSX general trazable.
       }
     }
   }
 
+  // Para 3, 4 o más años, el generador general crea una columna por cada año activo.
   downloadGeneralBudgetXlsx(budget, result, parameters);
-  return {
-    mode: result.years.length > 2 ? "GENERAL_MULTIYEAR" : "GENERAL_FALLBACK",
-    years: [...result.years],
-    compatibilityIssue,
-    fallbackReason,
-  };
 }
 
 async function loadBudgetPdfCover() {
