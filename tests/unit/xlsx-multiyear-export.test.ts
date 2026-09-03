@@ -37,16 +37,29 @@ describe("exportación XLSX multianual", () => {
     expect(multiyear).toContain("No genera un formato alternativo");
   });
 
-  it("cobra matrícula anual completa por bloque de dos semestres sin partir estudiantes por año calendario", () => {
+  it("respeta matrícula anual, semestral o única sin partir estudiantes por año calendario", () => {
     const download = source("lib/export/download.ts");
     const normalizer = source("lib/export/institutional-budget-enrollment-normalizer.ts");
 
-    expect(download).toContain("normalizeInstitutionalAnnualEnrollment(bytes, budget, result, parameters)");
-    expect(normalizer).toContain("getAnnualEnrollmentChargePeriods");
-    expect(normalizer).toContain("getAnnualTuitionChargePeriods");
-    expect(normalizer).toContain("Los estudiantes no se prorratean por 0,5");
+    expect(download).toContain("normalizeInstitutionalEnrollmentBilling(bytes, budget, result, parameters)");
+    expect(normalizer).toContain("enrollmentChargePeriodsForBudget");
+    expect(normalizer).toContain("enrollmentFeeForPeriod");
+    expect(normalizer).toContain("Ninguna modalidad divide estudiantes por 0,5");
     expect(normalizer).not.toContain("activeStudents) * 0.5");
     expect(normalizer).not.toContain("discount.students) * 0.5");
+  });
+
+  it("extiende Prorrateo Staff a cada año activo adicional, incluido un último semestre parcial", () => {
+    const download = source("lib/export/download.ts");
+    const staff = source("lib/export/institutional-budget-staff-multiyear.ts");
+
+    expect(download).toContain('import { extendInstitutionalStaffProration } from "./institutional-budget-staff-multiyear"');
+    expect(download).toContain("extendInstitutionalStaffProration(bytes, budget, result, parameters)");
+    expect(staff).toContain("const extraYears = result.years.length - 2");
+    expect(staff).toContain("2028 (1S)");
+    expect(staff).toContain("activeSemesterLabel");
+    expect(staff).toContain("Otras cohortes / versiones / programas / proyectos");
+    expect(staff).toContain("'Prorrateo Staff'!F");
   });
 
   it("mantiene una firma Promise<void> compatible con los consumidores de exportación", () => {
