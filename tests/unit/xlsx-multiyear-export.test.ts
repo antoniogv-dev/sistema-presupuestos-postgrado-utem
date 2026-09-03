@@ -41,8 +41,9 @@ describe("exportación XLSX multianual", () => {
     const multiyear = source("lib/export/institutional-budget-multiyear.ts");
     const institutional = source("lib/export/institutional-budget-xlsx.ts");
 
-    expect(institutional).toContain("yearColumns: string[]");
-    expect(institutional).toContain("SUM('FLUJO TOTAL'!${firstColumn}37:${lastColumn}37)");
+    expect(institutional).toContain("yearColumnsOrLastColumn: string[] | string");
+    expect(institutional).toContain("const yearColumns = Array.isArray(yearColumnsOrLastColumn)");
+    expect(institutional).toContain("SUM('FLUJO TOTAL'!${firstYearColumn}37:${lastYearColumn}37)");
     expect(multiyear).toContain("result.years.map((_year, index) => yearColumn(index))");
     expect(multiyear).toContain("calculateBreakEvenEquivalentEnrollments(budget, parameters)");
   });
