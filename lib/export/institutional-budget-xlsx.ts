@@ -252,15 +252,28 @@ function maybeProjectionFormula(base: number, next: number, adjustment: number, 
  * La fórmula se construye con el último año disponible de la plantilla. En una cohorte distribuida
  * en tres años calendario, el rango resultante es B:D; en una de dos años, B:C.
  */
-function breakEvenExcelFormula(
-  lastYearColumn: string,
+export function breakEvenExcelFormula(
+  yearColumnsOrLastColumn: string[] | string,
   badDebtParameterRow: number,
   centralOverheadParameterRow: number,
   facultyOverheadParameterRow: number,
-  totalStudentsRow: number,
-  equivalentStudentsRow: number,
+  totalStudentsRow?: number,
+  equivalentStudentsRow?: number,
 ): string {
-  return `LET(costosFijos,ABS(SUM('FLUJO TOTAL'!B37:${lastYearColumn}37)-SUM('FLUJO TOTAL'!B36:${lastYearColumn}36)-SUM('FLUJO TOTAL'!B10:${lastYearColumn}10)),aporteArancel,SUMPRODUCT(Parámetros!B4:${lastYearColumn}4,1-Parámetros!B${badDebtParameterRow}:${lastYearColumn}${badDebtParameterRow},1-Parámetros!B${centralOverheadParameterRow}:${lastYearColumn}${centralOverheadParameterRow}-Parámetros!B${facultyOverheadParameterRow}:${lastYearColumn}${facultyOverheadParameterRow}),aporteMatricula,(SUM(Parámetros!B5:${lastYearColumn}5)-SUM(Parámetros!B8:${lastYearColumn}8))*(B${totalStudentsRow}/B${equivalentStudentsRow}),costosFijos/(aporteArancel+aporteMatricula))`;
+  const yearColumns = Array.isArray(yearColumnsOrLastColumn)
+    ? (yearColumnsOrLastColumn.length ? yearColumnsOrLastColumn : ["B"])
+    : ["B", yearColumnsOrLastColumn].filter((column, index, values) => values.indexOf(column) === index);
+  const firstYearColumn = yearColumns[0] ?? "B";
+  const lastYearColumn = yearColumns.at(-1) ?? firstYearColumn;
+
+  // En la plantilla institucional las filas de estudiantes se desplazan cuando hay
+  // más de dos descuentos. Si el llamador multianual no entrega explícitamente las
+  // filas, se deducen desde la fila de incobrabilidad (10 + cantidad de descuentos).
+  const discountSlots = Math.max(2, badDebtParameterRow - 10);
+  const resolvedTotalStudentsRow = totalStudentsRow ?? (4 + discountSlots);
+  const resolvedEquivalentStudentsRow = equivalentStudentsRow ?? (5 + discountSlots);
+
+  return `LET(costosFijos,ABS(SUM('FLUJO TOTAL'!${firstYearColumn}37:${lastYearColumn}37)-SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)-SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10)),aporteArancel,SUMPRODUCT(Parámetros!${firstYearColumn}4:${lastYearColumn}4,1-Parámetros!${firstYearColumn}${badDebtParameterRow}:${lastYearColumn}${badDebtParameterRow},1-Parámetros!${firstYearColumn}${centralOverheadParameterRow}:${lastYearColumn}${centralOverheadParameterRow}-Parámetros!${firstYearColumn}${facultyOverheadParameterRow}:${lastYearColumn}${facultyOverheadParameterRow}),aporteMatricula,(SUM(Parámetros!${firstYearColumn}5:${lastYearColumn}5)-SUM(Parámetros!${firstYearColumn}8:${lastYearColumn}8))*(${firstYearColumn}${resolvedTotalStudentsRow}/${firstYearColumn}${resolvedEquivalentStudentsRow}),costosFijos/(aporteArancel+aporteMatricula))`;
 }
 
 function modalityLabel(budget: CohortBudget): string {
