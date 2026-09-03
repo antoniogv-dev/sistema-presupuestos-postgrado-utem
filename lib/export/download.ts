@@ -53,7 +53,6 @@ export function downloadTextFile(content: string, type: string, filename: string
   triggerDownload(new Blob([content], { type }), filename);
 }
 
-
 function institutionalBudgetFilename(budget: CohortBudget): string {
   // Conserva la convención histórica entregada como modelo institucional.
   const programName = budget.program.name.replaceAll("Metodologías", "Metodologias");
@@ -82,27 +81,63 @@ async function loadInstitutionalBudgetXlsxTemplate(): Promise<Uint8Array> {
   return bytes;
 }
 
-export async function downloadBudgetXlsx(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters) {
+export type BudgetXlsxExportMode = "INSTITUTIONAL" | "GENERAL_MULTIYEAR" | "GENERAL_FALLBACK";
+
+export interface BudgetXlsxDownloadResult {
+  mode: BudgetXlsxExportMode;
+  years: number[];
+  compatibilityIssue?: string;
+  fallbackReason?: string;
+}
+
+function downloadGeneralBudgetXlsx(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters) {
+  const report = buildFinancialReport(budget, result);
+  const parameterReport = buildParameterReport(budget, result, parameters);
+  download(
+    createFinancialReportXlsx(report, parameterReport),
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    humanBudgetFilename(budget, "xlsx"),
+  );
+}
+
+export async function downloadBudgetXlsx(
+  budget: CohortBudget,
+  result: BudgetResult,
+  parameters: InstitutionalParameters,
+): Promise<BudgetXlsxDownloadResult> {
   const institutionalCandidate = budget.program.type === "MAGISTER_PROFESIONAL"
     && budget.tuitionPricingMode !== "PROGRAM_TOTAL"
     && !budget.discounts.some((discount) => discount.target === "ENROLLMENT");
 
-  // La plantilla institucional histórica tiene una estructura física acotada (por ejemplo,
-  // dos años presupuestarios). Si el presupuesto no cabe en ella, la descarga no se bloquea:
-  // se utiliza automáticamente el XLSX general, que admite todos los años activos de la cohorte.
+  let compatibilityIssue: string | undefined;
+  let fallbackReason: string | undefined;
+
+  // La plantilla institucional histórica tiene una estructura física de dos años.
+  // La exportación ya no se bloquea por esa limitación: cuando la cohorte abarca
+  // tres, cuatro o más años, se genera automáticamente el XLSX general multianual.
+  // Además, si la plantilla institucional falla por versión, integridad o lectura,
+  // se preserva la descarga mediante el mismo XLSX general para no perder información.
   if (institutionalCandidate) {
-    const compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result);
+    compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result) ?? undefined;
     if (!compatibilityIssue) {
-      const template = await loadInstitutionalBudgetXlsxTemplate();
-      const bytes = await createInstitutionalFormulaBudgetXlsx(template, budget, result, parameters);
-      download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
-      return;
+      try {
+        const template = await loadInstitutionalBudgetXlsxTemplate();
+        const bytes = await createInstitutionalFormulaBudgetXlsx(template, budget, result, parameters);
+        download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
+        return { mode: "INSTITUTIONAL", years: [...result.years] };
+      } catch (reason) {
+        fallbackReason = reason instanceof Error ? reason.message : "La plantilla institucional no pudo generarse.";
+      }
     }
   }
 
-  const report = buildFinancialReport(budget, result);
-  const parameterReport = buildParameterReport(budget, result, parameters);
-  download(createFinancialReportXlsx(report, parameterReport), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", humanBudgetFilename(budget, "xlsx"));
+  downloadGeneralBudgetXlsx(budget, result, parameters);
+  return {
+    mode: result.years.length > 2 ? "GENERAL_MULTIYEAR" : "GENERAL_FALLBACK",
+    years: [...result.years],
+    compatibilityIssue,
+    fallbackReason,
+  };
 }
 
 async function loadBudgetPdfCover() {
@@ -154,7 +189,6 @@ function csvCell(value: unknown): string {
   const text = value == null ? "" : String(value);
   return `"${text.replaceAll('"', '""')}"`;
 }
-
 
 export function consolidationReport(group: ConsolidationGroup): FinancialReport {
   return {
