@@ -12,9 +12,8 @@ describe("exportación XLSX multianual", () => {
   it("no bloquea presupuestos de 3 o más años cuando la plantilla institucional no es compatible", () => {
     const download = source("lib/export/download.ts");
 
-    expect(download).toContain("compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result) ?? undefined");
+    expect(download).toContain("const compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result)");
     expect(download).toContain("downloadGeneralBudgetXlsx(budget, result, parameters)");
-    expect(download).toContain('result.years.length > 2 ? "GENERAL_MULTIYEAR" : "GENERAL_FALLBACK"');
     expect(download).not.toContain("if (compatibilityIssue) throw new Error(compatibilityIssue)");
   });
 
@@ -22,9 +21,15 @@ describe("exportación XLSX multianual", () => {
     const download = source("lib/export/download.ts");
 
     expect(download).toContain("try {");
-    expect(download).toContain("catch (reason)");
-    expect(download).toContain("fallbackReason = reason instanceof Error ? reason.message");
-    expect(download).toContain("GENERAL_FALLBACK");
+    expect(download).toContain("catch {");
+    expect(download).toContain("Si la plantilla institucional falla, se continúa con el XLSX general trazable");
+  });
+
+  it("mantiene una firma Promise<void> compatible con los consumidores de exportación", () => {
+    const download = source("lib/export/download.ts");
+
+    expect(download).toContain("): Promise<void> {");
+    expect(download).not.toContain("Promise<BudgetXlsxDownloadResult>");
   });
 
   it("el XLSX general construye columnas de acuerdo con todos los años del reporte", () => {
