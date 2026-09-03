@@ -37,6 +37,18 @@ describe("exportación XLSX multianual", () => {
     expect(multiyear).toContain("No genera un formato alternativo");
   });
 
+  it("cobra matrícula anual completa por bloque de dos semestres sin partir estudiantes por año calendario", () => {
+    const download = source("lib/export/download.ts");
+    const normalizer = source("lib/export/institutional-budget-enrollment-normalizer.ts");
+
+    expect(download).toContain("normalizeInstitutionalAnnualEnrollment(bytes, budget, result, parameters)");
+    expect(normalizer).toContain("getAnnualEnrollmentChargePeriods");
+    expect(normalizer).toContain("getAnnualTuitionChargePeriods");
+    expect(normalizer).toContain("Los estudiantes no se prorratean por 0,5");
+    expect(normalizer).not.toContain("activeStudents) * 0.5");
+    expect(normalizer).not.toContain("discount.students) * 0.5");
+  });
+
   it("mantiene una firma Promise<void> compatible con los consumidores de exportación", () => {
     const download = source("lib/export/download.ts");
 
