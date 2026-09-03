@@ -12,7 +12,7 @@ describe("exportación XLSX multianual", () => {
   it("no bloquea presupuestos de 3 o más años cuando la plantilla institucional no es compatible", () => {
     const download = source("lib/export/download.ts");
 
-    expect(download).toContain("const compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result)");
+    expect(download).toContain("compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result) ?? undefined");
     expect(download).toContain("downloadGeneralBudgetXlsx(budget, result, parameters)");
     expect(download).toContain('result.years.length > 2 ? "GENERAL_MULTIYEAR" : "GENERAL_FALLBACK"');
     expect(download).not.toContain("if (compatibilityIssue) throw new Error(compatibilityIssue)");
