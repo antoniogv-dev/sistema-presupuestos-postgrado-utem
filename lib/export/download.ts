@@ -37,13 +37,10 @@ function triggerDownload(blob: Blob, filename: string) {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  // Se difiere la revocación para permitir que navegadores/WebViews completen la descarga.
   window.setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
 function download(bytes: Uint8Array, type: string, filename: string) {
-  // Copia a un ArrayBuffer propio para evitar incompatibilidades de tipado BlobPart
-  // con Uint8Array<ArrayBufferLike> en TypeScript/DOM recientes.
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
   triggerDownload(new Blob([copy.buffer], { type }), filename);
@@ -54,7 +51,6 @@ export function downloadTextFile(content: string, type: string, filename: string
 }
 
 function institutionalBudgetFilename(budget: CohortBudget): string {
-  // Conserva la convención histórica entregada como modelo institucional.
   const programName = budget.program.name.replaceAll("Metodologías", "Metodologias");
   return `${budget.startYear} - ${programName}.xlsx`;
 }
@@ -70,7 +66,6 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 }
 
 async function loadInstitutionalBudgetXlsxTemplate(): Promise<Uint8Array> {
-  // URL versionada + no-store: evita reutilizar la plantilla v10.25 que no contenía B17.
   const response = await fetch(INSTITUTIONAL_TEMPLATE_URL, { cache: "no-store" });
   if (!response.ok) throw new Error("No fue posible cargar la plantilla institucional mejorada de Excel.");
   const bytes = new Uint8Array(await response.arrayBuffer());
@@ -105,6 +100,7 @@ export async function downloadBudgetXlsx(
   result: BudgetResult,
   parameters: InstitutionalParameters,
 ): Promise<BudgetXlsxDownloadResult> {
+  // Los presupuestos con arancel total usan el XLSX trazable general.
   const institutionalCandidate = budget.program.type === "MAGISTER_PROFESIONAL"
     && budget.tuitionPricingMode !== "PROGRAM_TOTAL"
     && !budget.discounts.some((discount) => discount.target === "ENROLLMENT");
@@ -112,11 +108,6 @@ export async function downloadBudgetXlsx(
   let compatibilityIssue: string | undefined;
   let fallbackReason: string | undefined;
 
-  // La plantilla institucional histórica tiene una estructura física de dos años.
-  // La exportación ya no se bloquea por esa limitación: cuando la cohorte abarca
-  // tres, cuatro o más años, se genera automáticamente el XLSX general multianual.
-  // Además, si la plantilla institucional falla por versión, integridad o lectura,
-  // se preserva la descarga mediante el mismo XLSX general para no perder información.
   if (institutionalCandidate) {
     compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result) ?? undefined;
     if (!compatibilityIssue) {
@@ -144,11 +135,7 @@ async function loadBudgetPdfCover() {
   const response = await fetch("/Portada2026.jpg", { cache: "force-cache" });
   if (!response.ok) throw new Error("No fue posible cargar la portada institucional del PDF.");
   const bytes = new Uint8Array(await response.arrayBuffer());
-  return {
-    jpegBytes: bytes,
-    imageWidth: 912,
-    imageHeight: 1168,
-  };
+  return { jpegBytes: bytes, imageWidth: 912, imageHeight: 1168 };
 }
 
 export async function downloadBudgetPdf(
@@ -161,11 +148,7 @@ export async function downloadBudgetPdf(
   const completeParameterReport = buildParameterReport(budget, result, parameters);
   const parameterReport = compactParameterReportForPdf(completeParameterReport);
   const image = await loadBudgetPdfCover();
-  const cover = {
-    ...image,
-    title: budget.program.name,
-    subtitle: `Versión ${budget.programVersionLabel}\nCohorte ${budget.startYear}-${budget.startSemester}S`,
-  };
+  const cover = { ...image, title: budget.program.name, subtitle: `Versión ${budget.programVersionLabel}\nCohorte ${budget.startYear}-${budget.startSemester}S` };
   const history = buildHistoricalCohortSnapshots(budget, allBudgets, parameters);
   const narrative = buildFinancialNarrative(budget, result, parameters, history);
   download(createFinancialReportPdf(report, parameterReport, cover, narrative), "application/pdf", humanBudgetFilename(budget, "pdf"));
@@ -207,11 +190,7 @@ export function consolidationReport(group: ConsolidationGroup): FinancialReport 
 }
 
 export function downloadConsolidationXlsx(group: ConsolidationGroup) {
-  download(
-    createFinancialReportXlsx(consolidationReport(group)),
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    `${slug(group.label)}.xlsx`,
-  );
+  download(createFinancialReportXlsx(consolidationReport(group)), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", `${slug(group.label)}.xlsx`);
 }
 
 export function consolidationCsv(group: ConsolidationGroup): string {
