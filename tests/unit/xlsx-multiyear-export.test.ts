@@ -9,20 +9,32 @@ function source(path: string): string {
 }
 
 describe("exportación XLSX multianual", () => {
-  it("no bloquea presupuestos de 3 o más años cuando la plantilla institucional no es compatible", () => {
+  it("conserva la plantilla institucional y la extiende cuando existen 3 o más años", () => {
     const download = source("lib/export/download.ts");
 
-    expect(download).toContain("const compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result)");
-    expect(download).toContain("downloadGeneralBudgetXlsx(budget, result, parameters)");
-    expect(download).not.toContain("if (compatibilityIssue) throw new Error(compatibilityIssue)");
+    expect(download).toContain('import { extendInstitutionalBudgetXlsx } from "./institutional-budget-multiyear"');
+    expect(download).toContain("const baseResult = result.years.length > 2 ? institutionalBaseResult(result) : result");
+    expect(download).toContain("institutionalTemplateCompatibilityIssue(budget, baseResult)");
+    expect(download).toContain("createInstitutionalFormulaBudgetXlsx(template, budget, baseResult, parameters)");
+    expect(download).toContain("extendInstitutionalBudgetXlsx(bytes, budget, result, parameters)");
   });
 
-  it("usa fallback general si la plantilla institucional falla durante la generación", () => {
+  it("no sustituye un Magíster Profesional compatible por un formato general no validado", () => {
     const download = source("lib/export/download.ts");
 
-    expect(download).toContain("try {");
-    expect(download).toContain("catch {");
-    expect(download).toContain("Si la plantilla institucional falla, se continúa con el XLSX general trazable");
+    expect(download).not.toContain("Si la plantilla institucional falla, se continúa con el XLSX general trazable");
+    expect(download).toContain("if (compatibilityIssue) throw new Error(compatibilityIssue)");
+    expect(download).toContain("Los modelos que históricamente no usan la plantilla institucional mantienen su XLSX trazable general");
+  });
+
+  it("agrega los años posteriores en las mismas hojas institucionales", () => {
+    const multiyear = source("lib/export/institutional-budget-multiyear.ts");
+
+    expect(multiyear).toContain("extendParametersSheet");
+    expect(multiyear).toContain("extendStudentFlowSheet");
+    expect(multiyear).toContain("extendDirectTeachingSheet");
+    expect(multiyear).toContain("extendTotalFlowSheet");
+    expect(multiyear).toContain("No genera un formato alternativo");
   });
 
   it("mantiene una firma Promise<void> compatible con los consumidores de exportación", () => {
@@ -32,7 +44,7 @@ describe("exportación XLSX multianual", () => {
     expect(download).not.toContain("Promise<BudgetXlsxDownloadResult>");
   });
 
-  it("el XLSX general construye columnas de acuerdo con todos los años del reporte", () => {
+  it("el XLSX general continúa disponible para modelos que no usan la plantilla profesional", () => {
     const xlsx = source("lib/export/xlsx.ts");
 
     expect(xlsx).toContain("report.years.length + 1");
