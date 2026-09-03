@@ -7,6 +7,7 @@ import { buildFinancialReport, buildParameterReport, compactParameterReportForPd
 import { createFinancialReportXlsx } from "./xlsx";
 import { createInstitutionalFormulaBudgetXlsx, institutionalTemplateCompatibilityIssue } from "./institutional-budget-xlsx";
 import { extendInstitutionalBudgetXlsx } from "./institutional-budget-multiyear";
+import { normalizeInstitutionalAnnualEnrollment } from "./institutional-budget-enrollment-normalizer";
 import { buildFinancialNarrative, buildHistoricalCohortSnapshots } from "./financial-narrative";
 import { createBudgetMemorandumDocx } from "./memorandum";
 
@@ -118,6 +119,9 @@ export async function downloadBudgetXlsx(
     if (result.years.length > 2) {
       bytes = await extendInstitutionalBudgetXlsx(bytes, budget, result, parameters);
     }
+    // Regla institucional de matrícula anual: una matrícula completa al inicio de cada
+    // bloque de dos semestres. Un inicio en 2S no divide estudiantes ni matrícula por 0,5.
+    bytes = await normalizeInstitutionalAnnualEnrollment(bytes, budget, result, parameters);
     download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
     return;
   }
