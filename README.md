@@ -1,4 +1,4 @@
-# Sistema de Presupuestos de Postgrado UTEM — v12.1.1 · GitHub web + Cloudflare D1
+# Sistema de Presupuestos de Postgrado UTEM — v12.1.2 · GitHub web + Cloudflare D1
 
 Aplicación institucional para formular, revisar, consolidar y exportar presupuestos de cohortes de programas de postgrado. Esta edición está preparada para operar con GitHub web, Cloudflare Workers/OpenNext y Cloudflare D1.
 
@@ -20,6 +20,28 @@ Aplicación institucional para formular, revisar, consolidar y exportar presupue
 - **Accesibilidad visual:** se refuerza el contraste de badges neutrales en modo claro.
 - **Regresión reforzada:** 10 pruebas del motor financiero v12/v12.0.1, además de las suites históricas.
 - **Control de despliegue:** versión `v12.0.1 · 2.0.1-d1-web`.
+
+
+## Corrección financiera v12.1.2 — matrícula en punto de equilibrio
+
+La v12.1.2 corrige y unifica el punto de equilibrio de los Magísteres Profesionales en la plataforma y en el Excel institucional.
+
+- El cálculo usa todo el horizonte presupuestario disponible, no sólo el primer año.
+- Los costos fijos excluyen overhead central/facultad y la guía de tesis variable por estudiante.
+- El aporte por arancel incorpora incobrabilidad y overhead.
+- La matrícula se incorpora como aporte por estudiante y se descuenta la guía de tesis unitaria.
+- La razón estudiantes reales / matrículas equivalentes ajusta el aporte de matrícula, reproduciendo la estructura `B6/B7` del Excel institucional.
+- El XLSX exporta una fórmula `LET` trazable y mantiene un valor cacheado conciliado con el motor.
+- Los ingresos extraordinarios, financiamiento institucional y arrastre no reducen artificialmente el umbral de viabilidad.
+
+Fórmula institucional equivalente:
+
+```text
+Punto de equilibrio =
+costos fijos /
+(aporte de arancel + aporte de matrícula)
+```
+
 
 ## Mejora curricular v12.1.1 — docencia directa, graduación y secciones por cohorte
 
@@ -100,8 +122,8 @@ La v12.1.0 integra en un único proyecto todas las mejoras funcionales, financie
 
 ## Mejora funcional v11.0.8
 
-- **Punto de equilibrio multianual:** se calcula con los costos fijos de todos los años y semestres activos, excluyendo overhead variable, divididos por la contribución neta acumulada de los cobros de arancel que correspondan según la estructura anual o total del programa.
-- **Fórmula XLSX dinámica:** suma los costos sin overhead de todas las columnas anuales activas y los divide por la suma del arancel neto de incobrabilidad y overhead de esas mismas columnas.
+- **Punto de equilibrio corregido:** se calcula como costos fijos del primer año, excluyendo overhead variable, divididos por la contribución neta de una matrícula equivalente.
+- **Fórmula XLSX dinámica:** `ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)/(Arancel × (1-Incobrabilidad) × (1-Overhead central-Overhead facultad))`.
 - **Descuentos:** afectan la cantidad observada de matrículas equivalentes, pero no se descuentan por segunda vez del umbral requerido.
 - **Matrícula administrativa/reconocida y otros ingresos no arancelarios:** no reducen este indicador de equilibrio.
 - **Mínimo entero:** `ROUNDUP(PuntoEquilibrio,0)`.

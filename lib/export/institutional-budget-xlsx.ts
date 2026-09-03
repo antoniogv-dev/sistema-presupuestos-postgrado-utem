@@ -2,7 +2,8 @@ import type { BudgetResult, CohortBudget, InstitutionalParameters, SemesterParam
 import { resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
 import { calculateBreakEvenEquivalentEnrollments } from "../calculations/break-even";
 import { genericCurriculumCourses, payableCurriculumCourses } from "../curriculum/budget-load";
-import { getActivePeriods } from "../calculations/periods";
+import { enrollmentChargePeriodsForBudget, enrollmentFeeForPeriod } from "../calculations/billing";
+import { getActivePeriods, getAnnualEnrollmentChargePeriods } from "../calculations/periods";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -190,12 +191,29 @@ function discountApplies(discount: CohortBudget["discounts"][number], semester: 
 function exportableDiscounts(budget: CohortBudget): CohortBudget["discounts"] {
   return budget.discounts.filter((discount) => Math.max(0, Math.min(1, discount.percentage)) > 0);
 }
+function tuitionChargePeriodsForYear(budget: CohortBudget, year: number): SemesterParameters[] {
+  const chargePeriods = new Set(getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
+    .filter((period) => period.year === year)
+    .map((period) => `${period.year}-${period.semester}`));
+  return periodsForYear(budget, year).filter((semester) => chargePeriods.has(`${semester.year}-${semester.semester}`));
+}
 function weightedDiscountStudentsForItem(budget: CohortBudget, year: number, discount: CohortBudget["discounts"][number]): number {
-  return periodsForYear(budget, year).reduce((total, semester) =>
-    total + (discountApplies(discount, semester) ? Math.max(0, discount.students) * 0.5 : 0), 0);
+  // v12.1.2: la hoja debe usar los estudiantes del periodo que efectivamente cobra arancel,
+  // no un promedio semestral 0,5. Esto alinea B6/B7 con el motor y con cohortes que parten en 2S.
+  return tuitionChargePeriodsForYear(budget, year).reduce((total, semester) =>
+    total + (discountApplies(discount, semester) ? Math.max(0, discount.students) : 0), 0);
 }
 function weightedStudents(budget: CohortBudget, year: number): number {
-  return periodsForYear(budget, year).reduce((total, semester) => total + Math.max(0, semester.activeStudents) * 0.5, 0);
+  return tuitionChargePeriodsForYear(budget, year).reduce((total, semester) => total + Math.max(0, semester.activeStudents), 0);
+}
+function enrollmentFeePerStudentForYear(budget: CohortBudget, parameters: InstitutionalParameters, year: number): number {
+  const override = resolvedAnnualOverrideForYear(budget, parameters, year);
+  return enrollmentChargePeriodsForBudget(budget)
+    .filter((period) => period.year === year)
+    .reduce((total, period) => total + enrollmentFeeForPeriod(budget, period.year, period.semester, override.annualEnrollmentFee), 0);
+}
+function thesisGuidancePerStudentForYear(flow: BudgetResult["annualFlows"][number]): number {
+  return flow.graduatingStudents > 0 ? flow.thesisGuidanceCost / flow.graduatingStudents : 0;
 }
 function annualEnrollmentStudents(budget: CohortBudget, year: number, grossFee: number, annualFee: number): number {
   if (annualFee > 0) return grossFee / annualFee;
@@ -226,33 +244,23 @@ function maybeProjectionFormula(base: number, next: number, adjustment: number, 
 /**
  * Fórmula Excel institucional del punto de equilibrio de estudiantes.
  *
- * Costos fijos = TOTAL COSTOS Y GASTOS menos el subtotal de overhead, sumados para
- * todos los años activos del programa.
- * Contribución por matrícula equivalente = suma de los aranceles cobrados en el horizonte,
- * netos de incobrabilidad y overhead en cada año.
+ * v12.1.2 reproduce la regla solicitada por Postgrado:
+ *   costosFijos = |Σ costos - Σ overhead - Σ guía de tesis|
+ *   aporteArancel = Σ arancel × (1-incobrabilidad) × (1-overhead central-overhead facultad)
+ *   aporteMatricula = (Σ matrícula - Σ guía de tesis por estudiante) × (estudiantes / equivalentes)
  *
- * Los descuentos no aparecen nuevamente en el denominador porque una matrícula equivalente
- * ya representa el efecto financiero de esos beneficios. La matrícula administrativa/reconocida
- * y los demás ingresos no arancelarios no reducen el umbral de este indicador.
- *
- * Con dos filas de descuentos y dos años, la fórmula resultante abarca B:C. Cuando la
- * cohorte cruza un tercer año, el extensor institucional la recompone automáticamente
- * hasta la última columna activa.
- *
- * Si existen más descuentos, las filas de incobrabilidad y overhead se desplazan y las
- * referencias se actualizan automáticamente sin alterar la lógica.
+ * La fórmula se construye con el último año disponible de la plantilla. En una cohorte distribuida
+ * en tres años calendario, el rango resultante es B:D; en una de dos años, B:C.
  */
-export function breakEvenExcelFormula(
-  yearColumns: string[],
+function breakEvenExcelFormula(
+  lastYearColumn: string,
   badDebtParameterRow: number,
   centralOverheadParameterRow: number,
   facultyOverheadParameterRow: number,
+  totalStudentsRow: number,
+  equivalentStudentsRow: number,
 ): string {
-  const columns = yearColumns.length > 0 ? yearColumns : ["B"];
-  const firstColumn = columns[0];
-  const lastColumn = columns.at(-1)!;
-  const contributions = columns.map((column) => `Parámetros!$${column}$4*(1-Parámetros!$${column}$${badDebtParameterRow})*(1-Parámetros!$${column}$${centralOverheadParameterRow}-Parámetros!$${column}$${facultyOverheadParameterRow})`);
-  return `ABS(SUM('FLUJO TOTAL'!${firstColumn}37:${lastColumn}37)-SUM('FLUJO TOTAL'!${firstColumn}36:${lastColumn}36))/SUM(${contributions.join(",")})`;
+  return `LET(costosFijos,ABS(SUM('FLUJO TOTAL'!B37:${lastYearColumn}37)-SUM('FLUJO TOTAL'!B36:${lastYearColumn}36)-SUM('FLUJO TOTAL'!B10:${lastYearColumn}10)),aporteArancel,SUMPRODUCT(Parámetros!B4:${lastYearColumn}4,1-Parámetros!B${badDebtParameterRow}:${lastYearColumn}${badDebtParameterRow},1-Parámetros!B${centralOverheadParameterRow}:${lastYearColumn}${centralOverheadParameterRow}-Parámetros!B${facultyOverheadParameterRow}:${lastYearColumn}${facultyOverheadParameterRow}),aporteMatricula,(SUM(Parámetros!B5:${lastYearColumn}5)-SUM(Parámetros!B8:${lastYearColumn}8))*(B${totalStudentsRow}/B${equivalentStudentsRow}),costosFijos/(aporteArancel+aporteMatricula))`;
 }
 
 function modalityLabel(budget: CohortBudget): string {
@@ -325,6 +333,15 @@ export async function createInstitutionalFormulaBudgetXlsx(
   const equilibriumWholeStudentsRow = 11 + (2 * discountSlots);
   const adjustment = Math.max(0, parameters.annualAdjustmentRate || 0);
   const teachingRate1 = effectiveTeachingRate(budget, parameters, year1); const teachingRate2 = effectiveTeachingRate(budget, parameters, year2);
+  const tuitionUnit1 = Math.max(0, override1.annualTuition) * Math.max(0, flow1.tuitionFactor);
+  const tuitionUnit2 = Math.max(0, override2.annualTuition) * Math.max(0, flow2.tuitionFactor);
+  const enrollmentUnit1 = enrollmentFeePerStudentForYear(budget, parameters, year1);
+  const enrollmentUnit2 = enrollmentFeePerStudentForYear(budget, parameters, year2);
+  const thesisUnit1 = thesisGuidancePerStudentForYear(flow1);
+  const thesisUnit2 = thesisGuidancePerStudentForYear(flow2);
+  // La fórmula institucional de equilibrio conserva al menos el horizonte B:D solicitado por Postgrado.
+  // Si la plantilla tiene sólo dos años efectivos, D permanece vacío y Excel lo trata como 0.
+  const lastYearColumn = String.fromCharCode(65 + Math.max(3, result.years.length));
   const modality = modalityLabel(budget);
 
   // 1. Parámetros: reproduce la versión mejorada aportada por Postgrado.
@@ -332,11 +349,11 @@ export async function createInstitutionalFormulaBudgetXlsx(
   s1 = setText(s1, "A1", `${budget.program.name} - ${budget.startYear}-${budget.startSemester}`);
   s1 = setText(s1, "A2", modality);
   s1 = setNumber(s1, "B3", year1); s1 = setNumber(s1, "C3", year2);
-  s1 = setNumber(s1, "B4", override1.annualTuition); s1 = setNumber(s1, "C4", override2.annualTuition);
-  s1 = setNumber(s1, "B5", override1.annualEnrollmentFee); s1 = setNumber(s1, "C5", override2.annualEnrollmentFee);
+  s1 = setNumber(s1, "B4", tuitionUnit1); s1 = setNumber(s1, "C4", tuitionUnit2);
+  s1 = setNumber(s1, "B5", enrollmentUnit1); s1 = setNumber(s1, "C5", enrollmentUnit2);
   s1 = setNumber(s1, "B6", teachingRate1); s1 = setNumber(s1, "C6", teachingRate2);
   s1 = setNumber(s1, "B7", parameters.replacementHour); s1 = setNumber(s1, "C7", parameters.replacementHour);
-  s1 = setNumber(s1, "B8", override1.thesisGuidancePerGraduatingStudent); s1 = setNumber(s1, "C8", override2.thesisGuidancePerGraduatingStudent);
+  s1 = setNumber(s1, "B8", thesisUnit1); s1 = setNumber(s1, "C8", thesisUnit2);
   s1 = setText(s1, "B9", `${budget.startYear}-${budget.startSemester}S`); s1 = clearCell(s1, "C9");
   if (extraDiscountRows > 0) s1 = insertRowsFromTemplate(s1, 11, extraDiscountRows, 11);
   for (let index = 0; index < discountSlots; index += 1) {
@@ -387,23 +404,23 @@ export async function createInstitutionalFormulaBudgetXlsx(
     s2 = setFormula(s2, `C${studentRow}`, continuationFormula(`B${studentRow}`, students1, students2), students2);
     const incomeRow = discountIncomeStartRow + index;
     s2 = setTextFormula(s2, `A${incomeRow}`, discountLabelFormula, label);
-    s2 = setFormula(s2, `B${incomeRow}`, `(B${studentRow})*Parámetros!$B$4*(1-Parámetros!$B$${parameterRow})`, students1 * override1.annualTuition * (1 - rate));
-    s2 = setFormula(s2, `C${incomeRow}`, `(C${studentRow})*Parámetros!$C$4*(1-Parámetros!$C$${parameterRow})`, students2 * override2.annualTuition * (1 - rate));
+    s2 = setFormula(s2, `B${incomeRow}`, `(B${studentRow})*Parámetros!$B$4*(1-Parámetros!$B$${parameterRow})`, students1 * tuitionUnit1 * (1 - rate));
+    s2 = setFormula(s2, `C${incomeRow}`, `(C${studentRow})*Parámetros!$C$4*(1-Parámetros!$C$${parameterRow})`, students2 * tuitionUnit2 * (1 - rate));
   }
   s2 = setFormula(s2, `B${totalStudentsRow}`, `SUM(B3:B${studentDiscountStartRow + discountSlots - 1})`, no1 + discounted1); s2 = setFormula(s2, `C${totalStudentsRow}`, `SUM(C3:C${studentDiscountStartRow + discountSlots - 1})`, no2 + discounted2);
   const equivalentFormula = (column: "B" | "C") => [`${column}3`, ...Array.from({ length: discountSlots }, (_, index) => `${column}${studentDiscountStartRow + index}*(1-Parámetros!${column}${parameterDiscountStartRow + index})`)].join("+");
   s2 = setFormula(s2, `B${equivalentStudentsRow}`, equivalentFormula("B"), flow1.equivalentEnrollments); s2 = setFormula(s2, `C${equivalentStudentsRow}`, equivalentFormula("C"), flow2.equivalentEnrollments);
   s2 = setFormula(s2, `B${graduationStudentsRow}`, `${flow1.graduatingStudents}`, flow1.graduatingStudents); const graduationFormula2 = Math.abs(flow2.graduatingStudents - (no2 + discounted2)) < 1e-9 ? `C${totalStudentsRow}` : `${flow2.graduatingStudents}`; s2 = setFormula(s2, `C${graduationStudentsRow}`, graduationFormula2, flow2.graduatingStudents);
-  const enrollmentStudents1 = annualEnrollmentStudents(budget, year1, flow1.grossEnrollmentFee, override1.annualEnrollmentFee); const enrollmentStudents2 = annualEnrollmentStudents(budget, year2, flow2.grossEnrollmentFee, override2.annualEnrollmentFee);
+  const enrollmentStudents1 = annualEnrollmentStudents(budget, year1, flow1.grossEnrollmentFee, enrollmentUnit1); const enrollmentStudents2 = annualEnrollmentStudents(budget, year2, flow2.grossEnrollmentFee, enrollmentUnit2);
   s2 = setFormula(s2, `B${enrollmentIncomeRow}`, Math.abs(enrollmentStudents1 - (no1 + discounted1)) < 1e-9 ? `B${totalStudentsRow}*Parámetros!$B$5` : `${enrollmentStudents1}*Parámetros!$B$5`, flow1.grossEnrollmentFee); s2 = setFormula(s2, `C${enrollmentIncomeRow}`, Math.abs(enrollmentStudents2 - (no2 + discounted2)) < 1e-9 ? `C${totalStudentsRow}*Parámetros!$C$5` : `${enrollmentStudents2}*Parámetros!$C$5`, flow2.grossEnrollmentFee);
-  s2 = setFormula(s2, `B${noDiscountIncomeRow}`, `(B3)*Parámetros!$B$4`, no1 * override1.annualTuition); s2 = setFormula(s2, `C${noDiscountIncomeRow}`, `(C3)*Parámetros!$C$4`, no2 * override2.annualTuition);
+  s2 = setFormula(s2, `B${noDiscountIncomeRow}`, `(B3)*Parámetros!$B$4`, no1 * tuitionUnit1); s2 = setFormula(s2, `C${noDiscountIncomeRow}`, `(C3)*Parámetros!$C$4`, no2 * tuitionUnit2);
   s2 = setFormula(s2, `B${totalTuitionIncomeRow}`, `SUM(B${noDiscountIncomeRow}:B${discountIncomeStartRow + discountSlots - 1})`, flow1.tuitionAfterBenefits); s2 = setFormula(s2, `C${totalTuitionIncomeRow}`, `SUM(C${noDiscountIncomeRow}:C${discountIncomeStartRow + discountSlots - 1})`, flow2.tuitionAfterBenefits);
   const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, parameters);
   const equilibriumFormula = breakEvenExcelFormula(
-    ["B", "C"],
-    badDebtParameterRow, centralOverheadParameterRow, facultyOverheadParameterRow,
+    lastYearColumn, badDebtParameterRow, centralOverheadParameterRow, facultyOverheadParameterRow,
+    totalStudentsRow, equivalentStudentsRow,
   );
-  s2 = setFormula(s2, `B${equilibriumRow}`, equilibriumFormula, equilibrium.minimumEquivalentEnrollments ?? 0);
+  s2 = setFormula(s2, `B${equilibriumRow}`, equilibriumFormula, equilibrium.minimumEquivalentEnrollmentsExact ?? 0);
   s2 = setText(s2, `C${equilibriumRow}`, "matrículas equivalentes");
   s2 = setFormula(s2, `B${equilibriumWholeStudentsRow}`, `ROUNDUP(B${equilibriumRow},0)`, equilibrium.minimumWholeStudents ?? 0);
   s2 = setText(s2, `C${equilibriumWholeStudentsRow}`, "estudiantes");

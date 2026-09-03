@@ -1,6 +1,6 @@
 {
   "name": "sistema-presupuestos-postgrado-utem",
-  "version": "2.1.1-d1-web",
+  "version": "2.1.2-d1-web",
   "private": true,
   "description": "Sistema de Presupuestos de Postgrado UTEM para Cloudflare Workers y D1, desplegable desde GitHub y Cloudflare web.",
   "engines": {
@@ -29,7 +29,7 @@
     "preview:cloudflare": "npm run build:cloudflare && opennextjs-cloudflare preview",
     "verify": "npm run build:cloudflare",
     "source:audit": "node scripts/source-audit.mjs",
-    "quality:cloudflare": "npm run preflight && npm run repository:audit && npm run source:audit && npm run integrity:audit && npm run security:sql && npm run typecheck && npm run lint && npm run test:engine && npm run test:institutional-xlsx && npm run test:billing && npm run test:finance-v12 && npm run test:cohort-v1202 && npm run test:curriculum && npm run test:curriculum-v1211 && npm run test:curriculum-sim-v1211 && npm run test:form-defaults && npm run test:documents && npm run test && npm run test:standalone",
+    "quality:cloudflare": "npm run preflight && npm run repository:audit && npm run source:audit && npm run integrity:audit && npm run security:sql && npm run typecheck && npm run lint && npm run test:engine && npm run test:institutional-xlsx && npm run test:break-even-v1212 && npm run test:billing && npm run test:finance-v12 && npm run test:cohort-v1202 && npm run test:curriculum && npm run test:curriculum-v1211 && npm run test:curriculum-sim-v1211 && npm run test:form-defaults && npm run test:documents && npm run test && npm run test:standalone",
     "db:validate": "prisma validate",
     "integrity:audit": "node scripts/platform-integrity-audit.mjs",
     "test:institutional-xlsx": "node --test demo/tests/institutional-xlsx.test.mjs",
@@ -42,7 +42,8 @@
     "security:sql": "node scripts/sql-safety-audit.mjs",
     "test:curriculum-v1211": "node --test demo/tests/curriculum-graduation-v1211.test.mjs",
     "test:curriculum-sim-v1211": "node --test demo/tests/curriculum-graduation-simulation-v1211.test.mjs",
-    "repository:audit": "node scripts/repository-completeness-audit.mjs"
+    "repository:audit": "node scripts/repository-completeness-audit.mjs",
+    "test:break-even-v1212": "node --test demo/tests/break-even-v1212.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "3.9.1",

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { calculateBudget, defaultAnnualOverrideForYear, hydrateAnnualOverrides, overheadApplies, professionalEnrollmentFeeForYear, resolvedAnnualOverrideForYear } from "@/lib/calculations/budget-engine";
 import { calculateBreakEvenEquivalentEnrollments } from "@/lib/calculations/break-even";
-import { getActivePeriods } from "@/lib/calculations/periods";
 import { buildConsolidationGroups, consolidateBudgets, detectPotentialDuplicateCosts } from "@/lib/calculations/consolidation";
 import { demoBudget, institutionalParameters, secondDemoBudget } from "@/lib/demo-data";
 import { applyWorkflowAction, canDeleteBudget, canEditBudget } from "@/lib/workflow/budget-workflow";
@@ -193,15 +192,30 @@ describe("motor financiero", () => {
     expect(annual.annualDiffusion).toBe(0);
   });
 
-  it("calcula el punto de equilibrio con costos y contribuciones de todo el horizonte", () => {
+  it("v12.1.2 calcula el punto de equilibrio con arancel, matrícula y guía de tesis sobre todo el horizonte", () => {
     const budget = clone(demoBudget);
     const result = calculateBudget(budget, institutionalParameters);
     const breakEven = calculateBreakEvenEquivalentEnrollments(budget, institutionalParameters);
-    const badDebtRate = institutionalParameters.byProgramType.MAGISTER_PROFESIONAL.badDebtRate;
-    const fixedCosts = result.annualFlows.reduce((total, flow) => total + flow.totalExpenses - flow.centralOverhead - flow.facultyOverhead, 0);
-    const contribution = result.annualFlows.reduce((total, flow) => total + flow.annualTuition * flow.tuitionDistributionShare * (1 - badDebtRate) * (1 - flow.centralOverheadRate - flow.facultyOverheadRate), 0);
-    const exact = fixedCosts / contribution;
+    const fixedCosts = result.annualFlows.reduce(
+      (total, flow) => total + Math.max(0, flow.totalExpenses - flow.centralOverhead - flow.facultyOverhead - flow.thesisGuidanceCost),
+      0,
+    );
+    const tuitionContribution = result.annualFlows.reduce((total, flow) => {
+      const badDebtRate = flow.tuitionAfterBenefits > 0 ? flow.badDebt / flow.tuitionAfterBenefits : 0;
+      return total + flow.annualTuition * flow.tuitionFactor
+        * (1 - badDebtRate)
+        * (1 - flow.centralOverheadRate - flow.facultyOverheadRate);
+    }, 0);
+    const expectedContribution = tuitionContribution + (
+      breakEven.components.enrollmentPerActualStudent - breakEven.components.thesisGuidancePerActualStudent
+    ) * breakEven.components.actualStudentsPerEquivalentEnrollment;
+    const exact = fixedCosts / expectedContribution;
+
     expect(breakEven.reached).toBe(true);
+    expect(breakEven.components.fixedCosts).toBeCloseTo(fixedCosts, 8);
+    expect(breakEven.components.tuitionContribution).toBeCloseTo(tuitionContribution, 8);
+    expect(breakEven.components.enrollmentContribution).not.toBe(0);
+    expect(breakEven.components.contributionPerEquivalentEnrollment).toBeCloseTo(expectedContribution, 8);
     expect(breakEven.minimumEquivalentEnrollmentsExact).toBeCloseTo(exact, 8);
     expect(breakEven.minimumEquivalentEnrollments).toBe(Math.ceil((exact - 1e-9) * 100) / 100);
     expect(breakEven.minimumWholeStudents).toBe(Math.ceil(exact - 1e-9));
@@ -209,58 +223,32 @@ describe("motor financiero", () => {
     expect(breakEven.projectedFinalFlowAtMinimum!).toBeGreaterThanOrEqual(0);
   });
 
-  it.each([
-    { startSemester: 1 as const, durationSemesters: 3 },
-    { startSemester: 2 as const, durationSemesters: 4 },
-  ])("incluye el último año activo para una cohorte que comienza en $startSemester S y dura $durationSemesters semestres", ({ startSemester, durationSemesters }) => {
-    const budget = clone(demoBudget);
-    budget.startYear = 2026;
-    budget.startSemester = startSemester;
-    budget.durationSemesters = durationSemesters;
-    const periods = getActivePeriods(budget.startYear, startSemester, durationSemesters);
-    budget.semesters = periods.map((period, index) => ({
-      ...budget.semesters[Math.min(index, budget.semesters.length - 1)],
-      year: period.year,
-      semester: period.semester,
-      activeStudents: 12 - Math.floor(index / 2),
-      graduatingStudents: index === periods.length - 1 ? 12 - Math.floor(index / 2) : 0,
+  it("v12.1.2 incorpora la matrícula: al aumentar su valor disminuye el punto de equilibrio", () => {
+    const base = clone(demoBudget);
+    const higherEnrollment = clone(demoBudget);
+    higherEnrollment.annualOverrides = [...new Set(higherEnrollment.semesters.map((semester) => semester.year))].map((year) => ({
+      ...defaultAnnualOverrideForYear(higherEnrollment, institutionalParameters, year),
+      annualEnrollmentFee: 900000,
     }));
-    budget.annualOverrides = [];
-    budget.externalIncome = [];
-    budget.manualItems = [{
-      id: "ultimo-periodo",
-      name: "Costo del último período",
-      description: "Regresión de horizonte completo",
-      category: "Otros costos y gastos",
-      year: periods.at(-1)!.year,
-      semester: periods.at(-1)!.semester,
-      amount: 3_000_000,
-      costType: "Único de esta versión",
-      periodicity: "Único",
-    }];
+    const a = calculateBreakEvenEquivalentEnrollments(base, institutionalParameters);
+    const b = calculateBreakEvenEquivalentEnrollments(higherEnrollment, institutionalParameters);
 
-    const result = calculateBudget(budget, institutionalParameters);
-    const breakEven = calculateBreakEvenEquivalentEnrollments(budget, institutionalParameters);
-    const badDebtRate = institutionalParameters.byProgramType.MAGISTER_PROFESIONAL.badDebtRate;
-    const fixedCosts = result.annualFlows.reduce((total, flow) => total + flow.totalExpenses - flow.centralOverhead - flow.facultyOverhead, 0);
-    const contribution = result.annualFlows.reduce((total, flow) => total + flow.annualTuition * flow.tuitionDistributionShare * (1 - badDebtRate) * (1 - flow.centralOverheadRate - flow.facultyOverheadRate), 0);
-    const currentContribution = result.annualFlows.reduce((total, flow) => total + flow.tuitionAfterBenefits * (1 - badDebtRate) * (1 - flow.centralOverheadRate - flow.facultyOverheadRate), 0);
-
-    expect(result.years.at(-1)).toBe(periods.at(-1)!.year);
-    expect(breakEven.minimumEquivalentEnrollmentsExact).toBeCloseTo(fixedCosts / contribution, 8);
-    expect(breakEven.currentEquivalentEnrollments).toBeCloseTo(currentContribution / contribution, 8);
-    expect(fixedCosts).toBeGreaterThan(result.annualFlows[0].totalExpenses - result.annualFlows[0].centralOverhead - result.annualFlows[0].facultyOverhead);
+    expect(b.components.enrollmentPerActualStudent).toBeGreaterThan(a.components.enrollmentPerActualStudent);
+    expect(b.components.enrollmentContribution).toBeGreaterThan(a.components.enrollmentContribution);
+    expect(b.minimumEquivalentEnrollmentsExact!).toBeLessThan(a.minimumEquivalentEnrollmentsExact!);
   });
 
-  it("los descuentos cambian las matrículas equivalentes observadas, pero no el umbral equivalente requerido", () => {
+  it("v12.1.2 mantiene B6/B7 como razón estudiantes reales / matrículas equivalentes", () => {
     const withoutDiscount = clone(demoBudget);
     withoutDiscount.discounts = [];
     const withDiscount = clone(demoBudget);
     withDiscount.discounts = [{ ...withDiscount.discounts[0], percentage: 0.4, students: 10 }];
     const a = calculateBreakEvenEquivalentEnrollments(withoutDiscount, institutionalParameters);
     const b = calculateBreakEvenEquivalentEnrollments(withDiscount, institutionalParameters);
-    expect(a.minimumEquivalentEnrollmentsExact).toBeCloseTo(b.minimumEquivalentEnrollmentsExact!, 8);
+
+    expect(a.components.actualStudentsPerEquivalentEnrollment).not.toBe(b.components.actualStudentsPerEquivalentEnrollment);
     expect(a.currentEquivalentEnrollments).not.toBe(b.currentEquivalentEnrollments);
+    expect(a.components.enrollmentContribution).not.toBe(b.components.enrollmentContribution);
   });
 
   it("permite sobrescribir por año hora directa y guía de tesis", () => {

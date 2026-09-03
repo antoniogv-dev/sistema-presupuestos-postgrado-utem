@@ -260,7 +260,7 @@ for (const marker of [
   'ManualCostRows',
   'Otros honorarios no académicos',
   'HONORARIOS NO ACADÉMICOS (SUBTOTAL)',
-  'FUNCTIONAL_RELEASE = "v12.1.1"',
+  'FUNCTIONAL_RELEASE = "v12.1.2"',
 ]) {
   if (!budgetWorkspaceV108.includes(marker)) fail(`BudgetWorkspace.tsx: falta la mejora v10.11 ${marker}.`);
 }
@@ -279,8 +279,8 @@ if (!engineV108.includes("annualTuition: storedTuition > 0 ? storedTuition : fal
   fail("budget-engine.ts: falta recuperación de arancel anual cuando un override histórico está en 0.");
 }
 const appShellV110 = await readFile(path.join(root, "components/AppShell.tsx"), "utf8");
-if (!appShellV110.includes("v12.1.1") || !appShellV110.includes("2.1.1-d1-web")) {
-  fail("AppShell.tsx: debe mostrar la versión funcional v12.1.1 para detectar despliegues parciales o antiguos.");
+if (!appShellV110.includes("v12.1.2") || !appShellV110.includes("2.1.2-d1-web")) {
+  fail("AppShell.tsx: debe mostrar la versión funcional v12.1.2 para detectar despliegues parciales o antiguos.");
 }
 const v111Migration = await readFile(path.join(root, "migrations/0007_cashflow_editable_staff_and_costs.sql"), "utf8");
 for (const marker of ["annualOtherNonAcademicHonoraria", "annualOperational", "annualFoodBeverages", "Otros honorarios no académicos"]) {
@@ -585,7 +585,7 @@ for (const marker of [
   "Toda la página quedó sincronizada con este presupuesto",
   "auditBudgetIntegrity",
   "beforeunload",
-  'FUNCTIONAL_RELEASE = "v12.1.1"',
+  'FUNCTIONAL_RELEASE = "v12.1.2"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`Aislamiento de presupuestos v10.23: falta ${marker}.`);
 }
@@ -612,7 +612,7 @@ for (const marker of [
   "setInitialStudentsForAllSemesters",
   "Punto de equilibrio",
   "Viabilidad mínima de dictación",
-  'FUNCTIONAL_RELEASE = "v12.1.1"',
+  'FUNCTIONAL_RELEASE = "v12.1.2"',
 ]) {
   if (!budgetWorkspaceV1021.includes(marker)) fail(`BudgetWorkspace v10.22: falta ${marker}.`);
 }
@@ -813,7 +813,7 @@ for (const marker of ["curriculumCourseWeeklyDirectHours", "theoryWeeklyHours", 
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.28: falta ${marker}.`);
 }
 const budgetWorkspaceV1028 = await readFile(path.join(root, "features/budgets/components/BudgetWorkspace.tsx"), "utf8");
-for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v12.1.1"']) {
+for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla reconocida, pero sin horas docentes", "Horas aplicadas", 'FUNCTIONAL_RELEASE = "v12.1.2"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.28: falta ${marker}.`);
 }
 
@@ -821,7 +821,7 @@ for (const marker of ["Asignaturas vinculadas a esta formulación", "Malla recon
 for (const marker of ["curriculumCourseAppliedMode", 'modality === "PRESENCIAL"', 'return "PRESENCIAL"']) {
   if (!curriculumLoadV1028.includes(marker)) fail(`Carga curricular v10.30: falta ${marker}.`);
 }
-for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v12.1.1"']) {
+for (const marker of ["Bolsa de carga", "Horas docentes presenciales", "Cohorte presencial", 'FUNCTIONAL_RELEASE = "v12.1.2"']) {
   if (!budgetWorkspaceV1028.includes(marker)) fail(`Presupuestos v10.30: falta ${marker}.`);
 }
 
@@ -896,13 +896,13 @@ for (const marker of ["Para la elaboración de esta proyección se tuvieron a la
 if (memorandumTemplateV1106.byteLength < 20000) fail("Memorándum v11.0.6: la plantilla institucional parece incompleta.");
 for (const marker of ["memorandum-presupuesto-base-v11-0-6.docx", "Para la elaboración de esta proyección se tuvieron a la vista los siguientes antecedentes:", "En virtud de lo expuesto"]) if (!memorandumTestV1106.includes(marker)) fail(`Memorándum v11.0.6 test: falta ${marker}.`);
 
-// Punto de equilibrio institucional multianual = costos fijos del horizonte / contribución neta acumulada por matrícula equivalente.
+// v12.1.2: punto de equilibrio institucional completo = costos fijos / (aporte arancel + aporte matrícula).
 const institutionalXlsxV1108 = await readFile(path.join(root, "lib/export/institutional-budget-xlsx.ts"), "utf8");
 const institutionalXlsxTestV1108 = await readFile(path.join(root, "demo/tests/institutional-xlsx.test.mjs"), "utf8");
 const breakEvenV1108 = await readFile(path.join(root, "lib/calculations/break-even.ts"), "utf8");
-for (const marker of ["breakEvenExcelFormula", "SUM('FLUJO TOTAL'!${firstColumn}37:${lastColumn}37)", "Parámetros!$${column}$4*(1-Parámetros!$${column}$${badDebtParameterRow})", "matrículas equivalentes", "ROUNDUP(B${equilibriumRow},0)"]) if (!institutionalXlsxV1108.includes(marker)) fail(`XLSX punto de equilibrio multianual: falta ${marker}.`);
-for (const marker of ["expectedBreakEvenFormula", "el XLSX institucional calcula el equilibrio sobre 2026-2S, 2027 y 2028-1S", "ROUNDUP(B14,0)"]) if (!institutionalXlsxTestV1108.includes(marker)) fail(`XLSX pruebas de equilibrio multianual: falta ${marker}.`);
-for (const marker of ["fixedCosts", "contributionPerEquivalentEnrollment", "flows.reduce", "flow.tuitionDistributionShare", "currentNetContribution"]) if (!breakEvenV1108.includes(marker)) fail(`Motor punto de equilibrio multianual: falta ${marker}.`);
+for (const marker of ["breakEvenExcelFormula", "LET(costosFijos", "SUMPRODUCT(Parámetros!B4:${lastYearColumn}4", "SUM(Parámetros!B5:${lastYearColumn}5)-SUM(Parámetros!B8:${lastYearColumn}8)", "B${totalStudentsRow}/B${equivalentStudentsRow}", "matrículas equivalentes", "ROUNDUP(B${equilibriumRow},0)"]) if (!institutionalXlsxV1108.includes(marker)) fail(`XLSX v12.1.2 punto de equilibrio: falta ${marker}.`);
+for (const marker of ["v12.1.2 exporta el punto de equilibrio incorporando matrícula y guía de tesis", "LET(costosFijos,ABS(SUM('FLUJO TOTAL'!B37:D37)", "SUM(Parámetros!B5:D5)-SUM(Parámetros!B8:D8)", "ROUNDUP(B14,0)"]) if (!institutionalXlsxTestV1108.includes(marker)) fail(`XLSX v12.1.2 pruebas: falta ${marker}.`);
+for (const marker of ["calculateBreakEvenComponents", "flow.totalExpenses - flow.centralOverhead - flow.facultyOverhead - flow.thesisGuidanceCost", "enrollmentPerActualStudent - thesisGuidancePerActualStudent", "actualStudentsReference / equivalentEnrollmentsReference", "contributionPerEquivalentEnrollment"]) if (!breakEvenV1108.includes(marker)) fail(`Motor v12.1.2 punto de equilibrio: falta ${marker}.`);
 
 // v11.0.9: etiquetas limpias en Flujo estudiantes; las fórmulas permanecen en B14/B15.
 if (institutionalXlsxV1108.includes("matrículas equivalentes (fórmula)")) fail("XLSX v11.0.9: no debe mostrarse (fórmula) en la etiqueta de matrículas equivalentes.");
@@ -957,7 +957,7 @@ for (const marker of ["calculateRevenueEngine", "calculateAnnualCosts", "revenue
 for (const marker of ["PricingTrace", "SemesterRevenueTrace", "revenueLedger: SemesterRevenueTrace[]"]) if (!typesV1200.includes(marker)) fail(`Trazabilidad v12: falta ${marker}.`);
 for (const marker of ["presupuesto histórico conserva exactamente", "ledger semestral separa precio", "iniciar en 2S cambia el año", "cuotas son forma de pago"]) if (!financeTestsV1200.includes(marker)) fail(`Pruebas v12: falta ${marker}.`);
 for (const marker of ["#0B0F17", "#111827", "#2563EB", "#10B981", "#F43F5E", "font-variant-numeric: tabular-nums", "cubic-bezier(.16,1,.3,1)", "backdrop-filter: blur(16px)"]) if (!cssV1200.includes(marker)) fail(`Design system v12: falta ${marker}.`);
-for (const marker of ["postgrado-budget-theme", "Motor v12 activo", "v12.1.1", "2.1.1-d1-web"]) if (!shellV1200.includes(marker)) fail(`AppShell v12: falta ${marker}.`);
+for (const marker of ["postgrado-budget-theme", "Motor v12 activo", "v12.1.2", "2.1.2-d1-web"]) if (!shellV1200.includes(marker)) fail(`AppShell v12: falta ${marker}.`);
 for (const marker of ["institutional-active", "FinancialProfileChart", "Ingresos y egresos institucionales"]) if (!dashboardV1200.includes(marker)) fail(`Dashboard v12: falta ${marker}.`);
 for (const dependency of ["tailwindcss", "postcss", "autoprefixer"]) if (!packageV1200.devDependencies?.[dependency]) fail(`Tailwind v12: falta dependencia ${dependency}.`);
 

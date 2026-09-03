@@ -256,13 +256,15 @@ export function buildParameterReport(
 
   if (budget.program.type === "MAGISTER_PROFESIONAL") {
     const breakEven = calculateBreakEvenEquivalentEnrollments(budget, parameters);
-    const breakEvenScope = `${budget.durationSemesters} semestres activos`;
     if (breakEven.minimumEquivalentEnrollments !== null) {
-      pushNumber("Punto de equilibrio", "Matrículas equivalentes mínimas", breakEvenScope, breakEven.minimumEquivalentEnrollments, `Costos fijos de todo el horizonte / suma de contribuciones netas de los cobros de arancel activos. Umbral exacto ${breakEven.minimumEquivalentEnrollmentsExact?.toLocaleString("es-CL", { maximumFractionDigits: 4 })}`);
-      pushNumber("Punto de equilibrio", "Estudiantes a arancel completo aproximados", breakEvenScope, breakEven.minimumWholeStudents ?? 0, "Redondeo hacia arriba del umbral equivalente para toda la cohorte");
-      pushNumber("Punto de equilibrio", "Matrículas equivalentes actuales de referencia", breakEvenScope, breakEven.currentEquivalentEnrollments, "Promedio ponderado por la contribución neta de cada período de cobro; los descuentos inciden en esta equivalencia, no en el umbral requerido.");
+      pushCurrency("Punto de equilibrio", "Costos fijos considerados", "Horizonte completo", breakEven.components.fixedCosts, "Costos totales menos overhead central/facultad y menos guía de tesis variable por estudiante.");
+      pushCurrency("Punto de equilibrio", "Aporte neto de arancel por matrícula equivalente", "Horizonte completo", breakEven.components.tuitionContribution, "Suma de arancel efectivo × (1 − incobrabilidad) × (1 − overhead central − overhead facultad).");
+      pushCurrency("Punto de equilibrio", "Aporte neto de matrícula por matrícula equivalente", "Horizonte completo", breakEven.components.enrollmentContribution, `Matrícula del horizonte menos guía de tesis por estudiante, ajustada por la relación estudiantes/equivalentes (${breakEven.components.actualStudentsPerEquivalentEnrollment.toLocaleString("es-CL", { maximumFractionDigits: 4 })}).`);
+      pushNumber("Punto de equilibrio", "Matrículas equivalentes mínimas", "Horizonte completo", breakEven.minimumEquivalentEnrollments, `Costos fijos / (aporte arancel + aporte matrícula). Umbral exacto ${breakEven.minimumEquivalentEnrollmentsExact?.toLocaleString("es-CL", { maximumFractionDigits: 4 })}`);
+      pushNumber("Punto de equilibrio", "Estudiantes a arancel completo aproximados", "Horizonte completo", breakEven.minimumWholeStudents ?? 0, "Redondeo hacia arriba del umbral equivalente");
+      pushNumber("Punto de equilibrio", "Matrículas equivalentes actuales de referencia", "Periodo de referencia", breakEven.currentEquivalentEnrollments, "La relación entre estudiantes reales y matrículas equivalentes se utiliza también para convertir el aporte variable de matrícula y guía de tesis.");
     } else {
-      pushText("Punto de equilibrio", "Resultado", breakEvenScope, "No determinable: la contribución neta acumulada por matrícula equivalente es nula o negativa.");
+      pushText("Punto de equilibrio", "Resultado", "Horizonte completo", "No determinable: la suma del aporte neto de arancel y matrícula por matrícula equivalente es nula o negativa.");
     }
   }
 
