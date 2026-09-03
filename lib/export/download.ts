@@ -6,6 +6,7 @@ import { createFinancialReportPdf } from "./pdf";
 import { buildFinancialReport, buildParameterReport, compactParameterReportForPdf, type FinancialReport } from "./report-model";
 import { createFinancialReportXlsx } from "./xlsx";
 import { createInstitutionalFormulaBudgetXlsx, institutionalTemplateCompatibilityIssue } from "./institutional-budget-xlsx";
+import { extendInstitutionalBudgetXlsx } from "./institutional-budget-multiyear";
 import { buildFinancialNarrative, buildHistoricalCohortSnapshots } from "./financial-narrative";
 import { createBudgetMemorandumDocx } from "./memorandum";
 
@@ -86,6 +87,15 @@ function downloadGeneralBudgetXlsx(budget: CohortBudget, result: BudgetResult, p
   );
 }
 
+function institutionalBaseResult(result: BudgetResult): BudgetResult {
+  const years = result.years.slice(0, 2);
+  return {
+    ...result,
+    years,
+    annualFlows: result.annualFlows.filter((flow) => years.includes(flow.year)),
+  };
+}
+
 export async function downloadBudgetXlsx(
   budget: CohortBudget,
   result: BudgetResult,
@@ -96,21 +106,23 @@ export async function downloadBudgetXlsx(
     && budget.tuitionPricingMode !== "PROGRAM_TOTAL"
     && !budget.discounts.some((discount) => discount.target === "ENROLLMENT");
 
-  if (institutionalCandidate) {
-    const compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, result);
-    if (!compatibilityIssue) {
-      try {
-        const template = await loadInstitutionalBudgetXlsxTemplate();
-        const bytes = await createInstitutionalFormulaBudgetXlsx(template, budget, result, parameters);
-        download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
-        return;
-      } catch {
-        // Si la plantilla institucional falla, se continúa con el XLSX general trazable.
-      }
+  // Para los Magísteres Profesionales se conserva el formato institucional validado.
+  // Si la cohorte cruza tres o más años, se genera primero el mismo archivo de dos años
+  // y luego se agregan las columnas siguientes dentro de sus mismas hojas y flujos.
+  if (institutionalCandidate && result.years.length >= 2) {
+    const baseResult = result.years.length > 2 ? institutionalBaseResult(result) : result;
+    const compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, baseResult);
+    if (compatibilityIssue) throw new Error(compatibilityIssue);
+    const template = await loadInstitutionalBudgetXlsxTemplate();
+    let bytes = await createInstitutionalFormulaBudgetXlsx(template, budget, baseResult, parameters);
+    if (result.years.length > 2) {
+      bytes = await extendInstitutionalBudgetXlsx(bytes, budget, result, parameters);
     }
+    download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
+    return;
   }
 
-  // Para 3, 4 o más años, el generador general crea una columna por cada año activo.
+  // Los modelos que históricamente no usan la plantilla institucional mantienen su XLSX trazable general.
   downloadGeneralBudgetXlsx(budget, result, parameters);
 }
 
