@@ -1,7 +1,9 @@
 import type { BudgetResult, CohortBudget, InstitutionalParameters, SemesterParameters } from "../calculations/types";
 import { resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
+import { calculateBreakEvenEquivalentEnrollments } from "../calculations/break-even";
 import { genericCurriculumCourses, payableCurriculumCourses } from "../curriculum/budget-load";
 import { getActivePeriods } from "../calculations/periods";
+import { breakEvenExcelFormula } from "./institutional-budget-xlsx";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -335,6 +337,14 @@ function extendStudentFlowSheet(sheetXml: string, budget: CohortBudget, result: 
     output = clearCell(output, `${col}${rows.equilibriumRow}`);
     output = clearCell(output, `${col}${rows.equilibriumWholeStudentsRow}`);
   }
+  const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, parameters);
+  output = setFormula(output, `B${rows.equilibriumRow}`, breakEvenExcelFormula(
+    result.years.map((_year, index) => yearColumn(index)),
+    rows.badDebtParameterRow,
+    rows.centralOverheadParameterRow,
+    rows.facultyOverheadParameterRow,
+  ), equilibrium.minimumEquivalentEnrollments ?? 0);
+  output = setFormula(output, `B${rows.equilibriumWholeStudentsRow}`, `ROUNDUP(B${rows.equilibriumRow},0)`, equilibrium.minimumWholeStudents ?? 0);
   return output;
 }
 

@@ -226,25 +226,33 @@ function maybeProjectionFormula(base: number, next: number, adjustment: number, 
 /**
  * Fórmula Excel institucional del punto de equilibrio de estudiantes.
  *
- * Costos fijos = TOTAL COSTOS Y GASTOS menos el subtotal de overhead.
- * Contribución por matrícula equivalente = arancel anual neto de incobrabilidad y overhead.
+ * Costos fijos = TOTAL COSTOS Y GASTOS menos el subtotal de overhead, sumados para
+ * todos los años activos del programa.
+ * Contribución por matrícula equivalente = suma de los aranceles cobrados en el horizonte,
+ * netos de incobrabilidad y overhead en cada año.
  *
  * Los descuentos no aparecen nuevamente en el denominador porque una matrícula equivalente
  * ya representa el efecto financiero de esos beneficios. La matrícula administrativa/reconocida
  * y los demás ingresos no arancelarios no reducen el umbral de este indicador.
  *
- * Con dos filas de descuentos, la fórmula resultante es exactamente:
- * =ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)/(Parámetros!$B$4*(1-Parámetros!$B$12)*(1-Parámetros!$B$13-Parámetros!$B$14))
+ * Con dos filas de descuentos y dos años, la fórmula resultante abarca B:C. Cuando la
+ * cohorte cruza un tercer año, el extensor institucional la recompone automáticamente
+ * hasta la última columna activa.
  *
  * Si existen más descuentos, las filas de incobrabilidad y overhead se desplazan y las
  * referencias se actualizan automáticamente sin alterar la lógica.
  */
-function breakEvenExcelFormula(
+export function breakEvenExcelFormula(
+  yearColumns: string[],
   badDebtParameterRow: number,
   centralOverheadParameterRow: number,
   facultyOverheadParameterRow: number,
 ): string {
-  return `ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)/(Parámetros!$B$4*(1-Parámetros!$B$${badDebtParameterRow})*(1-Parámetros!$B$${centralOverheadParameterRow}-Parámetros!$B$${facultyOverheadParameterRow}))`;
+  const columns = yearColumns.length > 0 ? yearColumns : ["B"];
+  const firstColumn = columns[0];
+  const lastColumn = columns.at(-1)!;
+  const contributions = columns.map((column) => `Parámetros!$${column}$4*(1-Parámetros!$${column}$${badDebtParameterRow})*(1-Parámetros!$${column}$${centralOverheadParameterRow}-Parámetros!$${column}$${facultyOverheadParameterRow})`);
+  return `ABS(SUM('FLUJO TOTAL'!${firstColumn}37:${lastColumn}37)-SUM('FLUJO TOTAL'!${firstColumn}36:${lastColumn}36))/SUM(${contributions.join(",")})`;
 }
 
 function modalityLabel(budget: CohortBudget): string {
@@ -392,6 +400,7 @@ export async function createInstitutionalFormulaBudgetXlsx(
   s2 = setFormula(s2, `B${totalTuitionIncomeRow}`, `SUM(B${noDiscountIncomeRow}:B${discountIncomeStartRow + discountSlots - 1})`, flow1.tuitionAfterBenefits); s2 = setFormula(s2, `C${totalTuitionIncomeRow}`, `SUM(C${noDiscountIncomeRow}:C${discountIncomeStartRow + discountSlots - 1})`, flow2.tuitionAfterBenefits);
   const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, parameters);
   const equilibriumFormula = breakEvenExcelFormula(
+    ["B", "C"],
     badDebtParameterRow, centralOverheadParameterRow, facultyOverheadParameterRow,
   );
   s2 = setFormula(s2, `B${equilibriumRow}`, equilibriumFormula, equilibrium.minimumEquivalentEnrollments ?? 0);

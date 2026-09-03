@@ -896,13 +896,13 @@ for (const marker of ["Para la elaboración de esta proyección se tuvieron a la
 if (memorandumTemplateV1106.byteLength < 20000) fail("Memorándum v11.0.6: la plantilla institucional parece incompleta.");
 for (const marker of ["memorandum-presupuesto-base-v11-0-6.docx", "Para la elaboración de esta proyección se tuvieron a la vista los siguientes antecedentes:", "En virtud de lo expuesto"]) if (!memorandumTestV1106.includes(marker)) fail(`Memorándum v11.0.6 test: falta ${marker}.`);
 
-// v11.0.8: punto de equilibrio institucional = costos fijos / contribución neta por matrícula equivalente.
+// Punto de equilibrio institucional multianual = costos fijos del horizonte / contribución neta acumulada por matrícula equivalente.
 const institutionalXlsxV1108 = await readFile(path.join(root, "lib/export/institutional-budget-xlsx.ts"), "utf8");
 const institutionalXlsxTestV1108 = await readFile(path.join(root, "demo/tests/institutional-xlsx.test.mjs"), "utf8");
 const breakEvenV1108 = await readFile(path.join(root, "lib/calculations/break-even.ts"), "utf8");
-for (const marker of ["breakEvenExcelFormula", "ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)", "Parámetros!$B$4*(1-Parámetros!$B$${badDebtParameterRow})", "matrículas equivalentes", "ROUNDUP(B${equilibriumRow},0)"]) if (!institutionalXlsxV1108.includes(marker)) fail(`XLSX v11.0.8 punto de equilibrio: falta ${marker}.`);
-for (const marker of ["v11.0.8 exporta el punto de equilibrio como fórmula institucional de contribución neta", "ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)/(Parámetros!$B$4*(1-Parámetros!$B$12)*(1-Parámetros!$B$13-Parámetros!$B$14))", "ROUNDUP(B14,0)"]) if (!institutionalXlsxTestV1108.includes(marker)) fail(`XLSX v11.0.8 pruebas: falta ${marker}.`);
-for (const marker of ["fixedCosts", "contributionPerEquivalentEnrollment", "first.totalExpenses - first.centralOverhead - first.facultyOverhead", "1 - badDebtRate", "1 - overheadRate"]) if (!breakEvenV1108.includes(marker)) fail(`Motor v11.0.8 punto de equilibrio: falta ${marker}.`);
+for (const marker of ["breakEvenExcelFormula", "SUM('FLUJO TOTAL'!${firstColumn}37:${lastColumn}37)", "Parámetros!$${column}$4*(1-Parámetros!$${column}$${badDebtParameterRow})", "matrículas equivalentes", "ROUNDUP(B${equilibriumRow},0)"]) if (!institutionalXlsxV1108.includes(marker)) fail(`XLSX punto de equilibrio multianual: falta ${marker}.`);
+for (const marker of ["expectedBreakEvenFormula", "el XLSX institucional calcula el equilibrio sobre 2026-2S, 2027 y 2028-1S", "ROUNDUP(B14,0)"]) if (!institutionalXlsxTestV1108.includes(marker)) fail(`XLSX pruebas de equilibrio multianual: falta ${marker}.`);
+for (const marker of ["fixedCosts", "contributionPerEquivalentEnrollment", "flows.reduce", "flow.tuitionDistributionShare", "currentNetContribution"]) if (!breakEvenV1108.includes(marker)) fail(`Motor punto de equilibrio multianual: falta ${marker}.`);
 
 // v11.0.9: etiquetas limpias en Flujo estudiantes; las fórmulas permanecen en B14/B15.
 if (institutionalXlsxV1108.includes("matrículas equivalentes (fórmula)")) fail("XLSX v11.0.9: no debe mostrarse (fórmula) en la etiqueta de matrículas equivalentes.");

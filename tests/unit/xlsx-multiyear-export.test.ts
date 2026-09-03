@@ -37,6 +37,16 @@ describe("exportación XLSX multianual", () => {
     expect(multiyear).toContain("No genera un formato alternativo");
   });
 
+  it("recompone el punto de equilibrio hasta la última columna anual activa", () => {
+    const multiyear = source("lib/export/institutional-budget-multiyear.ts");
+    const institutional = source("lib/export/institutional-budget-xlsx.ts");
+
+    expect(institutional).toContain("yearColumns: string[]");
+    expect(institutional).toContain("SUM('FLUJO TOTAL'!${firstColumn}37:${lastColumn}37)");
+    expect(multiyear).toContain("result.years.map((_year, index) => yearColumn(index))");
+    expect(multiyear).toContain("calculateBreakEvenEquivalentEnrollments(budget, parameters)");
+  });
+
   it("respeta matrícula anual, semestral o única sin partir estudiantes por año calendario", () => {
     const download = source("lib/export/download.ts");
     const normalizer = source("lib/export/institutional-budget-enrollment-normalizer.ts");

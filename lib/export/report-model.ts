@@ -256,12 +256,13 @@ export function buildParameterReport(
 
   if (budget.program.type === "MAGISTER_PROFESIONAL") {
     const breakEven = calculateBreakEvenEquivalentEnrollments(budget, parameters);
+    const breakEvenScope = `${budget.durationSemesters} semestres activos`;
     if (breakEven.minimumEquivalentEnrollments !== null) {
-      pushNumber("Punto de equilibrio", "Matrículas equivalentes mínimas", budget.tuitionPricingMode === "PROGRAM_TOTAL" ? "Programa completo" : "Primer año presupuestario", breakEven.minimumEquivalentEnrollments, `Costos fijos / [arancel × (1 − incobrabilidad) × (1 − overhead central − overhead facultad)]. Umbral exacto ${breakEven.minimumEquivalentEnrollmentsExact?.toLocaleString("es-CL", { maximumFractionDigits: 4 })}`);
-      pushNumber("Punto de equilibrio", "Estudiantes a arancel completo aproximados", budget.tuitionPricingMode === "PROGRAM_TOTAL" ? "Programa completo" : "Primer año presupuestario", breakEven.minimumWholeStudents ?? 0, "Redondeo hacia arriba del umbral equivalente");
-      pushNumber("Punto de equilibrio", "Matrículas equivalentes actuales de referencia", budget.tuitionPricingMode === "PROGRAM_TOTAL" ? "Programa completo" : "Primer año presupuestario", breakEven.currentEquivalentEnrollments, "Los descuentos inciden en esta equivalencia, no en el umbral requerido expresado en equivalentes.");
+      pushNumber("Punto de equilibrio", "Matrículas equivalentes mínimas", breakEvenScope, breakEven.minimumEquivalentEnrollments, `Costos fijos de todo el horizonte / suma de contribuciones netas de los cobros de arancel activos. Umbral exacto ${breakEven.minimumEquivalentEnrollmentsExact?.toLocaleString("es-CL", { maximumFractionDigits: 4 })}`);
+      pushNumber("Punto de equilibrio", "Estudiantes a arancel completo aproximados", breakEvenScope, breakEven.minimumWholeStudents ?? 0, "Redondeo hacia arriba del umbral equivalente para toda la cohorte");
+      pushNumber("Punto de equilibrio", "Matrículas equivalentes actuales de referencia", breakEvenScope, breakEven.currentEquivalentEnrollments, "Promedio ponderado por la contribución neta de cada período de cobro; los descuentos inciden en esta equivalencia, no en el umbral requerido.");
     } else {
-      pushText("Punto de equilibrio", "Resultado", "Primer año presupuestario", "No determinable: la contribución neta por matrícula equivalente es nula o negativa.");
+      pushText("Punto de equilibrio", "Resultado", breakEvenScope, "No determinable: la contribución neta acumulada por matrícula equivalente es nula o negativa.");
     }
   }
 

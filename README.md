@@ -100,8 +100,8 @@ La v12.1.0 integra en un único proyecto todas las mejoras funcionales, financie
 
 ## Mejora funcional v11.0.8
 
-- **Punto de equilibrio corregido:** se calcula como costos fijos del primer año, excluyendo overhead variable, divididos por la contribución neta de una matrícula equivalente.
-- **Fórmula XLSX dinámica:** `ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)/(Arancel × (1-Incobrabilidad) × (1-Overhead central-Overhead facultad))`.
+- **Punto de equilibrio multianual:** se calcula con los costos fijos de todos los años y semestres activos, excluyendo overhead variable, divididos por la contribución neta acumulada de los cobros de arancel que correspondan según la estructura anual o total del programa.
+- **Fórmula XLSX dinámica:** suma los costos sin overhead de todas las columnas anuales activas y los divide por la suma del arancel neto de incobrabilidad y overhead de esas mismas columnas.
 - **Descuentos:** afectan la cantidad observada de matrículas equivalentes, pero no se descuentan por segunda vez del umbral requerido.
 - **Matrícula administrativa/reconocida y otros ingresos no arancelarios:** no reducen este indicador de equilibrio.
 - **Mínimo entero:** `ROUNDUP(PuntoEquilibrio,0)`.

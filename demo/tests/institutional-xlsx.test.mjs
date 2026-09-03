@@ -8,11 +8,12 @@ import { createHash } from "node:crypto";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
-const { demoBudget, institutionalParameters, programs } = await import(pathToFileURL(path.join(root, ".engine-build/lib/demo-data.js")).href);
+const { demoBudget, institutionalParameters, programs, secondDemoBudget } = await import(pathToFileURL(path.join(root, ".engine-build/lib/demo-data.js")).href);
 const { calculateBudget } = await import(pathToFileURL(path.join(root, ".engine-build/lib/calculations/budget-engine.js")).href);
 const { calculateBreakEvenEquivalentEnrollments } = await import(pathToFileURL(path.join(root, ".engine-build/lib/calculations/break-even.js")).href);
 const { applyProgramCurriculumToBudget } = await import(pathToFileURL(path.join(root, ".engine-build/lib/curriculum/budget-load.js")).href);
 const { createInstitutionalFormulaBudgetXlsx, canUseFormulaTemplate } = await import(pathToFileURL(path.join(root, ".engine-build/lib/export/institutional-budget-xlsx.js")).href);
+const { extendInstitutionalBudgetXlsx } = await import(pathToFileURL(path.join(root, ".engine-build/lib/export/institutional-budget-multiyear.js")).href);
 
 const templatePath = path.join(root, "public/templates/presupuesto-profesional-formula-base-v10-30.xlsx");
 const template = new Uint8Array(readFileSync(templatePath));
@@ -70,6 +71,12 @@ function formulaForCell(sheet, ref) {
   const match = sheet.match(new RegExp(`<c(?=[^>]*\\br="${ref}")[^>]*>[\\s\\S]*?<f(?: [^>]*)?>([\\s\\S]*?)<\\/f>[\\s\\S]*?<\\/c>`));
   assert.ok(match, `No se encontró fórmula ${ref}`);
   return match[1];
+}
+function expectedBreakEvenFormula(columns, badDebtRow = 12, centralOverheadRow = 13, facultyOverheadRow = 14) {
+  const first = columns[0];
+  const last = columns.at(-1);
+  const contributions = columns.map((column) => `Parámetros!$${column}$4*(1-Parámetros!$${column}$${badDebtRow})*(1-Parámetros!$${column}$${centralOverheadRow}-Parámetros!$${column}$${facultyOverheadRow})`);
+  return `ABS(SUM('FLUJO TOTAL'!${first}37:${last}37)-SUM('FLUJO TOTAL'!${first}36:${last}36))/SUM(${contributions.join(",")})`;
 }
 function stripSheetData(xml) { return xml.replace(/<sheetData>[\s\S]*?<\/sheetData>/, "<sheetData/>"); }
 
@@ -220,7 +227,7 @@ test("v10.30 genera XLSX institucional mejorado, con malla y fórmulas coherente
   assert.equal(/flujo(?: final)? simulado/i.test(studentXml), false, "no debe exportarse el texto flujo simulado");
   const studentFormulas = formulaMap(studentXml);
   const equilibriumFormula = formulaForCell(studentXml, "B14");
-  assert.equal(equilibriumFormula, "ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)/(Parámetros!$B$4*(1-Parámetros!$B$12)*(1-Parámetros!$B$13-Parámetros!$B$14))");
+  assert.equal(equilibriumFormula, expectedBreakEvenFormula(["B", "C"]));
   assert.equal(formulaForCell(studentXml, "B15"), "ROUNDUP(B14,0)");
   assert.ok(studentXml.includes("matrículas equivalentes"), "etiqueta de punto de equilibrio faltante");
   assert.equal(studentXml.includes("matrículas equivalentes (fórmula)"), false, "la etiqueta no debe mostrar (fórmula)");
@@ -272,7 +279,7 @@ test("v11.0.8 exporta el punto de equilibrio como fórmula institucional de cont
   const generated = await createInstitutionalFormulaBudgetXlsx(template, formulaBudget, formulaResult, institutionalParameters);
   const studentXml = text(unzip(generated), "xl/worksheets/sheet2.xml");
   const formula = formulaForCell(studentXml, "B14");
-  assert.equal(formula, "ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)/(Parámetros!$B$4*(1-Parámetros!$B$12)*(1-Parámetros!$B$13-Parámetros!$B$14))");
+  assert.equal(formula, expectedBreakEvenFormula(["B", "C"]));
   assert.equal(formula.includes("B39"), false, "el arrastre no reduce el umbral de equilibrio equivalente");
   assert.equal(formula.includes("Parámetros!$B$5"), false, "la matrícula administrativa/reconocida no reduce el umbral");
   assert.equal(formula.includes("3500000"), false, "el financiamiento institucional no reduce el umbral");
@@ -290,10 +297,9 @@ test("v11.0.8 reproduce un caso objetivo de 9,45 matrículas equivalentes y 10 e
   targetBudget.enrollmentRecognitionRate = 0;
   targetBudget.manualItems = [];
   const baseResult = calculateBudget(targetBudget, institutionalParameters);
-  const firstBase = baseResult.annualFlows[0];
-  const badDebtRate = firstBase.badDebt / firstBase.tuitionAfterBenefits;
-  const contribution = firstBase.annualTuition * (1 - badDebtRate) * (1 - firstBase.centralOverheadRate - firstBase.facultyOverheadRate);
-  const fixedBase = Math.abs(firstBase.totalExpenses - firstBase.centralOverhead - firstBase.facultyOverhead);
+  const badDebtRate = targetBudget.badDebtRate;
+  const contribution = baseResult.annualFlows.reduce((total, flow) => total + flow.annualTuition * flow.tuitionDistributionShare * (1 - badDebtRate) * (1 - flow.centralOverheadRate - flow.facultyOverheadRate), 0);
+  const fixedBase = baseResult.annualFlows.reduce((total, flow) => total + flow.totalExpenses - flow.centralOverhead - flow.facultyOverhead, 0);
   const requiredFixed = 9.45 * contribution;
   const additionalCost = Math.max(0, Math.round(requiredFixed - fixedBase));
   targetBudget.manualItems = [{
@@ -306,10 +312,42 @@ test("v11.0.8 reproduce un caso objetivo de 9,45 matrículas equivalentes y 10 e
   assert.equal(equilibrium.minimumWholeStudents, 10);
   const generated = await createInstitutionalFormulaBudgetXlsx(template, targetBudget, targetResult, institutionalParameters);
   const studentXml = text(unzip(generated), "xl/worksheets/sheet2.xml");
-  assert.equal(formulaForCell(studentXml, "B14"), "ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)/(Parámetros!$B$4*(1-Parámetros!$B$12)*(1-Parámetros!$B$13-Parámetros!$B$14))");
+  assert.equal(formulaForCell(studentXml, "B14"), expectedBreakEvenFormula(["B", "C"]));
   assert.equal(formulaForCell(studentXml, "B15"), "ROUNDUP(B14,0)");
   assert.ok(Math.abs(cachedNumber(studentXml, "B14") - 9.45) < 0.01);
   assert.equal(cachedNumber(studentXml, "B15"), 10);
+});
+
+test("el XLSX institucional calcula el equilibrio sobre 2026-2S, 2027 y 2028-1S sin cambiar sus estilos", async () => {
+  const multiyearBudget = structuredClone(secondDemoBudget);
+  multiyearBudget.externalIncome = [];
+  multiyearBudget.manualItems = [{
+    id: "costo-2028-equilibrio", name: "Costo final 2028", description: "Control multianual",
+    category: "Otros costos y gastos", year: 2028, semester: 1, amount: 3000000,
+    costType: "Único de esta versión", periodicity: "Único",
+  }];
+  const fullResult = calculateBudget(multiyearBudget, institutionalParameters);
+  const baseYears = fullResult.years.slice(0, 2);
+  const baseResult = {
+    ...fullResult,
+    years: baseYears,
+    annualFlows: fullResult.annualFlows.filter((flow) => baseYears.includes(flow.year)),
+  };
+  assert.deepEqual(fullResult.years, [2026, 2027, 2028]);
+  assert.equal(canUseFormulaTemplate(multiyearBudget, baseResult), true);
+
+  const base = await createInstitutionalFormulaBudgetXlsx(template, multiyearBudget, baseResult, institutionalParameters);
+  const generated = await extendInstitutionalBudgetXlsx(base, multiyearBudget, fullResult, institutionalParameters);
+  const baseFiles = unzip(base);
+  const out = unzip(generated);
+  const studentXml = text(out, "xl/worksheets/sheet2.xml");
+  const equilibrium = calculateBreakEvenEquivalentEnrollments(multiyearBudget, institutionalParameters);
+
+  assert.equal(formulaForCell(studentXml, "B14"), expectedBreakEvenFormula(["B", "C", "D"]));
+  assert.equal(formulaForCell(studentXml, "B15"), "ROUNDUP(B14,0)");
+  assert.ok(Math.abs(cachedNumber(studentXml, "B14") - (equilibrium.minimumEquivalentEnrollments ?? 0)) < 0.01);
+  assert.equal(cachedNumber(studentXml, "B15"), equilibrium.minimumWholeStudents ?? 0);
+  assert.equal(sha(out.get("xl/styles.xml")), sha(baseFiles.get("xl/styles.xml")), "la extensión del equilibrio no debe cambiar styles.xml");
 });
 
 test("v11.0.11 muestra Descuento X% en Flujo estudiantes mediante fórmula vinculada a Parámetros", async () => {
@@ -366,7 +404,7 @@ test("v11.0.3 exporta N descuentos como filas independientes y mantiene las fór
   assert.match(studentXml, /<dimension ref="A1:C21"\/>/);
   assert.match(studentXml, /<c(?=[^>]*\br="B19")[^>]*>[\s\S]*?<f>SUM\(B13:B18\)<\/f>/);
   const manyStudentFormulas = formulaMap(studentXml);
-  assert.equal(formulaForCell(studentXml, "B20"), "ABS('FLUJO TOTAL'!B37-'FLUJO TOTAL'!B36)/(Parámetros!$B$4*(1-Parámetros!$B$15)*(1-Parámetros!$B$16-Parámetros!$B$17))");
+  assert.equal(formulaForCell(studentXml, "B20"), expectedBreakEvenFormula(["B", "C"], 15, 16, 17));
   assert.equal(formulaForCell(studentXml, "B21"), "ROUNDUP(B20,0)");
   assert.match(flowXml, /<c(?=[^>]*\br="B5")[^>]*>[\s\S]*?<f>'Flujo estudiantes'!B19<\/f>/);
   assert.match(flowXml, /<c(?=[^>]*\br="B6")[^>]*>[\s\S]*?<f>-B5\*Parámetros!B15<\/f>/);

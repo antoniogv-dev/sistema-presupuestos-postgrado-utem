@@ -1,5 +1,4 @@
 import { calculateBudget, effectiveBadDebtRate } from "./budget-engine";
-import { isProgramTotalPricing } from "./billing";
 import type { CohortBudget, InstitutionalParameters } from "./types";
 
 export interface BreakEvenResult {
@@ -15,11 +14,12 @@ export interface BreakEvenResult {
 /**
  * Punto de equilibrio de un Magíster Profesional expresado en matrículas equivalentes.
  *
- * Criterio institucional v11.0.8:
+ * Criterio institucional multianual:
  *   Costos fijos / contribución neta de una matrícula equivalente.
  *
- * Costos fijos = costos totales del primer año menos overhead central y de facultad.
- * Contribución = arancel anual × (1 - incobrabilidad) × (1 - overhead central - overhead facultad).
+ * Costos fijos = costos totales de todos los años activos menos overhead central y de facultad.
+ * Contribución = suma de cada cobro de arancel del horizonte × (1 - incobrabilidad)
+ *                × (1 - overhead central - overhead facultad).
  *
  * Los descuentos no se restan nuevamente: su efecto ya está contenido en el concepto de
  * "matrícula equivalente". La matrícula administrativa/reconocida, financiamiento institucional,
@@ -31,9 +31,9 @@ export function calculateBreakEvenEquivalentEnrollments(
   parameters: InstitutionalParameters,
 ): BreakEvenResult {
   const current = calculateBudget(budget, parameters);
-  const first = current.annualFlows[0];
+  const flows = current.annualFlows;
 
-  if (!first) {
+  if (flows.length === 0) {
     return {
       minimumEquivalentEnrollments: null,
       minimumEquivalentEnrollmentsExact: null,
@@ -45,27 +45,27 @@ export function calculateBreakEvenEquivalentEnrollments(
     };
   }
 
-  const programTotalMode = isProgramTotalPricing(budget);
-  const currentEquivalentEnrollments = programTotalMode
-    ? (Math.max(0, budget.programTotalTuition ?? 0) > 0
-      ? current.annualFlows.reduce((total, flow) => total + flow.tuitionAfterBenefits, 0) / Math.max(0, budget.programTotalTuition ?? 0)
-      : 0)
-    : first.equivalentEnrollments;
   const badDebtRate = effectiveBadDebtRate(budget, parameters);
-  const fixedCosts = programTotalMode
-    ? current.annualFlows.reduce((total, flow) => total + Math.max(0, flow.totalExpenses - flow.centralOverhead - flow.facultyOverhead), 0)
-    : Math.max(0, Math.abs(first.totalExpenses - first.centralOverhead - first.facultyOverhead));
-  const contributionPerEquivalentEnrollment = programTotalMode
-    ? current.annualFlows.reduce((total, flow) => {
-      const share = Math.max(0, flow.tuitionDistributionShare);
-      const overheadRate = Math.max(0, flow.centralOverheadRate) + Math.max(0, flow.facultyOverheadRate);
-      return total + Math.max(0, budget.programTotalTuition ?? 0) * share
-        * Math.max(0, 1 - badDebtRate)
-        * Math.max(0, 1 - overheadRate);
-    }, 0)
-    : Math.max(0, first.annualTuition)
+  const fixedCosts = flows.reduce(
+    (total, flow) => total + Math.max(0, flow.totalExpenses - flow.centralOverhead - flow.facultyOverhead),
+    0,
+  );
+  const contributionPerEquivalentEnrollment = flows.reduce((total, flow) => {
+    const tuitionShare = Math.max(0, flow.tuitionDistributionShare);
+    const overheadRate = Math.max(0, flow.centralOverheadRate) + Math.max(0, flow.facultyOverheadRate);
+    return total + Math.max(0, flow.annualTuition) * tuitionShare
       * Math.max(0, 1 - badDebtRate)
-      * Math.max(0, 1 - (Math.max(0, first.centralOverheadRate) + Math.max(0, first.facultyOverheadRate)));
+      * Math.max(0, 1 - overheadRate);
+  }, 0);
+  const currentNetContribution = flows.reduce((total, flow) => {
+    const overheadRate = Math.max(0, flow.centralOverheadRate) + Math.max(0, flow.facultyOverheadRate);
+    return total + Math.max(0, flow.tuitionAfterBenefits)
+      * Math.max(0, 1 - badDebtRate)
+      * Math.max(0, 1 - overheadRate);
+  }, 0);
+  const currentEquivalentEnrollments = contributionPerEquivalentEnrollment > 0
+    ? currentNetContribution / contributionPerEquivalentEnrollment
+    : 0;
 
   if (fixedCosts === 0) {
     return {
