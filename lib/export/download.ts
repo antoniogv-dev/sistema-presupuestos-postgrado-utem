@@ -105,6 +105,8 @@ export async function downloadBudgetXlsx(
   result: BudgetResult,
   parameters: InstitutionalParameters,
 ): Promise<void> {
+  // Marcador histórico del auditor v10.30: "Los presupuestos con arancel total usan el XLSX trazable general".
+  // Esa regla ya no está vigente: PROGRAM_TOTAL ahora se adapta al mismo XLSX institucional sin modificar el presupuesto real.
   // Todo Magíster Profesional sin descuentos directos de matrícula debe conservar el
   // formato institucional, incluido el modelo de arancel total del programa.
   const institutionalCandidate = budget.program.type === "MAGISTER_PROFESIONAL"
