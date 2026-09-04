@@ -113,6 +113,10 @@ function styleFromCell(sheetXml: string, ref: string): string {
   const style = match[1]?.match(/\bs="(\d+)"/);
   return style ? ` s="${style[1]}"` : "";
 }
+function styleFromCellXml(cellXml: string): string {
+  const style = cellXml.match(/\bs="(\d+)"/);
+  return style ? ` s="${style[1]}"` : "";
+}
 function typeFromCell(cellXml: string): string {
   const match = cellXml.match(/\bt="([^"]+)"/);
   return match ? ` t="${match[1]}"` : "";
@@ -126,6 +130,19 @@ function replaceCell(sheetXml: string, ref: string, body: string, typeAttribute 
   if (!pattern.test(sheetXml)) throw new Error(`El formato institucional no contiene la celda ${ref}.`);
   const style = styleFromCell(sheetXml, ref);
   return sheetXml.replace(pattern, () => `<c r="${ref}"${style}${typeAttribute}>${body}</c>`);
+}
+function insertCellInExistingRow(sheetXml: string, ref: string, cellXml: string): string {
+  const rowMatch = ref.match(/(\d+)$/);
+  if (!rowMatch) throw new Error(`Referencia de celda institucional inválida: ${ref}.`);
+  const row = Number(rowMatch[1]);
+  const rowPattern = new RegExp(`<row(?=[^>]*\\br="${row}")([^>]*)>[\\s\\S]*?<\\/row>`, "m");
+  const existingRow = sheetXml.match(rowPattern);
+  if (!existingRow) throw new Error(`El formato institucional no contiene la fila ${row} necesaria para crear ${ref}.`);
+  const expandedRow = existingRow[0].replace(/<\/row>$/, `${cellXml}</row>`);
+  let output = sheetXml.replace(rowPattern, () => expandedRow);
+  output = output.replace(/<dimension ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/, (_full, firstCol: string, firstRow: string, lastCol: string, lastRow: string) =>
+    `<dimension ref="${firstCol}${firstRow}:${lastCol}${Math.max(Number(lastRow), row)}"/>`);
+  return output;
 }
 function setFormula(sheetXml: string, ref: string, formula: string, cached: number): string {
   return replaceCell(sheetXml, ref, `<f>${xml(formula)}</f><v>${Number.isFinite(cached) ? cached : 0}</v>`);
@@ -149,7 +166,10 @@ function shiftFlowCellDown(sheetXml: string, column: string, sourceRow: number, 
   let body = innerFromCell(sourceCell);
   body = body.replace(/<f([^>]*)>([\s\S]*?)<\/f>/g, (_full, attrs: string, formula: string) =>
     `<f${attrs}>${xml(shiftLocalFormulaRows(formula, 7, 1))}</f>`);
-  return replaceCell(sheetXml, `${column}${targetRow}`, body, typeFromCell(sourceCell));
+  const targetRef = `${column}${targetRow}`;
+  if (cellPattern(targetRef).test(sheetXml)) return replaceCell(sheetXml, targetRef, body, typeFromCell(sourceCell));
+  const newCell = `<c r="${targetRef}"${styleFromCellXml(sourceCell)}${typeFromCell(sourceCell)}>${body}</c>`;
+  return insertCellInExistingRow(sheetXml, targetRef, newCell);
 }
 
 /**
