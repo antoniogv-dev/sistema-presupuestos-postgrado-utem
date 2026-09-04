@@ -64,8 +64,7 @@ describe("exportación XLSX multianual", () => {
     const patch = source("lib/export/institutional-budget-break-even-formula.ts");
 
     expect(patch).toContain("const formula = `IFERROR(");
-    expect(patch).toContain("budget.enrollmentRecognitionRate");
-    expect(patch).toContain("recognized").not;
+    expect(patch).toContain("const recognition = clampRate(budget.enrollmentRecognitionRate)");
     expect(patch).not.toContain("`LET(");
     expect(patch).not.toContain("@LET");
   });
