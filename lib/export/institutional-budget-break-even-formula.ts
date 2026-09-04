@@ -107,6 +107,9 @@ function clampRate(value: number): number { return Math.max(0, Math.min(1, Numbe
 function cellPattern(ref: string): RegExp {
   return new RegExp(`<c(?=[^>]*\\br="${ref}")([^>]*?)(?:\\/>|>[\\s\\S]*?<\\/c>)`, "m");
 }
+function rowPattern(row: number): RegExp {
+  return new RegExp(`<row(?=[^>]*\\br="${row}")([^>]*)>[\\s\\S]*?<\\/row>`, "m");
+}
 function styleFromCell(sheetXml: string, ref: string): string {
   const match = sheetXml.match(cellPattern(ref));
   if (!match) return "";
@@ -135,11 +138,24 @@ function insertCellInExistingRow(sheetXml: string, ref: string, cellXml: string)
   const rowMatch = ref.match(/(\d+)$/);
   if (!rowMatch) throw new Error(`Referencia de celda institucional inválida: ${ref}.`);
   const row = Number(rowMatch[1]);
-  const rowPattern = new RegExp(`<row(?=[^>]*\\br="${row}")([^>]*)>[\\s\\S]*?<\\/row>`, "m");
-  const existingRow = sheetXml.match(rowPattern);
-  if (!existingRow) throw new Error(`El formato institucional no contiene la fila ${row} necesaria para crear ${ref}.`);
-  const expandedRow = existingRow[0].replace(/<\/row>$/, `${cellXml}</row>`);
-  let output = sheetXml.replace(rowPattern, () => expandedRow);
+  const targetRowPattern = rowPattern(row);
+  const existingRow = sheetXml.match(targetRowPattern);
+  let output = sheetXml;
+
+  if (existingRow) {
+    const expandedRow = existingRow[0].replace(/<\/row>$/, `${cellXml}</row>`);
+    output = sheetXml.replace(targetRowPattern, () => expandedRow);
+  } else {
+    const sourceRow = sheetXml.match(rowPattern(row - 1));
+    if (!sourceRow) throw new Error(`El formato institucional no contiene la fila ${row - 1} necesaria para crear la fila ${row}.`);
+    const opening = sourceRow[0].match(/^<row\b([^>]*)>/);
+    if (!opening) throw new Error(`No fue posible replicar el formato institucional de la fila ${row - 1}.`);
+    const attrs = opening[1].replace(new RegExp(`\\br="${row - 1}"`), `r="${row}"`);
+    const newRow = `<row${attrs}>${cellXml}</row>`;
+    if (!/<\/sheetData>/.test(sheetXml)) throw new Error("El formato institucional no contiene sheetData para ampliar FLUJO TOTAL.");
+    output = sheetXml.replace(/<\/sheetData>/, `${newRow}</sheetData>`);
+  }
+
   output = output.replace(/<dimension ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/, (_full, firstCol: string, firstRow: string, lastCol: string, lastRow: string) =>
     `<dimension ref="${firstCol}${firstRow}:${lastCol}${Math.max(Number(lastRow), row)}"/>`);
   return output;
@@ -177,8 +193,9 @@ function shiftFlowCellDown(sheetXml: string, column: string, sourceRow: number, 
  * utilizado por Postgrado (como el modelo MEES 2026 / Memorándum 227-2026).
  *
  * El generador histórico escribe el flujo una fila más arriba desde INGRESOS TOTAL.
- * Aquí se desplazan únicamente los contenidos de B:... una fila hacia abajo, manteniendo
- * intactas las filas, estilos, anchos, alturas, colores y rótulos de la plantilla.
+ * Aquí se desplazan los rótulos y contenidos de A:... una fila hacia abajo, manteniendo
+ * estilos, anchos, alturas, colores y la estructura de la plantilla. Si la fila final 42
+ * no existe físicamente, se crea replicando los atributos de formato de la fila 41.
  * Luego se escribe el reconocimiento de matrícula en la fila 7 y se alinea el punto de
  * equilibrio con la misma identidad financiera del motor, sin LET ni operador @.
  */
@@ -209,6 +226,14 @@ export async function alignInstitutionalBreakEvenFormula(
   const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, parameters);
 
   let totalFlow = decoder.decode(files.get(totalSheetName)!);
+
+  // El modelo institucional de referencia tiene una fila adicional: Reconocimiento de Matrícula.
+  // Se desplazan primero los rótulos para que FLUJO TOTAL termine realmente en la fila 42.
+  for (let row = 41; row >= 7; row -= 1) {
+    if (cellPattern(`A${row}`).test(totalFlow)) totalFlow = shiftFlowCellDown(totalFlow, "A", row, row + 1);
+  }
+  totalFlow = setText(totalFlow, "A7", "Reconocimiento de Matrícula");
+
   for (let index = 0; index < result.years.length; index += 1) {
     const col = yearColumn(index);
     const flow = result.annualFlows.find((item) => item.year === result.years[index]);
