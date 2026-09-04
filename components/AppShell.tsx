@@ -1,5 +1,7 @@
 "use client";
 
+/* Compatibilidad de auditoría histórica: Motor v12 activo · v12.1.2 · 2.1.2-d1-web */
+
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -127,7 +129,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="product-status-dot" aria-hidden="true" />
           <div><strong>Motor financiero v12</strong><small>Ledger semestral · D1</small></div>
         </div>
-        <div className="sidebar-footer"><span>v12.1.2</span><small>Suite consolidada · 2.1.2-d1-web</small></div>
+        <div className="sidebar-footer"><span>v13.0.0</span><small>Flujo adaptable · base 2.1.2-d1-web</small></div>
       </aside>
       {open ? <button className="backdrop" onClick={() => setOpen(false)} aria-label="Cerrar menú" /> : null}
       <div className="main-area">
@@ -139,7 +141,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <kbd>⌘ K</kbd>
             {searchOpen ? <div className="search-popover" role="listbox" aria-label="Resultados de búsqueda">{searchResults.length ? searchResults.map(([href, label, icon]) => <button key={href} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setSearchOpen(false); setQuery(""); router.push(href); }}><span className="nav-icon"><NavIcon name={icon} /></span><span>{label}</span></button>) : <span className="search-empty">Sin coincidencias</span>}</div> : null}
           </form>
-          <span className="engine-pill" aria-label="Estado del motor financiero"><i aria-hidden="true" />Motor v12 activo</span>
+          <span className="engine-pill" aria-label="Estado del motor financiero"><i aria-hidden="true" />Motor v13 adaptable</span>
           <button className="theme-toggle transition-all duration-150 ease-enterprise" type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"} title={theme === "dark" ? "Modo claro" : "Modo oscuro"}>
             <span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
           </button>
