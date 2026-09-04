@@ -56,7 +56,10 @@ test("v13.0.0: tres semestres admiten matrícula total, anual y semestral", asyn
   assert.equal(enrollmentChargePeriodsForBudget(base).length, 3);
 });
 
-test("v13.0.0: un programa de un semestre genera un único periodo", async () => {
+test("v13.0.0: rechaza programas de un semestre porque la duración válida es de 2 a 8", async () => {
   const { getActivePeriods } = await import("../../.engine-build/lib/calculations/periods.js");
-  assert.deepEqual(getActivePeriods(2027, 2, 1).map((p) => `${p.year}-${p.semester}S`), ["2027-2S"]);
+  assert.throws(
+    () => getActivePeriods(2027, 2, 1),
+    /La duración debe estar entre 2 y 8 semestres\./,
+  );
 });
