@@ -10,6 +10,7 @@ import { extendInstitutionalBudgetXlsx } from "./institutional-budget-multiyear"
 import { normalizeInstitutionalEnrollmentBilling } from "./institutional-budget-enrollment-normalizer";
 import { extendInstitutionalStaffProration } from "./institutional-budget-staff-multiyear";
 import { alignInstitutionalBreakEvenFormula } from "./institutional-budget-break-even-formula";
+import { institutionalBudgetForExport, normalizeInstitutionalProgramTotalTuition } from "./institutional-budget-program-total";
 import { buildFinancialNarrative, buildHistoricalCohortSnapshots } from "./financial-narrative";
 import { createBudgetMemorandumDocx } from "./memorandum";
 
@@ -104,28 +105,32 @@ export async function downloadBudgetXlsx(
   result: BudgetResult,
   parameters: InstitutionalParameters,
 ): Promise<void> {
-  // Los presupuestos con arancel total usan el XLSX trazable general.
+  // Todo Magíster Profesional sin descuentos directos de matrícula debe conservar el
+  // formato institucional, incluido el modelo de arancel total del programa.
   const institutionalCandidate = budget.program.type === "MAGISTER_PROFESIONAL"
-    && budget.tuitionPricingMode !== "PROGRAM_TOTAL"
     && !budget.discounts.some((discount) => discount.target === "ENROLLMENT");
 
   // Para los Magísteres Profesionales se conserva el formato institucional validado.
   // Si la cohorte cruza tres o más años, se genera primero el mismo archivo de dos años
   // y luego se agregan las columnas siguientes dentro de sus mismas hojas y flujos.
   if (institutionalCandidate && result.years.length >= 2) {
+    const exportBudget = institutionalBudgetForExport(budget, result, parameters);
     const baseResult = result.years.length > 2 ? institutionalBaseResult(result) : result;
-    const compatibilityIssue = institutionalTemplateCompatibilityIssue(budget, baseResult);
+    const compatibilityIssue = institutionalTemplateCompatibilityIssue(exportBudget, baseResult);
     if (compatibilityIssue) throw new Error(compatibilityIssue);
     const template = await loadInstitutionalBudgetXlsxTemplate();
-    let bytes = await createInstitutionalFormulaBudgetXlsx(template, budget, baseResult, parameters);
+    let bytes = await createInstitutionalFormulaBudgetXlsx(template, exportBudget, baseResult, parameters);
     if (result.years.length > 2) {
-      bytes = await extendInstitutionalBudgetXlsx(bytes, budget, result, parameters);
+      bytes = await extendInstitutionalBudgetXlsx(bytes, exportBudget, result, parameters);
     }
     // Matrícula parametrizable sin fraccionar estudiantes por año calendario.
-    bytes = await normalizeInstitutionalEnrollmentBilling(bytes, budget, result, parameters);
+    bytes = await normalizeInstitutionalEnrollmentBilling(bytes, exportBudget, result, parameters);
+    // PROGRAM_TOTAL se representa dentro de la misma plantilla institucional mediante
+    // el valor unitario efectivamente reconocido en cada año calendario.
+    bytes = await normalizeInstitutionalProgramTotalTuition(bytes, budget, result);
     // El prorrateo de Dirección, Asistencia y Otros honorarios se extiende también
     // a cada año adicional activo (por ejemplo, 2028-1S en una cohorte 2026-2S de 4 semestres).
-    bytes = await extendInstitutionalStaffProration(bytes, budget, result, parameters);
+    bytes = await extendInstitutionalStaffProration(bytes, exportBudget, result, parameters);
     // El punto de equilibrio se corrige al final, sin tocar la estructura ni estilos del XLSX.
     bytes = await alignInstitutionalBreakEvenFormula(bytes, budget, result, parameters);
     download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
