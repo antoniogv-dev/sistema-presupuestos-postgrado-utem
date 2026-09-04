@@ -127,7 +127,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="sidebar-product-card">
           <span className="product-status-dot" aria-hidden="true" />
-          <div><strong>Motor financiero v12</strong><small>Ledger semestral · D1</small></div>
+          <div><strong>Motor financiero v13</strong><small>Flujo adaptable · D1</small></div>
         </div>
         <div className="sidebar-footer"><span>v13.0.0</span><small>Flujo adaptable · base 2.1.2-d1-web</small></div>
       </aside>
