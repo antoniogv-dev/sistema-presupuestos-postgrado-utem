@@ -11,36 +11,27 @@ const { calculateBreakEvenEquivalentEnrollments } = await import(path.join(root,
 
 const clone = (value) => structuredClone(value);
 
-test("v12.1.2 concilia la fórmula institucional completa del punto de equilibrio", () => {
+test("v13.0.1 concilia punto de equilibrio y resultado operacional con una sola identidad", () => {
   const budget = clone(demoBudget);
+  budget.enrollmentRecognitionRate = 1;
   const result = calculateBudget(budget, institutionalParameters);
   const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, institutionalParameters);
 
-  const fixedCosts = Math.abs(result.annualFlows.reduce(
-    (total, flow) => total + flow.totalExpenses - flow.centralOverhead - flow.facultyOverhead - flow.thesisGuidanceCost,
-    0,
-  ));
-  const tuitionContribution = result.annualFlows.reduce((total, flow) => {
-    const badDebtRate = flow.tuitionAfterBenefits > 0 ? flow.badDebt / flow.tuitionAfterBenefits : 0;
-    return total + flow.annualTuition * flow.tuitionFactor
-      * (1 - badDebtRate)
-      * (1 - flow.centralOverheadRate - flow.facultyOverheadRate);
-  }, 0);
-  const enrollmentContribution = (
-    equilibrium.components.enrollmentPerActualStudent - equilibrium.components.thesisGuidancePerActualStudent
-  ) * equilibrium.components.actualStudentsPerEquivalentEnrollment;
-  const expected = fixedCosts / (tuitionContribution + enrollmentContribution);
-
   assert.ok(equilibrium.minimumEquivalentEnrollmentsExact !== null);
-  assert.ok(Math.abs(equilibrium.minimumEquivalentEnrollmentsExact - expected) < 1e-9);
-  assert.ok(Math.abs(equilibrium.components.fixedCosts - fixedCosts) < 1e-9);
-  assert.ok(Math.abs(equilibrium.components.tuitionContribution - tuitionContribution) < 1e-9);
-  assert.ok(Math.abs(equilibrium.components.enrollmentContribution - enrollmentContribution) < 1e-9);
+  const expectedOperationalResult = equilibrium.currentEquivalentEnrollments
+    * equilibrium.components.contributionPerEquivalentEnrollment
+    - equilibrium.components.fixedCosts;
+
+  assert.ok(Math.abs(equilibrium.components.operationalResult - expectedOperationalResult) < 1e-6);
+  assert.equal(result.viable, equilibrium.currentEquivalentEnrollments + 1e-9 >= equilibrium.minimumEquivalentEnrollmentsExact);
+  assert.equal(equilibrium.reached, result.viable);
 });
 
-test("v12.1.2 reconoce la matrícula como aporte: una matrícula mayor reduce el umbral", () => {
+test("v13.0.1 reconoce matrícula sólo en la proporción configurada como ingreso", () => {
   const base = clone(demoBudget);
   const higher = clone(demoBudget);
+  base.enrollmentRecognitionRate = 1;
+  higher.enrollmentRecognitionRate = 1;
   const years = [...new Set(higher.semesters.map((semester) => semester.year))];
   higher.annualOverrides = years.map((year) => ({
     ...defaultAnnualOverrideForYear(higher, institutionalParameters, year),
@@ -52,14 +43,53 @@ test("v12.1.2 reconoce la matrícula como aporte: una matrícula mayor reduce el
 
   assert.ok(before.minimumEquivalentEnrollmentsExact !== null);
   assert.ok(after.minimumEquivalentEnrollmentsExact !== null);
-  assert.ok(after.components.enrollmentPerActualStudent > before.components.enrollmentPerActualStudent);
+  assert.ok(after.components.recognizedEnrollmentPerActualStudent > before.components.recognizedEnrollmentPerActualStudent);
   assert.ok(after.components.enrollmentContribution > before.components.enrollmentContribution);
   assert.ok(after.minimumEquivalentEnrollmentsExact < before.minimumEquivalentEnrollmentsExact);
 });
 
-test("v12.1.2 reclasifica guía de tesis como costo variable por estudiante", () => {
+test("v13.0.1 con reconocimiento de matrícula 0% no reduce artificialmente el equilibrio", () => {
+  const base = clone(demoBudget);
+  const higher = clone(demoBudget);
+  base.enrollmentRecognitionRate = 0;
+  higher.enrollmentRecognitionRate = 0;
+  const years = [...new Set(higher.semesters.map((semester) => semester.year))];
+  higher.annualOverrides = years.map((year) => ({
+    ...defaultAnnualOverrideForYear(higher, institutionalParameters, year),
+    annualEnrollmentFee: 900000,
+  }));
+
+  const before = calculateBreakEvenEquivalentEnrollments(base, institutionalParameters);
+  const after = calculateBreakEvenEquivalentEnrollments(higher, institutionalParameters);
+
+  assert.equal(before.components.recognizedEnrollmentPerActualStudent, 0);
+  assert.equal(after.components.recognizedEnrollmentPerActualStudent, 0);
+  assert.ok(Math.abs((before.minimumEquivalentEnrollmentsExact ?? 0) - (after.minimumEquivalentEnrollmentsExact ?? 0)) < 1e-9);
+});
+
+test("v13.0.1 si 8 equivalentes superan el equilibrio el presupuesto es viable", () => {
+  const budget = clone(demoBudget);
+  budget.enrollmentRecognitionRate = 1;
+  budget.discounts = [];
+  budget.initialStudents = 8;
+  budget.semesters.forEach((semester) => { semester.activeStudents = 8; });
+
+  const result = calculateBudget(budget, institutionalParameters);
+  const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, institutionalParameters);
+
+  assert.equal(equilibrium.currentEquivalentEnrollments, 8);
+  assert.ok(equilibrium.minimumEquivalentEnrollmentsExact !== null);
+  assert.ok(equilibrium.minimumEquivalentEnrollmentsExact < 8);
+  assert.ok(equilibrium.components.operationalResult > 0);
+  assert.equal(equilibrium.reached, true);
+  assert.equal(result.viable, true);
+});
+
+test("v13.0.1 mantiene guía de tesis como costo variable por estudiante", () => {
   const base = clone(demoBudget);
   const higherThesis = clone(demoBudget);
+  base.enrollmentRecognitionRate = 1;
+  higherThesis.enrollmentRecognitionRate = 1;
   const lastYear = Math.max(...higherThesis.semesters.map((semester) => semester.year));
   higherThesis.annualOverrides = [...new Set(higherThesis.semesters.map((semester) => semester.year))].map((year) => ({
     ...defaultAnnualOverrideForYear(higherThesis, institutionalParameters, year),
