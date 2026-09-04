@@ -48,29 +48,26 @@ describe("exportación XLSX multianual", () => {
     expect(multiyear).toContain("calculateBreakEvenEquivalentEnrollments(budget, parameters)");
   });
 
-  it("respeta matrícula anual, semestral o única sin partir estudiantes por año calendario", () => {
+  it("v13.0.1 conserva el modelo institucional anterior y corrige sólo la fórmula final de equilibrio", () => {
     const download = source("lib/export/download.ts");
-    const normalizer = source("lib/export/institutional-budget-enrollment-normalizer.ts");
+    const patch = source("lib/export/institutional-budget-break-even-formula.ts");
 
-    expect(download).toContain("normalizeInstitutionalEnrollmentBilling(bytes, budget, result, parameters)");
-    expect(normalizer).toContain("enrollmentChargePeriodsForBudget");
-    expect(normalizer).toContain("enrollmentFeeForPeriod");
-    expect(normalizer).toContain("Ninguna modalidad divide estudiantes por 0,5");
-    expect(normalizer).not.toContain("activeStudents) * 0.5");
-    expect(normalizer).not.toContain("discount.students) * 0.5");
+    expect(download).toContain('import { alignInstitutionalBreakEvenFormula } from "./institutional-budget-break-even-formula"');
+    expect(download).toContain("alignInstitutionalBreakEvenFormula(bytes, budget, result, parameters)");
+    expect(download).not.toContain("normalizeInstitutionalEnrollmentBilling(bytes, budget, result, parameters)");
+    expect(download).not.toContain("extendInstitutionalStaffProration(bytes, budget, result, parameters)");
+    expect(patch).toContain("No agrega hojas, filas, columnas, estilos ni cambia el modelo histórico de Postgrado");
+    expect(patch).toContain("const equilibriumRow = 10 + (2 * discountSlots)");
   });
 
-  it("extiende Prorrateo Staff a cada año activo adicional, incluido un último semestre parcial", () => {
-    const download = source("lib/export/download.ts");
-    const staff = source("lib/export/institutional-budget-staff-multiyear.ts");
+  it("v13.0.1 evita LET y el operador @ en la fórmula final de punto de equilibrio", () => {
+    const patch = source("lib/export/institutional-budget-break-even-formula.ts");
 
-    expect(download).toContain('import { extendInstitutionalStaffProration } from "./institutional-budget-staff-multiyear"');
-    expect(download).toContain("extendInstitutionalStaffProration(bytes, budget, result, parameters)");
-    expect(staff).toContain("const extraYears = result.years.length - 2");
-    expect(staff).toContain("2028 (1S)");
-    expect(staff).toContain("activeSemesterLabel");
-    expect(staff).toContain("Otras cohortes / versiones / programas / proyectos");
-    expect(staff).toContain("'Prorrateo Staff'!F");
+    expect(patch).toContain("const formula = `IFERROR(");
+    expect(patch).toContain("budget.enrollmentRecognitionRate");
+    expect(patch).toContain("recognized").not;
+    expect(patch).not.toContain("`LET(");
+    expect(patch).not.toContain("@LET");
   });
 
   it("mantiene una firma Promise<void> compatible con los consumidores de exportación", () => {
