@@ -7,6 +7,7 @@ import { buildFinancialReport, buildParameterReport, compactParameterReportForPd
 import { createFinancialReportXlsx } from "./xlsx";
 import { createInstitutionalFormulaBudgetXlsx, institutionalTemplateCompatibilityIssue } from "./institutional-budget-xlsx";
 import { extendInstitutionalBudgetXlsx } from "./institutional-budget-multiyear";
+import { alignInstitutionalBreakEvenFormula } from "./institutional-budget-break-even-formula";
 import { buildFinancialNarrative, buildHistoricalCohortSnapshots } from "./financial-narrative";
 import { createBudgetMemorandumDocx } from "./memorandum";
 
@@ -118,6 +119,8 @@ export async function downloadBudgetXlsx(
     if (result.years.length > 2) {
       bytes = await extendInstitutionalBudgetXlsx(bytes, budget, result, parameters);
     }
+    // Mantiene exactamente el modelo institucional anterior y corrige sólo la fórmula de equilibrio.
+    bytes = await alignInstitutionalBreakEvenFormula(bytes, budget, result, parameters);
     download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
     return;
   }
