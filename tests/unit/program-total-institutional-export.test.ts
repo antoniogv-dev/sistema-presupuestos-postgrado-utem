@@ -9,7 +9,10 @@ describe("adaptación PROGRAM_TOTAL al XLSX institucional", () => {
     budget.tuitionPricingMode = "PROGRAM_TOTAL";
     budget.programTotalTuition = 6_000_000;
     budget.tuitionDistributionMode = "CUSTOM";
-    budget.tuitionSemesterDistribution = [0.25, 0.25, 0.25, 0.25];
+    budget.tuitionSemesterDistribution = Array.from(
+      { length: budget.durationSemesters },
+      () => 1 / budget.durationSemesters,
+    );
 
     const result = calculateBudget(budget, institutionalParameters);
     const adapted = institutionalBudgetForExport(budget, result, institutionalParameters);
