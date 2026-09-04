@@ -37,32 +37,35 @@ describe("exportación XLSX multianual", () => {
     expect(multiyear).toContain("No genera un formato alternativo");
   });
 
-  it("recompone el punto de equilibrio hasta la última columna anual activa", () => {
-    const multiyear = source("lib/export/institutional-budget-multiyear.ts");
-    const institutional = source("lib/export/institutional-budget-xlsx.ts");
+  it("mantiene matrícula parametrizable y prorrateo de staff del modelo de referencia", () => {
+    const download = source("lib/export/download.ts");
 
-    expect(institutional).toContain("yearColumnsOrLastColumn: string[] | string");
-    expect(institutional).toContain("const yearColumns = Array.isArray(yearColumnsOrLastColumn)");
-    expect(institutional).toContain("SUM('FLUJO TOTAL'!${firstYearColumn}37:${lastYearColumn}37)");
-    expect(multiyear).toContain("result.years.map((_year, index) => yearColumn(index))");
-    expect(multiyear).toContain("calculateBreakEvenEquivalentEnrollments(budget, parameters)");
+    expect(download).toContain('import { normalizeInstitutionalEnrollmentBilling } from "./institutional-budget-enrollment-normalizer"');
+    expect(download).toContain('import { extendInstitutionalStaffProration } from "./institutional-budget-staff-multiyear"');
+    expect(download).toContain("normalizeInstitutionalEnrollmentBilling(bytes, budget, result, parameters)");
+    expect(download).toContain("extendInstitutionalStaffProration(bytes, budget, result, parameters)");
   });
 
-  it("v13.0.1 conserva el modelo institucional anterior y corrige sólo la fórmula final de equilibrio", () => {
+  it("v13.0.2 realinea FLUJO TOTAL con el formato MEES de referencia sin cambiar estilos", () => {
     const download = source("lib/export/download.ts");
     const patch = source("lib/export/institutional-budget-break-even-formula.ts");
 
     expect(download).toContain('import { alignInstitutionalBreakEvenFormula } from "./institutional-budget-break-even-formula"');
     expect(download).toContain("alignInstitutionalBreakEvenFormula(bytes, budget, result, parameters)");
-    expect(download).not.toContain("normalizeInstitutionalEnrollmentBilling(bytes, budget, result, parameters)");
-    expect(download).not.toContain("extendInstitutionalStaffProration(bytes, budget, result, parameters)");
-    expect(patch).toContain("No agrega hojas, filas, columnas, estilos ni cambia el modelo histórico de Postgrado");
-    expect(patch).toContain("const equilibriumRow = 10 + (2 * discountSlots)");
+    expect(patch).toContain("for (let row = 41; row >= 7; row -= 1)");
+    expect(patch).toContain("shiftFlowCellDown(totalFlow, col, row, row + 1)");
+    expect(patch).toContain("`${col}7`, `${col}4*${recognition}`");
+    expect(patch).toContain("SUM(${col}5:${col}7)");
+    expect(patch).toContain('"Asistencia técnica "');
   });
 
-  it("v13.0.1 evita LET y el operador @ en la fórmula final de punto de equilibrio", () => {
+  it("v13.0.2 usa la misma identidad operacional en Excel y evita LET/@", () => {
     const patch = source("lib/export/institutional-budget-break-even-formula.ts");
 
+    expect(patch).toContain("38:${lastYearColumn}38");
+    expect(patch).toContain("37:${lastYearColumn}37");
+    expect(patch).toContain("11:${lastYearColumn}11");
+    expect(patch).toContain("7:${lastYearColumn}7");
     expect(patch).toContain("const formula = `IFERROR(");
     expect(patch).toContain("const recognition = clampRate(budget.enrollmentRecognitionRate)");
     expect(patch).not.toContain("`LET(");

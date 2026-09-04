@@ -7,6 +7,8 @@ import { buildFinancialReport, buildParameterReport, compactParameterReportForPd
 import { createFinancialReportXlsx } from "./xlsx";
 import { createInstitutionalFormulaBudgetXlsx, institutionalTemplateCompatibilityIssue } from "./institutional-budget-xlsx";
 import { extendInstitutionalBudgetXlsx } from "./institutional-budget-multiyear";
+import { normalizeInstitutionalEnrollmentBilling } from "./institutional-budget-enrollment-normalizer";
+import { extendInstitutionalStaffProration } from "./institutional-budget-staff-multiyear";
 import { alignInstitutionalBreakEvenFormula } from "./institutional-budget-break-even-formula";
 import { buildFinancialNarrative, buildHistoricalCohortSnapshots } from "./financial-narrative";
 import { createBudgetMemorandumDocx } from "./memorandum";
@@ -119,7 +121,12 @@ export async function downloadBudgetXlsx(
     if (result.years.length > 2) {
       bytes = await extendInstitutionalBudgetXlsx(bytes, budget, result, parameters);
     }
-    // Mantiene exactamente el modelo institucional anterior y corrige sólo la fórmula de equilibrio.
+    // Matrícula parametrizable sin fraccionar estudiantes por año calendario.
+    bytes = await normalizeInstitutionalEnrollmentBilling(bytes, budget, result, parameters);
+    // El prorrateo de Dirección, Asistencia y Otros honorarios se extiende también
+    // a cada año adicional activo (por ejemplo, 2028-1S en una cohorte 2026-2S de 4 semestres).
+    bytes = await extendInstitutionalStaffProration(bytes, budget, result, parameters);
+    // El punto de equilibrio se corrige al final, sin tocar la estructura ni estilos del XLSX.
     bytes = await alignInstitutionalBreakEvenFormula(bytes, budget, result, parameters);
     download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
     return;
