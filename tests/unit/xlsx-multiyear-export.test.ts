@@ -59,17 +59,21 @@ describe("exportación XLSX multianual", () => {
     expect(download).toContain("extendInstitutionalStaffProration(bytes, exportBudget, result, parameters)");
   });
 
-  it("v13.0.2 realinea FLUJO TOTAL con el formato MEES de referencia sin cambiar estilos", () => {
+  it("v13.0.5 realinea FLUJO TOTAL con el formato MEES y materializa la fila 42", () => {
     const download = source("lib/export/download.ts");
     const patch = source("lib/export/institutional-budget-break-even-formula.ts");
 
     expect(download).toContain('import { alignInstitutionalBreakEvenFormula } from "./institutional-budget-break-even-formula"');
     expect(download).toContain("alignInstitutionalBreakEvenFormula(bytes, budget, result, parameters)");
     expect(patch).toContain("for (let row = 41; row >= 7; row -= 1)");
+    expect(patch).toContain('shiftFlowCellDown(totalFlow, "A", row, row + 1)');
+    expect(patch).toContain('setText(totalFlow, "A7", "Reconocimiento de Matrícula")');
     expect(patch).toContain("shiftFlowCellDown(totalFlow, col, row, row + 1)");
+    expect(patch).toContain("const sourceRow = sheetXml.match(rowPattern(row - 1))");
     expect(patch).toContain("`${col}7`, `${col}4*${recognition}`");
     expect(patch).toContain("SUM(${col}5:${col}7)");
     expect(patch).toContain('"Asistencia técnica "');
+    expect(patch).not.toContain("necesaria para crear ${ref}");
   });
 
   it("v13.0.2 usa la misma identidad operacional en Excel y evita LET/@", () => {
