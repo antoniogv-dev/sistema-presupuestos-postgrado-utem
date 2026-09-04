@@ -192,40 +192,47 @@ describe("motor financiero", () => {
     expect(annual.annualDiffusion).toBe(0);
   });
 
-  it("v12.1.2 calcula el punto de equilibrio con arancel, matrícula y guía de tesis sobre todo el horizonte", () => {
+  it("v13.0.1 calcula el punto de equilibrio con la misma identidad operacional del motor", () => {
     const budget = clone(demoBudget);
+    budget.enrollmentRecognitionRate = 1;
     const result = calculateBudget(budget, institutionalParameters);
     const breakEven = calculateBreakEvenEquivalentEnrollments(budget, institutionalParameters);
-    const fixedCosts = result.annualFlows.reduce(
-      (total, flow) => total + Math.max(0, flow.totalExpenses - flow.centralOverhead - flow.facultyOverhead - flow.thesisGuidanceCost),
+    const fixedCosts = Math.max(0, result.annualFlows.reduce(
+      (total, flow) => total + flow.totalExpenses - flow.centralOverhead - flow.facultyOverhead - flow.thesisGuidanceCost,
       0,
-    );
-    const tuitionContribution = result.annualFlows.reduce((total, flow) => {
-      const badDebtRate = flow.tuitionAfterBenefits > 0 ? flow.badDebt / flow.tuitionAfterBenefits : 0;
-      return total + flow.annualTuition * flow.tuitionFactor
-        * (1 - badDebtRate)
-        * (1 - flow.centralOverheadRate - flow.facultyOverheadRate);
-    }, 0);
-    const expectedContribution = tuitionContribution + (
-      breakEven.components.enrollmentPerActualStudent - breakEven.components.thesisGuidancePerActualStudent
-    ) * breakEven.components.actualStudentsPerEquivalentEnrollment;
+    ));
+    const equivalentEnrollments = breakEven.components.equivalentEnrollmentsReference;
+    const tuitionContribution = result.annualFlows.reduce(
+      (total, flow) => total + flow.netTuitionIncome - flow.centralOverhead - flow.facultyOverhead,
+      0,
+    ) / equivalentEnrollments;
+    const enrollmentContribution = result.annualFlows.reduce(
+      (total, flow) => total + flow.recognizedEnrollmentFee - flow.thesisGuidanceCost,
+      0,
+    ) / equivalentEnrollments;
+    const expectedContribution = tuitionContribution + enrollmentContribution;
     const exact = fixedCosts / expectedContribution;
+    const expectedOperationalResult = breakEven.currentEquivalentEnrollments * expectedContribution - fixedCosts;
 
-    expect(breakEven.reached).toBe(true);
     expect(breakEven.components.fixedCosts).toBeCloseTo(fixedCosts, 8);
     expect(breakEven.components.tuitionContribution).toBeCloseTo(tuitionContribution, 8);
-    expect(breakEven.components.enrollmentContribution).not.toBe(0);
+    expect(breakEven.components.enrollmentContribution).toBeCloseTo(enrollmentContribution, 8);
     expect(breakEven.components.contributionPerEquivalentEnrollment).toBeCloseTo(expectedContribution, 8);
+    expect(breakEven.components.operationalResult).toBeCloseTo(expectedOperationalResult, 8);
     expect(breakEven.minimumEquivalentEnrollmentsExact).toBeCloseTo(exact, 8);
     expect(breakEven.minimumEquivalentEnrollments).toBe(Math.ceil((exact - 1e-9) * 100) / 100);
     expect(breakEven.minimumWholeStudents).toBe(Math.ceil(exact - 1e-9));
+    expect(breakEven.reached).toBe(breakEven.currentEquivalentEnrollments + 1e-9 >= exact);
+    expect(result.viable).toBe(breakEven.reached);
     expect(breakEven.projectedFinalFlowAtMinimum).not.toBeNull();
     expect(breakEven.projectedFinalFlowAtMinimum!).toBeGreaterThanOrEqual(0);
   });
 
-  it("v12.1.2 incorpora la matrícula: al aumentar su valor disminuye el punto de equilibrio", () => {
+  it("v13.0.1 incorpora la matrícula reconocida: al aumentar su valor disminuye el punto de equilibrio", () => {
     const base = clone(demoBudget);
     const higherEnrollment = clone(demoBudget);
+    base.enrollmentRecognitionRate = 1;
+    higherEnrollment.enrollmentRecognitionRate = 1;
     higherEnrollment.annualOverrides = [...new Set(higherEnrollment.semesters.map((semester) => semester.year))].map((year) => ({
       ...defaultAnnualOverrideForYear(higherEnrollment, institutionalParameters, year),
       annualEnrollmentFee: 900000,
@@ -234,6 +241,7 @@ describe("motor financiero", () => {
     const b = calculateBreakEvenEquivalentEnrollments(higherEnrollment, institutionalParameters);
 
     expect(b.components.enrollmentPerActualStudent).toBeGreaterThan(a.components.enrollmentPerActualStudent);
+    expect(b.components.recognizedEnrollmentPerActualStudent).toBeGreaterThan(a.components.recognizedEnrollmentPerActualStudent);
     expect(b.components.enrollmentContribution).toBeGreaterThan(a.components.enrollmentContribution);
     expect(b.minimumEquivalentEnrollmentsExact!).toBeLessThan(a.minimumEquivalentEnrollmentsExact!);
   });
