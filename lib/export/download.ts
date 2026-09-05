@@ -10,6 +10,7 @@ import { extendInstitutionalBudgetXlsx } from "./institutional-budget-multiyear"
 import { normalizeInstitutionalEnrollmentBilling } from "./institutional-budget-enrollment-normalizer";
 import { extendInstitutionalStaffProration } from "./institutional-budget-staff-multiyear";
 import { alignInstitutionalBreakEvenFormula } from "./institutional-budget-break-even-formula";
+import { reconcileInstitutionalBudgetXlsx } from "./institutional-budget-final-reconciliation";
 import { institutionalBudgetForExport, normalizeInstitutionalProgramTotalTuition } from "./institutional-budget-program-total";
 import { buildFinancialNarrative, buildHistoricalCohortSnapshots } from "./financial-narrative";
 import { createBudgetMemorandumDocx } from "./memorandum";
@@ -133,8 +134,11 @@ export async function downloadBudgetXlsx(
     // El prorrateo de Dirección, Asistencia y Otros honorarios se extiende también
     // a cada año adicional activo (por ejemplo, 2028-1S en una cohorte 2026-2S de 4 semestres).
     bytes = await extendInstitutionalStaffProration(bytes, exportBudget, result, parameters);
-    // El punto de equilibrio se corrige al final, sin tocar la estructura ni estilos del XLSX.
+    // La estructura histórica se alinea primero con el modelo de 42 filas y se actualiza el punto de equilibrio.
     bytes = await alignInstitutionalBreakEvenFormula(bytes, budget, result, parameters);
+    // Última barrera de integridad: todos los detalles, subtotales y totales de FLUJO TOTAL
+    // se reescriben desde el mismo AnnualFlow del motor y deben conciliar antes de descargar.
+    bytes = await reconcileInstitutionalBudgetXlsx(bytes, budget, result);
     download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
     return;
   }
