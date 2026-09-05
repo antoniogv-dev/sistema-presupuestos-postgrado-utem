@@ -98,7 +98,11 @@ export function calculateAnnualCosts(
   const replacementTeachingCost = sum(semesters.map((semester) => nonNegative(semester.replacementTeachingHours) * parameters.replacementHour));
   const graduatingStudents = Math.max(0, ...semesters.map((semester) => semester.graduatingStudents === undefined ? inferredGraduatingStudents(budget, semester) : nonNegative(semester.graduatingStudents)));
   const thesisGuidanceCost = graduatingStudents * nonNegative(override.thesisGuidancePerGraduatingStudent);
-  const academicHonoraria = directTeachingCost + replacementTeachingCost + thesisGuidanceCost;
+  // Todo costo manual clasificado como Honorarios académicos representa docencia u otra
+  // labor académica (por ejemplo, docente invitado/extranjero) y debe permanecer dentro
+  // del subtotal académico, nunca en Otros servicios.
+  const manualAcademicHonoraria = sumManualItems(budget, year, ["Honorarios académicos"]);
+  const academicHonoraria = directTeachingCost + replacementTeachingCost + thesisGuidanceCost + manualAcademicHonoraria;
   const thesisStudents = Math.max(0, ...semesters.map((semester) => thesisStudentsForSemester(budget, semester)));
 
   const direction = nonNegative(override.annualDirection) * (override.directionProrated ? clampRate(override.directionAllocationRate) : 1) + sumManualItems(budget, year, ["Dirección"]);
@@ -117,7 +121,7 @@ export function calculateAnnualCosts(
   const travelFreight = nonNegative(override.annualTravelFreight) + sumManualItems(budget, year, ["Pasajes y fletes"]);
   const perDiem = nonNegative(override.annualPerDiem) + sumManualItems(budget, year, ["Viáticos"]);
   const foodBeverages = nonNegative(override.annualFoodBeverages) + sumManualItems(budget, year, ["Alimentos y bebidas"]);
-  const otherCosts = nonNegative(override.annualOtherCosts) + sumManualItems(budget, year, ["Otros", "Otros costos y gastos", "Honorarios académicos"]);
+  const otherCosts = nonNegative(override.annualOtherCosts) + sumManualItems(budget, year, ["Otros", "Otros costos y gastos"]);
   const otherExpenses = operational + software + diffusion + congressesInternships + booksPublications + travelFreight + perDiem + foodBeverages + otherCosts;
   const fixedExpensesBeforeOverhead = academicHonoraria + nonAcademicHonoraria + otherExpenses + equipment + scholarshipsAndAid;
 
