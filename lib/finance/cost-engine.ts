@@ -1,5 +1,6 @@
 import { getActivePeriods } from "../calculations/periods";
 import type { BudgetAnnualOverride, BudgetItem, CohortBudget, InstitutionalParameters, SemesterParameters } from "../calculations/types";
+import { costBelongsToCategories } from "./cost-classification";
 
 const sum = (values: number[]) => values.reduce((acc, value) => acc + value, 0);
 const nonNegative = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? Number(value) : 0);
@@ -23,7 +24,9 @@ export function manualItemAmountForYear(item: BudgetItem, budget: CohortBudget, 
 }
 
 function sumManualItems(budget: CohortBudget, year: number, categories: BudgetItem["category"][]): number {
-  return sum(budget.manualItems.filter((item) => categories.includes(item.category)).map((item) => manualItemAmountForYear(item, budget, year)));
+  return sum(budget.manualItems
+    .filter((item) => costBelongsToCategories(item, categories))
+    .map((item) => manualItemAmountForYear(item, budget, year)));
 }
 
 function thesisStudentsForSemester(budget: CohortBudget, semester: SemesterParameters): number {
@@ -98,9 +101,8 @@ export function calculateAnnualCosts(
   const replacementTeachingCost = sum(semesters.map((semester) => nonNegative(semester.replacementTeachingHours) * parameters.replacementHour));
   const graduatingStudents = Math.max(0, ...semesters.map((semester) => semester.graduatingStudents === undefined ? inferredGraduatingStudents(budget, semester) : nonNegative(semester.graduatingStudents)));
   const thesisGuidanceCost = graduatingStudents * nonNegative(override.thesisGuidancePerGraduatingStudent);
-  // Todo costo manual clasificado como Honorarios académicos representa docencia u otra
-  // labor académica (por ejemplo, docente invitado/extranjero) y debe permanecer dentro
-  // del subtotal académico, nunca en Otros servicios.
+  // Todo costo manual académico —incluidos registros legacy cuyo nombre identifica docencia—
+  // permanece dentro del subtotal académico y nunca se reubica en Otros servicios.
   const manualAcademicHonoraria = sumManualItems(budget, year, ["Honorarios académicos"]);
   const academicHonoraria = directTeachingCost + replacementTeachingCost + thesisGuidanceCost + manualAcademicHonoraria;
   const thesisStudents = Math.max(0, ...semesters.map((semester) => thesisStudentsForSemester(budget, semester)));
