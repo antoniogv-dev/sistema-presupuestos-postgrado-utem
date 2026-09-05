@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { calculateBudget } from "../../lib/calculations/budget-engine";
 import { demoBudget, institutionalParameters } from "../../lib/demo-data";
 import { institutionalAccountingProjection } from "../../lib/export/institutional-budget-final-reconciliation";
+import { effectiveCostCategory } from "../../lib/finance/cost-classification";
 
 const clone = <T,>(value: T): T => structuredClone(value);
 
@@ -27,6 +28,28 @@ describe("conciliación contable del XLSX institucional", () => {
     expect(after.academicHonoraria).toBeCloseTo(before.academicHonoraria + 700_000, 6);
     expect(after.otherCosts).toBeCloseTo(before.otherCosts, 6);
     expect(after.totalExpenses).toBeCloseTo(before.totalExpenses + 700_000, 6);
+  });
+
+  it("recupera un docente legacy aunque haya quedado persistido como Otros costos y gastos", () => {
+    const base = clone(demoBudget);
+    base.manualItems = [];
+    const legacy = clone(base);
+    legacy.manualItems = [{
+      id: "legacy-docente",
+      name: "Docente extranjero invitado",
+      description: "Participación académica en asignatura",
+      category: "Otros costos y gastos",
+      year: 2027,
+      amount: 650_000,
+      costType: "Único de esta versión",
+      periodicity: "Único",
+    }];
+
+    expect(effectiveCostCategory(legacy.manualItems[0])).toBe("Honorarios académicos");
+    const before = calculateBudget(base, institutionalParameters).annualFlows.find((flow) => flow.year === 2027)!;
+    const after = calculateBudget(legacy, institutionalParameters).annualFlows.find((flow) => flow.year === 2027)!;
+    expect(after.academicHonoraria).toBeCloseTo(before.academicHonoraria + 650_000, 6);
+    expect(after.otherCosts).toBeCloseTo(before.otherCosts, 6);
   });
 
   it("agrupa Dirección, Asistencia y otros honorarios dentro de HONORARIOS NO ACADÉMICOS", () => {
