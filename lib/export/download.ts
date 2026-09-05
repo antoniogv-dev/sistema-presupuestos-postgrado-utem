@@ -2,6 +2,7 @@
 
 import type { BudgetResult, CohortBudget, InstitutionalParameters } from "../calculations/types";
 import type { ConsolidationGroup } from "../calculations/consolidation";
+import { effectiveCostCategory } from "../finance/cost-classification";
 import { createFinancialReportPdf } from "./pdf";
 import { buildFinancialReport, buildParameterReport, compactParameterReportForPdf, type FinancialReport } from "./report-model";
 import { createFinancialReportXlsx } from "./xlsx";
@@ -138,7 +139,13 @@ export async function downloadBudgetXlsx(
     bytes = await alignInstitutionalBreakEvenFormula(bytes, budget, result, parameters);
     // Última barrera de integridad: todos los detalles, subtotales y totales de FLUJO TOTAL
     // se reescriben desde el mismo AnnualFlow del motor y deben conciliar antes de descargar.
-    bytes = await reconcileInstitutionalBudgetXlsx(bytes, budget, result);
+    // Para datos legacy se aplica la clasificación efectiva sólo a la copia de exportación;
+    // no se modifica D1 ni el presupuesto persistido.
+    const accountingBudget: CohortBudget = {
+      ...budget,
+      manualItems: budget.manualItems.map((item) => ({ ...item, category: effectiveCostCategory(item) })),
+    };
+    bytes = await reconcileInstitutionalBudgetXlsx(bytes, accountingBudget, result);
     download(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
     return;
   }
