@@ -24,17 +24,22 @@ function statusForTarget(target: WorkflowStage): BudgetStatus {
   return BudgetStatus.EN_REVISION;
 }
 
-function workflowRoleForTarget(target: WorkflowStage): AccessLevel {
-  if (target === WorkflowStage.GESTION) return AccessLevel.GESTOR;
-  if (target === WorkflowStage.VISTO_BUENO) return AccessLevel.VISTO_BUENO;
-  return AccessLevel.APROBADOR;
-}
-
 function nextStage(current: WorkflowStage, direction: "UP" | "DOWN"): WorkflowStage | null {
   const index = STAGE_ORDER.indexOf(current);
   if (index < 0) return null;
   const targetIndex = direction === "UP" ? index + 1 : index - 1;
   return STAGE_ORDER[targetIndex] ?? null;
+}
+
+function workflowEventFor(current: WorkflowStage, direction: "UP" | "DOWN") {
+  if (direction === "UP") {
+    if (current === WorkflowStage.GESTION) return { role: AccessLevel.GESTOR, action: "SUBMIT_VB" };
+    if (current === WorkflowStage.VISTO_BUENO) return { role: AccessLevel.VISTO_BUENO, action: "VB_APPROVE" };
+    return { role: AccessLevel.APROBADOR, action: "FINAL_APPROVE" };
+  }
+
+  if (current === WorkflowStage.VISTO_BUENO) return { role: AccessLevel.VISTO_BUENO, action: "VB_OBSERVE" };
+  return { role: AccessLevel.APROBADOR, action: "ADMIN_LEVEL_DOWN" };
 }
 
 export const dynamic = "force-dynamic";
@@ -62,7 +67,11 @@ export async function PATCH(request: Request) {
     }
 
     const targetStatus = statusForTarget(targetStage);
+    const workflowEvent = workflowEventFor(budget.workflowStage, input.direction);
     const currentVersion = budget.versions[0];
+    const administrativeComment = input.comment
+      ? `Cambio administrativo de nivel: ${input.comment}`
+      : "Cambio administrativo de nivel realizado por Administrador.";
     const database = d1Database();
     const statements: D1PreparedStatement[] = [
       database.prepare(`
@@ -97,11 +106,11 @@ export async function PATCH(request: Request) {
         d1Id("workflow"),
         budget.id,
         identity.userId,
-        workflowRoleForTarget(targetStage),
-        input.direction === "UP" ? "ADMIN_LEVEL_UP" : "ADMIN_LEVEL_DOWN",
+        workflowEvent.role,
+        workflowEvent.action,
         budget.workflowStage,
         targetStage,
-        input.comment || "Cambio administrativo de nivel",
+        administrativeComment,
       ),
     );
 
