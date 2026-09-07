@@ -76,6 +76,28 @@ describe("exportación XLSX multianual", () => {
     expect(patch).not.toContain("necesaria para crear ${ref}");
   });
 
+  it("v13.0.6 no desplaza referencias externas y reconstruye todos los subtotales de FLUJO TOTAL", () => {
+    const patch = source("lib/export/institutional-budget-break-even-formula.ts");
+
+    // Regresión MGDAP: Parámetros!$B$8 no puede convertirse en Parámetros!$B$9
+    // al insertar Reconocimiento de Matrícula, porque B9 contiene el año/semestre de inicio.
+    expect(patch).not.toContain("shiftLocalFormulaRows");
+    expect(patch).toContain("Parámetros!$${col}$8");
+    expect(patch).toContain("const graduationStudentsRow = 6 + discountSlots");
+
+    // La jerarquía de subtotales replica la estructura validada de Ciencia de Datos y Trabajo Social.
+    expect(patch).toContain("SUM(${col}9:${col}11)");
+    expect(patch).toContain("SUM(${col}13:${col}16)");
+    expect(patch).toContain("SUM(${col}18:${col}19)");
+    expect(patch).toContain("SUM(${col}23:${col}24)");
+    expect(patch).toContain("SUM(${col}30:${col}31)");
+    expect(patch).toContain("SUM(${col}35:${col}36)");
+    expect(patch).toContain("SUM(${col}12,${col}17,${col}20,${col}22,${col}25,${col}27,${col}29,${col}32,${col}34,${col}37)");
+    expect(patch).toContain("+${col}8+${col}38");
+    expect(patch).toContain("+${previousCol}41");
+    expect(patch).toContain("IFERROR((${col}8+${col}38)/${col}8,0)");
+  });
+
   it("v13.0.2 usa la misma identidad operacional en Excel y evita LET/@", () => {
     const patch = source("lib/export/institutional-budget-break-even-formula.ts");
 
