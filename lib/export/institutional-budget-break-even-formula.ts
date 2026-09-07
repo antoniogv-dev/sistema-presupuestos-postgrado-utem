@@ -102,7 +102,6 @@ function columnName(index: number): string {
   return result;
 }
 function yearColumn(index: number): string { return columnName(index + 2); }
-function clampRate(value: number): number { return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0)); }
 
 function cellPattern(ref: string): RegExp {
   return new RegExp(`<c(?=[^>]*\\br="${ref}")([^>]*?)(?:\\/>|>[\\s\\S]*?<\\/c>)`, "m");
@@ -172,7 +171,6 @@ function setText(sheetXml: string, ref: string, value: string): string {
 
 // La fila se mueve conservando literalmente su fórmula. No se reescriben referencias aquí:
 // las fórmulas locales que cambian de posición se reconstruyen después de insertar la fila 7.
-// Esto evita alterar referencias externas absolutas como Parámetros!$B$8 -> Parámetros!$B$9.
 function shiftFlowCellDown(sheetXml: string, column: string, sourceRow: number, targetRow: number): string {
   const sourceMatch = sheetXml.match(cellPattern(`${column}${sourceRow}`));
   if (!sourceMatch) throw new Error(`El formato institucional no contiene ${column}${sourceRow}.`);
@@ -185,15 +183,12 @@ function shiftFlowCellDown(sheetXml: string, column: string, sourceRow: number, 
 }
 
 /**
- * Ajuste final del XLSX institucional para conservar exactamente el formato operativo
- * utilizado por Postgrado (como el modelo MEES 2026 / Memorándum 227-2026).
+ * Ajuste final del XLSX institucional.
  *
- * El generador histórico escribe el flujo una fila más arriba desde INGRESOS TOTAL.
- * Aquí se desplazan los rótulos y contenidos de A:... una fila hacia abajo, manteniendo
- * estilos, anchos, alturas, colores y la estructura de la plantilla. Si la fila final 42
- * no existe físicamente, se crea replicando los atributos de formato de la fila 41.
- * Luego se escribe el reconocimiento de matrícula en la fila 7 y se reconstruyen los
- * subtotales/fórmulas locales para que Excel concilie exactamente con el motor financiero.
+ * La hoja FLUJO TOTAL debe ser una representación del mismo BudgetResult que ve el usuario
+ * en la plataforma. Las hojas auxiliares se conservan como respaldo de detalle, pero no son
+ * una segunda fuente de cálculo para los totales: si una malla, prorrateo o fórmula histórica
+ * difiere del motor financiero, prevalece el resultado de la aplicación.
  */
 export async function alignInstitutionalBreakEvenFormula(
   workbookBytes: Uint8Array,
@@ -215,61 +210,90 @@ export async function alignInstitutionalBreakEvenFormula(
   const discounts = budget.discounts.filter((discount) => Math.max(0, Math.min(1, discount.percentage)) > 0 && discount.target !== "ENROLLMENT");
   const discountSlots = Math.max(2, discounts.length);
   const equivalentStudentsRow = 5 + discountSlots;
-  const graduationStudentsRow = 6 + discountSlots;
   const equilibriumRow = 10 + (2 * discountSlots);
-  const centralOverheadParameterRow = 11 + discountSlots;
-  const facultyOverheadParameterRow = 12 + discountSlots;
   const firstYearColumn = "B";
   const lastYearColumn = yearColumn(result.years.length - 1);
-  const recognition = clampRate(budget.enrollmentRecognitionRate);
   const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, parameters);
 
   let totalFlow = decoder.decode(files.get(totalSheetName)!);
 
-  // El modelo institucional de referencia tiene una fila adicional: Reconocimiento de Matrícula.
-  // Se desplazan primero los rótulos para que FLUJO TOTAL termine realmente en la fila 42.
+  // Inserta Reconocimiento de Matrícula en la fila 7 y materializa la fila final 42.
   for (let row = 41; row >= 7; row -= 1) {
     if (cellPattern(`A${row}`).test(totalFlow)) totalFlow = shiftFlowCellDown(totalFlow, "A", row, row + 1);
   }
   totalFlow = setText(totalFlow, "A7", "Reconocimiento de Matrícula");
+
+  // Los rótulos principales quedan alineados con la nomenclatura de la plataforma.
+  if (cellPattern("A9").test(totalFlow)) totalFlow = setText(totalFlow, "A9", budget.deliveryModality === "PRESENCIAL" ? "Horas docentes presenciales" : "Docencia directa / sincrónica / asincrónica");
+  if (cellPattern("A10").test(totalFlow)) totalFlow = setText(totalFlow, "A10", "Horas docentes de reemplazo");
+  if (cellPattern("A11").test(totalFlow)) totalFlow = setText(totalFlow, "A11", "Guía de tesis");
+  if (cellPattern("A12").test(totalFlow)) totalFlow = setText(totalFlow, "A12", "HONORARIOS ACADÉMICOS (SUBTOTAL)");
+  if (cellPattern("A13").test(totalFlow)) totalFlow = setText(totalFlow, "A13", "Dirección");
+  if (cellPattern("A14").test(totalFlow)) totalFlow = setText(totalFlow, "A14", "Asistencia de dirección");
+  if (cellPattern("A16").test(totalFlow)) totalFlow = setText(totalFlow, "A16", "Otros honorarios no académicos");
+  if (cellPattern("A17").test(totalFlow)) totalFlow = setText(totalFlow, "A17", "HONORARIOS NO ACADÉMICOS (SUBTOTAL)");
+  if (cellPattern("A38").test(totalFlow)) totalFlow = setText(totalFlow, "A38", "TOTAL COSTOS Y GASTOS");
+  if (cellPattern("A39").test(totalFlow)) totalFlow = setText(totalFlow, "A39", "FLUJO NETO");
 
   for (let index = 0; index < result.years.length; index += 1) {
     const col = yearColumn(index);
     const flow = result.annualFlows.find((item) => item.year === result.years[index]);
     if (!flow) continue;
 
-    // Se copia de abajo hacia arriba para no perder las celdas fuente. Las fórmulas se
-    // preservan literalmente y luego se reconstruyen únicamente las que dependen de filas locales.
+    // Se copia la estructura una fila hacia abajo; inmediatamente después todos los valores
+    // financieros visibles se reemplazan por los del BudgetResult de la plataforma.
     for (let row = 41; row >= 7; row -= 1) totalFlow = shiftFlowCellDown(totalFlow, col, row, row + 1);
 
-    totalFlow = setFormula(totalFlow, `${col}7`, `${col}4*${recognition}`, flow.recognizedEnrollmentFee);
+    // INGRESOS. Matrícula bruta se informa, pero el ingreso efectivo de matrícula es la fila 7.
+    totalFlow = setNumber(totalFlow, `${col}4`, flow.grossEnrollmentFee);
+    totalFlow = setNumber(totalFlow, `${col}5`, flow.tuitionAfterBenefits);
+    totalFlow = setNumber(totalFlow, `${col}6`, -flow.badDebt);
+    totalFlow = setNumber(totalFlow, `${col}7`, flow.recognizedEnrollmentFee);
     const extraIncome = flow.externalIncome + flow.institutionalFinancing + flow.otherIncome;
     totalFlow = setFormula(totalFlow, `${col}8`, extraIncome ? `SUM(${col}5:${col}7)+${extraIncome}` : `SUM(${col}5:${col}7)`, flow.totalIncome);
 
-    // Referencia externa crítica: la guía de tesis siempre está en Parámetros fila 8.
-    // En presupuestos con tres o más descuentos sólo cambia la fila de graduación de Flujo estudiantes.
-    totalFlow = setFormula(
-      totalFlow,
-      `${col}11`,
-      `-'Flujo estudiantes'!${col}${graduationStudentsRow}*Parámetros!$${col}$8`,
-      -flow.thesisGuidanceCost,
-    );
-
-    // Subtotales de la planilla institucional. Se regeneran en sus filas finales para
-    // no depender de referencias heredadas de la plantilla anterior a Reconocimiento de Matrícula.
+    // HONORARIOS ACADÉMICOS: nunca se vuelven a calcular desde la hoja de malla.
+    totalFlow = setNumber(totalFlow, `${col}9`, -flow.directTeachingCost);
+    totalFlow = setNumber(totalFlow, `${col}10`, -flow.replacementTeachingCost);
+    totalFlow = setNumber(totalFlow, `${col}11`, -flow.thesisGuidanceCost);
     totalFlow = setFormula(totalFlow, `${col}12`, `SUM(${col}9:${col}11)`, -flow.academicHonoraria);
+
+    // HONORARIOS NO ACADÉMICOS: misma asignación/prorrateo que utiliza el motor.
+    totalFlow = setNumber(totalFlow, `${col}13`, -flow.direction);
+    totalFlow = setNumber(totalFlow, `${col}14`, -flow.assistance);
+    totalFlow = setNumber(totalFlow, `${col}15`, 0);
+    totalFlow = setNumber(totalFlow, `${col}16`, -flow.otherNonAcademicHonoraria);
     totalFlow = setFormula(totalFlow, `${col}17`, `SUM(${col}13:${col}16)`, -flow.nonAcademicHonoraria);
+
+    // OTROS GASTOS. Se mantiene el formato institucional histórico, pero cada bloque proviene
+    // de las mismas categorías que forman otherExpenses/equipment/scholarshipsAndAid en la app.
+    totalFlow = setNumber(totalFlow, `${col}18`, -flow.equipment);
+    totalFlow = setNumber(totalFlow, `${col}19`, -flow.booksPublications);
     totalFlow = setFormula(totalFlow, `${col}20`, `SUM(${col}18:${col}19)`, -(flow.equipment + flow.booksPublications));
+
+    totalFlow = setNumber(totalFlow, `${col}21`, -flow.diffusion);
     totalFlow = setFormula(totalFlow, `${col}22`, `SUM(${col}21)`, -flow.diffusion);
+
+    totalFlow = setNumber(totalFlow, `${col}23`, -flow.travelFreight);
+    totalFlow = setNumber(totalFlow, `${col}24`, 0);
     totalFlow = setFormula(totalFlow, `${col}25`, `SUM(${col}23:${col}24)`, -flow.travelFreight);
+
+    totalFlow = setNumber(totalFlow, `${col}26`, -flow.perDiem);
     totalFlow = setFormula(totalFlow, `${col}27`, `SUM(${col}26)`, -flow.perDiem);
+
+    totalFlow = setNumber(totalFlow, `${col}28`, -flow.software);
     totalFlow = setFormula(totalFlow, `${col}29`, `SUM(${col}28)`, -flow.software);
+
+    totalFlow = setNumber(totalFlow, `${col}30`, -(flow.operational + flow.otherCosts));
+    totalFlow = setNumber(totalFlow, `${col}31`, -flow.foodBeverages);
     totalFlow = setFormula(totalFlow, `${col}32`, `SUM(${col}30:${col}31)`, -(flow.operational + flow.otherCosts + flow.foodBeverages));
+
+    totalFlow = setNumber(totalFlow, `${col}33`, -(flow.congressesInternships + flow.scholarshipsAndAid));
     totalFlow = setFormula(totalFlow, `${col}34`, `SUM(${col}33)`, -(flow.congressesInternships + flow.scholarshipsAndAid));
 
-    // Retenciones y resultados finales quedan completamente alineados con el motor de la aplicación.
-    totalFlow = setFormula(totalFlow, `${col}35`, `-(${col}5+${col}6)*Parámetros!${col}${centralOverheadParameterRow}`, -flow.centralOverhead);
-    totalFlow = setFormula(totalFlow, `${col}36`, `-(${col}5+${col}6)*Parámetros!${col}${facultyOverheadParameterRow}`, -flow.facultyOverhead);
+    // OVERHEAD / RETENCIONES y resultados finales.
+    totalFlow = setNumber(totalFlow, `${col}35`, -flow.centralOverhead);
+    totalFlow = setNumber(totalFlow, `${col}36`, -flow.facultyOverhead);
     totalFlow = setFormula(totalFlow, `${col}37`, `SUM(${col}35:${col}36)`, -(flow.centralOverhead + flow.facultyOverhead));
     totalFlow = setFormula(totalFlow, `${col}38`, `SUM(${col}12,${col}17,${col}20,${col}22,${col}25,${col}27,${col}29,${col}32,${col}34,${col}37)`, -flow.totalExpenses);
     totalFlow = setFormula(totalFlow, `${col}39`, `+${col}8+${col}38`, flow.netFlow);
@@ -300,9 +324,7 @@ export async function alignInstitutionalBreakEvenFormula(
     files.set(staffSheetName, encoder.encode(staffSheet));
   }
 
-  // Punto de equilibrio = costos fijos / aporte unitario, usando exactamente el mismo
-  // ingreso operacional: arancel neto + matrícula reconocida; y los mismos costos variables:
-  // retenciones + docente tesista. El valor actual de equivalentes está en B{equivalentStudentsRow}.
+  // Punto de equilibrio = costos fijos / aporte unitario, usando el mismo flujo autoritativo.
   const fixedCosts = `ABS(SUM('FLUJO TOTAL'!${firstYearColumn}38:${lastYearColumn}38)-SUM('FLUJO TOTAL'!${firstYearColumn}37:${lastYearColumn}37)-SUM('FLUJO TOTAL'!${firstYearColumn}11:${lastYearColumn}11))`;
   const netContribution = `SUM('FLUJO TOTAL'!${firstYearColumn}5:${lastYearColumn}5)+SUM('FLUJO TOTAL'!${firstYearColumn}6:${lastYearColumn}6)+SUM('FLUJO TOTAL'!${firstYearColumn}7:${lastYearColumn}7)+SUM('FLUJO TOTAL'!${firstYearColumn}37:${lastYearColumn}37)+SUM('FLUJO TOTAL'!${firstYearColumn}11:${lastYearColumn}11)`;
   const formula = `IFERROR(${fixedCosts}*${firstYearColumn}${equivalentStudentsRow}/(${netContribution}),0)`;
