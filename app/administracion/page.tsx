@@ -6,9 +6,12 @@ import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { AccessRole } from "@/lib/calculations/types";
+import type { ApiBudgetRecord } from "@/lib/mappers/budget-api";
 
 type Identity = { userId: string; email: string; name: string; roles: AccessRole[]; source: string };
 type ManagedUser = { id: string; email: string; name: string; active: boolean; hasPassword: boolean; roles: AccessRole[] };
+type WorkflowDirection = "UP" | "DOWN";
+type WorkflowStage = ApiBudgetRecord["workflowStage"];
 
 type UserForm = {
   id?: string;
@@ -30,6 +33,20 @@ const availableRoles: Array<{ code: AccessRole; label: string; description: stri
 
 const roleLabels = Object.fromEntries(availableRoles.map((role) => [role.code, role.label])) as Record<AccessRole, string>;
 const emptyForm: UserForm = { email: "", name: "", password: "", roles: ["LECTOR"], active: true };
+const workflowOrder: WorkflowStage[] = ["GESTION", "VISTO_BUENO", "APROBACION", "FINALIZADO"];
+const workflowLabels: Record<WorkflowStage, string> = {
+  GESTION: "Gestión",
+  VISTO_BUENO: "V°B°",
+  APROBACION: "Aprobación",
+  FINALIZADO: "Finalizado",
+};
+const budgetStatusLabels: Record<string, string> = {
+  BORRADOR: "Borrador",
+  EN_REVISION: "En revisión",
+  OBSERVADO: "Observado",
+  APROBADO: "Aprobado",
+  REEMPLAZADO: "Reemplazado",
+};
 
 function responseErrorMessage(body: unknown): string {
   if (typeof body !== "object" || body === null || !("error" in body)) return "No fue posible completar la operación.";
@@ -43,26 +60,47 @@ async function responseBody<T = unknown>(response: Response): Promise<T> {
   return body as T;
 }
 
+function adjacentStage(stage: WorkflowStage, direction: WorkflowDirection): WorkflowStage | null {
+  const index = workflowOrder.indexOf(stage);
+  if (index < 0) return null;
+  return workflowOrder[direction === "UP" ? index + 1 : index - 1] ?? null;
+}
+
 export default function AdministrationPage() {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [budgets, setBudgets] = useState<ApiBudgetRecord[]>([]);
+  const [selectedBudgetId, setSelectedBudgetId] = useState("");
+  const [levelComment, setLevelComment] = useState("");
   const [message, setMessage] = useState("Cargando identidad institucional…");
   const [form, setForm] = useState<UserForm>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [movingLevel, setMovingLevel] = useState(false);
 
   const canManage = identity?.roles.includes("ADMIN") ?? false;
   const editing = Boolean(form.id);
+  const selectedBudget = useMemo(
+    () => budgets.find((budget) => budget.id === selectedBudgetId) ?? null,
+    [budgets, selectedBudgetId],
+  );
+  const lowerStage = selectedBudget ? adjacentStage(selectedBudget.workflowStage, "DOWN") : null;
+  const upperStage = selectedBudget ? adjacentStage(selectedBudget.workflowStage, "UP") : null;
 
   async function loadUsers() {
     const me = await responseBody<Identity>(await fetch("/api/me", { cache: "no-store" }));
     setIdentity(me);
     if (!me.roles.includes("ADMIN")) {
-      setMessage("Su identidad fue validada. Sólo el rol Administrador puede gestionar usuarios.");
+      setMessage("Su identidad fue validada. Sólo el rol Administrador puede gestionar usuarios y estados presupuestarios.");
       return;
     }
-    const records = await responseBody<ManagedUser[]>(await fetch("/api/admin/users", { cache: "no-store" }));
+    const [records, budgetRecords] = await Promise.all([
+      responseBody<ManagedUser[]>(await fetch("/api/admin/users", { cache: "no-store" })),
+      responseBody<ApiBudgetRecord[]>(await fetch("/api/budgets", { cache: "no-store" })),
+    ]);
     setUsers(records);
-    setMessage("Usuarios cargados correctamente desde Cloudflare D1.");
+    setBudgets(budgetRecords);
+    setSelectedBudgetId((current) => budgetRecords.some((budget) => budget.id === current) ? current : budgetRecords[0]?.id ?? "");
+    setMessage("Administración cargada correctamente desde Cloudflare D1.");
   }
 
   useEffect(() => {
@@ -110,6 +148,33 @@ export default function AdministrationPage() {
     }
   }
 
+  async function changeBudgetLevel(direction: WorkflowDirection) {
+    if (!selectedBudget || movingLevel) return;
+    const targetStage = adjacentStage(selectedBudget.workflowStage, direction);
+    if (!targetStage) return;
+    const verb = direction === "UP" ? "subir" : "bajar";
+    const confirmed = window.confirm(
+      `¿Confirma ${verb} el presupuesto ${selectedBudget.program.code} · ${selectedBudget.cohortName} desde ${workflowLabels[selectedBudget.workflowStage]} a ${workflowLabels[targetStage]}?`,
+    );
+    if (!confirmed) return;
+
+    setMovingLevel(true);
+    try {
+      await responseBody(await fetch("/api/admin/budgets/workflow-level", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ budgetId: selectedBudget.id, direction, comment: levelComment.trim() || undefined }),
+      }));
+      setLevelComment("");
+      await loadUsers();
+      setMessage(`Cambio administrativo registrado: ${selectedBudget.program.code} · ${selectedBudget.cohortName} quedó en ${workflowLabels[targetStage]}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No fue posible cambiar el nivel del presupuesto.");
+    } finally {
+      setMovingLevel(false);
+    }
+  }
+
   function editUser(user: ManagedUser) {
     setForm({ id: user.id, email: user.email, name: user.name, password: "", roles: user.roles.length ? user.roles : ["LECTOR"], active: user.active });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -122,7 +187,7 @@ export default function AdministrationPage() {
   }, [identity, message]);
 
   return <AppShell>
-    <PageHeader eyebrow="Administración" title="Usuarios, contraseñas y roles" description="Administración segregada de accesos, con credenciales internas opcionales y auditoría en Cloudflare D1." actions={<Link className="button secondary" href="/login">Ir al inicio de sesión</Link>} />
+    <PageHeader eyebrow="Administración" title="Usuarios, roles y estados presupuestarios" description="Administración segregada de accesos y control excepcional del nivel de los presupuestos, con trazabilidad en Cloudflare D1." actions={<Link className="button secondary" href="/login">Ir al inicio de sesión</Link>} />
 
     <div className="notice" role="status" aria-live="polite"><strong>Sesión</strong><span>{sessionDescription}</span>{identity ? <small>{identity.email}</small> : null}</div>
 
@@ -130,6 +195,28 @@ export default function AdministrationPage() {
       <div className="panel-title"><div><h2>Roles funcionales</h2><p>Los roles se pueden combinar. Administrador incorpora acceso total; Lector nunca habilita escritura por sí solo.</p></div></div>
       <div className="access-level-grid roles-six">{availableRoles.map((role) => <article className="access-level-card" key={role.code}><h3>{role.label}</h3><p>{role.description}</p></article>)}</div>
     </section>
+
+    {canManage ? <section className="panel">
+      <div className="panel-title"><div><h2>Control administrativo de estados</h2><p>Permite al Administrador subir o bajar un presupuesto exactamente un nivel. El movimiento es excepcional, queda auditado y no elimina el historial previo de revisiones o aprobaciones.</p></div></div>
+      <div className="form-grid cols-3">
+        <label>Presupuesto
+          <select value={selectedBudgetId} onChange={(event) => { setSelectedBudgetId(event.target.value); setLevelComment(""); }}>
+            <option value="">Seleccione</option>
+            {budgets.map((budget) => <option key={budget.id} value={budget.id}>{budget.program.code} · {budget.cohortName} · {workflowLabels[budget.workflowStage]}</option>)}
+          </select>
+        </label>
+        <label>Nivel actual<input readOnly value={selectedBudget ? workflowLabels[selectedBudget.workflowStage] : "—"} /></label>
+        <label>Estado actual<input readOnly value={selectedBudget ? budgetStatusLabels[selectedBudget.status] ?? selectedBudget.status : "—"} /></label>
+      </div>
+      {selectedBudget ? <div className="notice info"><strong>{selectedBudget.program.name}</strong><span>Flujo actual: {workflowLabels[selectedBudget.workflowStage]} · Estado: {budgetStatusLabels[selectedBudget.status] ?? selectedBudget.status}</span><small>Al volver a Gestión el presupuesto queda editable; al llegar a Finalizado queda Aprobado. Las versiones y eventos anteriores se conservan para auditoría.</small></div> : null}
+      <label>Motivo u observación del cambio administrativo
+        <textarea rows={3} maxLength={1000} placeholder="Opcional, pero recomendable para dejar trazabilidad del motivo." value={levelComment} onChange={(event) => setLevelComment(event.target.value)} />
+      </label>
+      <div className="form-actions-row">
+        <button className="button secondary" type="button" disabled={!selectedBudget || !lowerStage || movingLevel} onClick={() => void changeBudgetLevel("DOWN")}>{movingLevel ? "Procesando…" : lowerStage ? `Bajar a ${workflowLabels[lowerStage]}` : "Nivel mínimo"}</button>
+        <button className="button primary" type="button" disabled={!selectedBudget || !upperStage || movingLevel} onClick={() => void changeBudgetLevel("UP")}>{movingLevel ? "Procesando…" : upperStage ? `Subir a ${workflowLabels[upperStage]}` : "Nivel máximo"}</button>
+      </div>
+    </section> : null}
 
     {canManage ? <section className="panel">
       <div className="panel-title"><div><h2>{editing ? "Modificar usuario" : "Agregar usuario"}</h2><p>{editing ? "Deje la contraseña vacía para mantener la actual." : "Para un usuario nuevo la contraseña es obligatoria y se guarda únicamente como hash PBKDF2."}</p></div>{editing ? <button className="button secondary" type="button" onClick={() => setForm(emptyForm)}>Cancelar edición</button> : null}</div>
