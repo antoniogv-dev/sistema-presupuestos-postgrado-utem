@@ -59,7 +59,7 @@ describe("exportación XLSX multianual", () => {
     expect(download).toContain("extendInstitutionalStaffProration(bytes, exportBudget, result, parameters)");
   });
 
-  it("v13.0.5 realinea FLUJO TOTAL con el formato MEES y materializa la fila 42", () => {
+  it("v13.0.7 realinea FLUJO TOTAL, materializa la fila 42 y usa matrícula reconocida del motor", () => {
     const download = source("lib/export/download.ts");
     const patch = source("lib/export/institutional-budget-break-even-formula.ts");
 
@@ -70,20 +70,23 @@ describe("exportación XLSX multianual", () => {
     expect(patch).toContain('setText(totalFlow, "A7", "Reconocimiento de Matrícula")');
     expect(patch).toContain("shiftFlowCellDown(totalFlow, col, row, row + 1)");
     expect(patch).toContain("const sourceRow = sheetXml.match(rowPattern(row - 1))");
-    expect(patch).toContain("`${col}7`, `${col}4*${recognition}`");
+    expect(patch).toContain("setNumber(totalFlow, `${col}7`, flow.recognizedEnrollmentFee)");
     expect(patch).toContain("SUM(${col}5:${col}7)");
     expect(patch).toContain('"Asistencia técnica "');
     expect(patch).not.toContain("necesaria para crear ${ref}");
   });
 
-  it("v13.0.6 no desplaza referencias externas y reconstruye todos los subtotales de FLUJO TOTAL", () => {
+  it("v13.0.7 no desplaza referencias externas y reconstruye todos los subtotales desde BudgetResult", () => {
     const patch = source("lib/export/institutional-budget-break-even-formula.ts");
 
-    // Regresión MGDAP: Parámetros!$B$8 no puede convertirse en Parámetros!$B$9
-    // al insertar Reconocimiento de Matrícula, porque B9 contiene el año/semestre de inicio.
+    // Regresión MGDAP: FLUJO TOTAL ya no depende de fórmulas externas de Parámetros
+    // para guía de tesis ni docencia; toma los valores autoritativos del mismo BudgetResult de la plataforma.
     expect(patch).not.toContain("shiftLocalFormulaRows");
-    expect(patch).toContain("Parámetros!$${col}$8");
-    expect(patch).toContain("const graduationStudentsRow = 6 + discountSlots");
+    expect(patch).not.toContain("Parámetros!$${col}$8");
+    expect(patch).not.toContain("const graduationStudentsRow = 6 + discountSlots");
+    expect(patch).toContain("setNumber(totalFlow, `${col}9`, -flow.directTeachingCost)");
+    expect(patch).toContain("setNumber(totalFlow, `${col}10`, -flow.replacementTeachingCost)");
+    expect(patch).toContain("setNumber(totalFlow, `${col}11`, -flow.thesisGuidanceCost)");
 
     // La jerarquía de subtotales replica la estructura validada de Ciencia de Datos y Trabajo Social.
     expect(patch).toContain("SUM(${col}9:${col}11)");
@@ -98,7 +101,7 @@ describe("exportación XLSX multianual", () => {
     expect(patch).toContain("IFERROR((${col}8+${col}38)/${col}8,0)");
   });
 
-  it("v13.0.2 usa la misma identidad operacional en Excel y evita LET/@", () => {
+  it("v13.0.7 usa la misma identidad operacional de la plataforma y evita LET/@", () => {
     const patch = source("lib/export/institutional-budget-break-even-formula.ts");
 
     expect(patch).toContain("38:${lastYearColumn}38");
@@ -106,7 +109,8 @@ describe("exportación XLSX multianual", () => {
     expect(patch).toContain("11:${lastYearColumn}11");
     expect(patch).toContain("7:${lastYearColumn}7");
     expect(patch).toContain("const formula = `IFERROR(");
-    expect(patch).toContain("const recognition = clampRate(budget.enrollmentRecognitionRate)");
+    expect(patch).toContain("setNumber(totalFlow, `${col}7`, flow.recognizedEnrollmentFee)");
+    expect(patch).not.toContain("const recognition = clampRate(budget.enrollmentRecognitionRate)");
     expect(patch).not.toContain("`LET(");
     expect(patch).not.toContain("@LET");
   });
