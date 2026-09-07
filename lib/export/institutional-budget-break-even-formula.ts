@@ -163,25 +163,21 @@ function insertCellInExistingRow(sheetXml: string, ref: string, cellXml: string)
 function setFormula(sheetXml: string, ref: string, formula: string, cached: number): string {
   return replaceCell(sheetXml, ref, `<f>${xml(formula)}</f><v>${Number.isFinite(cached) ? cached : 0}</v>`);
 }
+function setNumber(sheetXml: string, ref: string, value: number): string {
+  return replaceCell(sheetXml, ref, `<v>${Number.isFinite(value) ? value : 0}</v>`);
+}
 function setText(sheetXml: string, ref: string, value: string): string {
   return replaceCell(sheetXml, ref, `<is><t>${xml(value)}</t></is>`, ` t="inlineStr"`);
 }
 
-// Simula la inserción de la fila institucional faltante en el generador histórico:
-// sólo desplaza referencias locales de FLUJO TOTAL; no toca referencias a otras hojas.
-function shiftLocalFormulaRows(formula: string, startRow: number, delta: number): string {
-  return formula.replace(/(?<!!)(\$?[A-Z]{1,3})(\$?)(\d+)/g, (full, column: string, absolute: string, rowText: string) => {
-    const row = Number(rowText);
-    return row >= startRow ? `${column}${absolute}${row + delta}` : full;
-  });
-}
+// La fila se mueve conservando literalmente su fórmula. No se reescriben referencias aquí:
+// las fórmulas locales que cambian de posición se reconstruyen después de insertar la fila 7.
+// Esto evita alterar referencias externas absolutas como Parámetros!$B$8 -> Parámetros!$B$9.
 function shiftFlowCellDown(sheetXml: string, column: string, sourceRow: number, targetRow: number): string {
   const sourceMatch = sheetXml.match(cellPattern(`${column}${sourceRow}`));
   if (!sourceMatch) throw new Error(`El formato institucional no contiene ${column}${sourceRow}.`);
   const sourceCell = sourceMatch[0];
-  let body = innerFromCell(sourceCell);
-  body = body.replace(/<f([^>]*)>([\s\S]*?)<\/f>/g, (_full, attrs: string, formula: string) =>
-    `<f${attrs}>${xml(shiftLocalFormulaRows(formula, 7, 1))}</f>`);
+  const body = innerFromCell(sourceCell);
   const targetRef = `${column}${targetRow}`;
   if (cellPattern(targetRef).test(sheetXml)) return replaceCell(sheetXml, targetRef, body, typeFromCell(sourceCell));
   const newCell = `<c r="${targetRef}"${styleFromCellXml(sourceCell)}${typeFromCell(sourceCell)}>${body}</c>`;
@@ -196,8 +192,8 @@ function shiftFlowCellDown(sheetXml: string, column: string, sourceRow: number, 
  * Aquí se desplazan los rótulos y contenidos de A:... una fila hacia abajo, manteniendo
  * estilos, anchos, alturas, colores y la estructura de la plantilla. Si la fila final 42
  * no existe físicamente, se crea replicando los atributos de formato de la fila 41.
- * Luego se escribe el reconocimiento de matrícula en la fila 7 y se alinea el punto de
- * equilibrio con la misma identidad financiera del motor, sin LET ni operador @.
+ * Luego se escribe el reconocimiento de matrícula en la fila 7 y se reconstruyen los
+ * subtotales/fórmulas locales para que Excel concilie exactamente con el motor financiero.
  */
 export async function alignInstitutionalBreakEvenFormula(
   workbookBytes: Uint8Array,
@@ -219,7 +215,10 @@ export async function alignInstitutionalBreakEvenFormula(
   const discounts = budget.discounts.filter((discount) => Math.max(0, Math.min(1, discount.percentage)) > 0 && discount.target !== "ENROLLMENT");
   const discountSlots = Math.max(2, discounts.length);
   const equivalentStudentsRow = 5 + discountSlots;
+  const graduationStudentsRow = 6 + discountSlots;
   const equilibriumRow = 10 + (2 * discountSlots);
+  const centralOverheadParameterRow = 11 + discountSlots;
+  const facultyOverheadParameterRow = 12 + discountSlots;
   const firstYearColumn = "B";
   const lastYearColumn = yearColumn(result.years.length - 1);
   const recognition = clampRate(budget.enrollmentRecognitionRate);
@@ -239,12 +238,50 @@ export async function alignInstitutionalBreakEvenFormula(
     const flow = result.annualFlows.find((item) => item.year === result.years[index]);
     if (!flow) continue;
 
-    // Se copia de abajo hacia arriba para no perder las celdas fuente.
+    // Se copia de abajo hacia arriba para no perder las celdas fuente. Las fórmulas se
+    // preservan literalmente y luego se reconstruyen únicamente las que dependen de filas locales.
     for (let row = 41; row >= 7; row -= 1) totalFlow = shiftFlowCellDown(totalFlow, col, row, row + 1);
 
     totalFlow = setFormula(totalFlow, `${col}7`, `${col}4*${recognition}`, flow.recognizedEnrollmentFee);
     const extraIncome = flow.externalIncome + flow.institutionalFinancing + flow.otherIncome;
     totalFlow = setFormula(totalFlow, `${col}8`, extraIncome ? `SUM(${col}5:${col}7)+${extraIncome}` : `SUM(${col}5:${col}7)`, flow.totalIncome);
+
+    // Referencia externa crítica: la guía de tesis siempre está en Parámetros fila 8.
+    // En presupuestos con tres o más descuentos sólo cambia la fila de graduación de Flujo estudiantes.
+    totalFlow = setFormula(
+      totalFlow,
+      `${col}11`,
+      `-'Flujo estudiantes'!${col}${graduationStudentsRow}*Parámetros!$${col}$8`,
+      -flow.thesisGuidanceCost,
+    );
+
+    // Subtotales de la planilla institucional. Se regeneran en sus filas finales para
+    // no depender de referencias heredadas de la plantilla anterior a Reconocimiento de Matrícula.
+    totalFlow = setFormula(totalFlow, `${col}12`, `SUM(${col}9:${col}11)`, -flow.academicHonoraria);
+    totalFlow = setFormula(totalFlow, `${col}17`, `SUM(${col}13:${col}16)`, -flow.nonAcademicHonoraria);
+    totalFlow = setFormula(totalFlow, `${col}20`, `SUM(${col}18:${col}19)`, -(flow.equipment + flow.booksPublications));
+    totalFlow = setFormula(totalFlow, `${col}22`, `SUM(${col}21)`, -flow.diffusion);
+    totalFlow = setFormula(totalFlow, `${col}25`, `SUM(${col}23:${col}24)`, -flow.travelFreight);
+    totalFlow = setFormula(totalFlow, `${col}27`, `SUM(${col}26)`, -flow.perDiem);
+    totalFlow = setFormula(totalFlow, `${col}29`, `SUM(${col}28)`, -flow.software);
+    totalFlow = setFormula(totalFlow, `${col}32`, `SUM(${col}30:${col}31)`, -(flow.operational + flow.otherCosts + flow.foodBeverages));
+    totalFlow = setFormula(totalFlow, `${col}34`, `SUM(${col}33)`, -(flow.congressesInternships + flow.scholarshipsAndAid));
+
+    // Retenciones y resultados finales quedan completamente alineados con el motor de la aplicación.
+    totalFlow = setFormula(totalFlow, `${col}35`, `-(${col}5+${col}6)*Parámetros!${col}${centralOverheadParameterRow}`, -flow.centralOverhead);
+    totalFlow = setFormula(totalFlow, `${col}36`, `-(${col}5+${col}6)*Parámetros!${col}${facultyOverheadParameterRow}`, -flow.facultyOverhead);
+    totalFlow = setFormula(totalFlow, `${col}37`, `SUM(${col}35:${col}36)`, -(flow.centralOverhead + flow.facultyOverhead));
+    totalFlow = setFormula(totalFlow, `${col}38`, `SUM(${col}12,${col}17,${col}20,${col}22,${col}25,${col}27,${col}29,${col}32,${col}34,${col}37)`, -flow.totalExpenses);
+    totalFlow = setFormula(totalFlow, `${col}39`, `+${col}8+${col}38`, flow.netFlow);
+
+    if (index === 0) {
+      totalFlow = setNumber(totalFlow, `${col}40`, flow.startingCarryover);
+    } else {
+      const previousCol = yearColumn(index - 1);
+      totalFlow = setFormula(totalFlow, `${col}40`, `+${previousCol}41`, flow.startingCarryover);
+    }
+    totalFlow = setFormula(totalFlow, `${col}41`, `+SUM(${col}39:${col}40)`, flow.accumulatedFlow);
+    totalFlow = setFormula(totalFlow, `${col}42`, `IFERROR((${col}8+${col}38)/${col}8,0)`, flow.operatingMargin ?? 0);
   }
   files.set(totalSheetName, encoder.encode(totalFlow));
 
