@@ -5,7 +5,7 @@ import type { ConsolidationGroup } from "../calculations/consolidation";
 import { createFinancialReportPdf } from "./pdf";
 import { buildFinancialReport, buildParameterReport, compactParameterReportForPdf, type FinancialReport } from "./report-model";
 import { createFinancialReportXlsx } from "./xlsx";
-import { createDoctoralBudgetXlsx } from "./doctoral-budget-xlsx";
+import { createAcademicBudgetXlsx } from "./doctoral-budget-xlsx";
 import { createInstitutionalFormulaBudgetXlsx, institutionalTemplateCompatibilityIssue } from "./institutional-budget-xlsx";
 import { extendInstitutionalBudgetXlsx } from "./institutional-budget-multiyear";
 import { normalizeInstitutionalEnrollmentBilling } from "./institutional-budget-enrollment-normalizer";
@@ -106,10 +106,10 @@ export async function downloadBudgetXlsx(
   result: BudgetResult,
   parameters: InstitutionalParameters,
 ): Promise<void> {
-  // Los Doctorados usan el formato presupuestario institucional de cuatro hojas
-  // (Parámetros, Flujo de estudiantes, Costo Directo de Docencia y Flujo Total).
-  if (budget.program.type === "DOCTORADO") {
-    download(createDoctoralBudgetXlsx(budget, result, parameters), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
+  // Doctorados y Magísteres Académicos usan el formato académico institucional
+  // de cuatro hojas: Parámetros, Flujo de estudiantes, Costo Directo de Docencia y Flujo Total.
+  if (budget.program.type === "DOCTORADO" || budget.program.type === "MAGISTER_ACADEMICO") {
+    download(createAcademicBudgetXlsx(budget, result, parameters), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", institutionalBudgetFilename(budget));
     return;
   }
   // Marcador histórico del auditor v10.30: "Los presupuestos con arancel total usan el XLSX trazable general".
