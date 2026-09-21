@@ -26,10 +26,140 @@ function maintenanceStudents(flow:AnnualFlow,monthly:number){return monthly>0?fl
 
 function parametersSheet(budget:CohortBudget,result:BudgetResult,parameters:InstitutionalParameters){const ys=result.years,last=col(ys.length+1),rows:string[]=[row(1,[tc("A1",`Parámetros ${ys[0]}–${ys.at(-1)} - ${budget.program.name}`,S.title)],28),row(2,[]),row(3,[tc("A3","Parámetro",S.header),...ys.map((y,i)=>nc(`${col(i+2)}3`,y,S.header))],22)];const labels=["Arancel anual","Matrícula","Valor hora docencia","Académico/a Claustro jornada parcial","Revisión de tesis","Beca de atención económica (manutención)","Meses de manutención","Año de inicio","Director/a Programa","Asistente de Dirección (media jornada)","Cohortes/versiones activas para prorrateo","Congresos y pasantías de doctorado"];labels.forEach((label,k)=>{const r=4+k,cells=[tc(`A${r}`,label)];ys.forEach((y,i)=>{const f=yf(result,y),a=resolvedAnnualOverrideForYear(budget,parameters,y),co=cohorts(budget,f,y);let v=0;if(r===4)v=a.annualTuition;else if(r===5)v=a.annualEnrollmentFee;else if(r===6)v=a.directTeachingHourValue;else if(r===8)v=a.thesisGuidancePerGraduatingStudent;else if(r===9)v=a.maintenanceScholarshipMonthlyValue;else if(r===10)v=f.maintenanceScholarships>0?12:0;else if(r===11)v=i===0?budget.startYear:0;else if(r===12)v=f.direction*co;else if(r===13)v=f.assistance*co;else if(r===14)v=co;else if(r===15)v=f.congressesInternships*co;cells.push(nc(`${col(i+2)}${r}`,v,(r===10||r===11||r===14)?S.number:S.money));});rows.push(row(r,cells));});return sheet(`A1:${last}15`,rows,`<col min="1" max="1" width="46" customWidth="1"/><col min="2" max="${ys.length+1}" width="17" customWidth="1"/>`,`A1:${last}1`);}
 
-function studentsSheet(budget:CohortBudget,result:BudgetResult,parameters:InstitutionalParameters){const ys=result.years,last=col(ys.length+1),rows:string[]=[row(1,[tc("A1",`Flujo de estudiantes - Cohorte ${budget.startYear} - ${budget.program.name}`,S.title)],28),row(2,[]),row(3,[tc("A3","CONCEPTOS",S.header),...ys.map((y,i)=>nc(`${col(i+2)}3`,y,S.header))],22)];const data=ys.map((y,i)=>{const f=yf(result,y),a=resolvedAnnualOverrideForYear(budget,parameters,y),e=enrollmentStudents(f,a.annualEnrollmentFee),q=Math.max(0,f.equivalentEnrollments),d=Math.max(0,e-q);return {e,q,d,n:i===0?d:0,o:i===0?0:d,g:f.graduatingStudents,m:maintenanceStudents(f,a.maintenanceScholarshipMonthlyValue)};});const labels=["Nuevos 100% descuento","Antiguos 100% descuento","Beca externa","Graduación","Tesistas en extensión","Manutención estudiantes","Matrículas totales","INGRESOS POR MATRÍCULA","INGRESOS POR ARANCEL EFECTIVO"];labels.forEach((label,k)=>{const r=4+k,cells=[tc(`A${r}`,label,r>=11?S.bold:S.normal)];ys.forEach((y,i)=>{const c=col(i+2),x=data[i],f=yf(result,y);let v=0;if(r===4)v=x.n;else if(r===5)v=x.o;else if(r===6)v=x.q;else if(r===7)v=x.g;else if(r===8)v=0;else if(r===9)v=x.m;else if(r===10)v=x.e;if(r===11)cells.push(fc(`${c}${r}`,`${c}10*Parámetros!${c}5`,f.grossEnrollmentFee,S.subtotal));else if(r===12)cells.push(fc(`${c}${r}`,`${c}6*Parámetros!${c}4`,f.tuitionAfterBenefits,S.subtotal));else cells.push(nc(`${c}${r}`,v));});rows.push(row,r,cells));});return sheet(`A1:${last}12`,rows,`<col min="1" max="1" width="38" customWidth="1"/><col min="2" max="${ys.length+1}" width="17" customWidth="1"/>`,`A1:${last}1`);}
+function studentsSheet(budget:CohortBudget,result:BudgetResult,parameters:InstitutionalParameters){const ys=result.years,last=col(ys.length+1),rows:string[]=[row(1,[tc("A1",`Flujo de estudiantes - Cohorte ${budget.startYear} - ${budget.program.name}`,S.title)],28),row(2,[]),row(3,[tc("A3","CONCEPTOS",S.header),...ys.map((y,i)=>nc(`${col(i+2)}3`,y,S.header))],22)];const data=ys.map((y,i)=>{const f=yf(result,y),a=resolvedAnnualOverrideForYear(budget,parameters,y),e=enrollmentStudents(f,a.annualEnrollmentFee),q=Math.max(0,f.equivalentEnrollments),d=Math.max(0,e-q);return {e,q,d,n:i===0?d:0,o:i===0?0:d,g:f.graduatingStudents,m:maintenanceStudents(f,a.maintenanceScholarshipMonthlyValue)};});const labels=["Nuevos 100% descuento","Antiguos 100% descuento","Beca externa","Graduación","Tesistas en extensión","Manutención estudiantes","Matrículas totales","INGRESOS POR MATRÍCULA","INGRESOS POR ARANCEL EFECTIVO"];labels.forEach((label,k)=>{const r=4+k,cells=[tc(`A${r}`,label,r>=11?S.bold:S.normal)];ys.forEach((y,i)=>{const c=col(i+2),x=data[i],f=yf(result,y);let v=0;if(r===4)v=x.n;else if(r===5)v=x.o;else if(r===6)v=x.q;else if(r===7)v=x.g;else if(r===8)v=0;else if(r===9)v=x.m;else if(r===10)v=x.e;if(r===11)cells.push(fc(`${c}${r}`,`${c}10*Parámetros!${c}5`,f.grossEnrollmentFee,S.subtotal));else if(r===12)cells.push(fc(`${c}${r}`,`${c}6*Parámetros!${c}4`,f.tuitionAfterBenefits,S.subtotal));else cells.push(nc(`${c}${r}`,v));});rows.push(row(r,cells));});return sheet(`A1:${last}12`,rows,`<col min="1" max="1" width="38" customWidth="1"/><col min="2" max="${ys.length+1}" width="17" customWidth="1"/>`,`A1:${last}1`);}
 
 function courseType(course:ProgramCourse){if(course.kind==="GRADUACION")return "Graduación";if(course.kind==="ELECTIVA")return "Electiva";if(course.kind==="ESPECIALIZACION")return "Especialización";return "Obligatoria";}
-function teachingSheet(budget:CohortBudget,result:BudgetResult,parameters:InstitutionalParameters){const ys=result.years,paid=payableCurriculumCourses(budget.program),generic=genericCurriculumCourses(budget.program),courses=[...paid,...generic],periods=getActivePeriods(budget.startYear,budget.startSemester,budget.durationSemesters),sectionsStart=6,hoursStart=sectionsStart+ys.length,costStart=hoursStart+ys.length,last=col(costStart+ys.length-1),rows:string[]=[];rows.push(row(1,[tc("A1",`Costo Directo de Docencia - ${budget.program.name}`,S.title)],28));rows.push(row(2,[tc("A2","Semestre",S.header),tc("B2","Asignatura",S.header),tc("C2","Tipo",S.header),tc("D2","Horas directas/sem.",S.header),tc("E2","Semanas",S.header),...ys.map((y,i)=>tc(`${col(sectionsStart+i)}2`,`Secciones ${y}`,S.header)),...ys.map((y,i)=>tc(`${col(hoursStart+i)}2`,`Horas ${y}`,S.header)),...ys.map((y,i)=>tc(`${col(costStart+i)}2`,`Costo ${y}`,S.header))],24));courses.forEach((course,index)=>{const r=3+index,period=periods[course.semester-1],isGeneric=course.kind==="COMPETENCIA_GENERICA",cells=[nc(`A${r}`,course.semester),tc(`B${r}`,course.name),tc(`C${r}`,isGeneric?"Competencia genérica":courseType(course)),nc(`D${r}`,curriculumCourseWeeklyDirectHours(course)),nc(`E${r}`,course.weeks)];const secVals=ys.map(y=>period?.year===y?curriculumCourseSectionsForBudget(course,budget.program.type,budget.semesters[course.semester-1]?.activeStudents??0,budget.curriculumSectionOverrides??{}):0);secVals.forEach((v,i)=>cells.push(nc(`${col(sectionsStart+i)}${r}`,v)));ys.forEach((y,i)=>{const hc=col(hoursStart+i),sc=col(sectionsStart+i),hours=isGeneric?0:(period?.year===y?curriculumCourseEffectiveHours(course,budget.deliveryModality,secVals[i]):0);cells.push(isGeneric?nc(`${hc}${r}`,0):fc(`${hc}${r}`,`${sc}${r}*E${r}*D${r}`,hours));});ys.forEach((y,i)=>{const cc=col(costStart+i),hc=col(hoursStart+i),pc=col(i+2),hours=isGeneric?0:(period?.year===y?curriculumCourseEffectiveHours(course,budget.deliveryModality,secVals[i]):0),rate=resolvedAnnualOverrideForYear(budget,parameters,y).directTeachingHourValue;cells.push(isGeneric?nc(`${cc}${r}`,0):fc(`${cc}${r}`,`${hc}${r}*Parámetros!${pc}6`,hours*rate));});rows.push(row(r,cells));});const totalRow=3+courses.length;rows.push(row(totalRow,[tc(`A${totalRow}`,"TOTAL HORAS / COSTO DOCENCIA",S.subtotal),tc(`B${totalRow}`,"Sólo asignaturas valorizables",S.subtotal),...Array.from({length:3+ys.length},(_,i)=>`<c r="${col(3+i)}${totalRow}" s="${S.subtotal}"/>`),...ys.map((y,i)=>fc(`${col(hoursStart+i)}${totalRow}`,`SUM(${col(hoursStart+i)}3:${col(hoursStart+i)}${2+paid.length})`,y===ys[i]?paid.reduce((s,c)=>{const p=periods[c.semester-1];if(p?.year!==y)return s;const sec=curriculumCourseSectionsForBudget(c,budget.program.type,budget.semesters[c.semester-1]?.activeStudents??0,budget.curriculumSectionOverrides??{});return s+curriculumCourseEffectiveHours(c,budget.deliveryModality,sec);},0):0,S.subtotal)),...ys.map((y,i)=>fc(`${col(costStart+i)}${totalRow}`,`SUM(${col(costStart+i)}3:${col(costStart+i)}${2+paid.length})`,yf(result,y).directTeachingCost,S.subtotal))]));const cols=`<col min="1" max="1" width="11" customWidth="1"/><col min="2" max="2" width="44" customWidth="1"/><col min="3" max="3" width="20" customWidth="1"/><col min="4" max="5" width="15" customWidth="1"/><col min="6" max="${costStart+ys.length-1}" width="15" customWidth="1"/>`;return sheet(`A1:${last}${totalRow}`,rows,cols,`A1:${last}1`,2);}
+function teachingSheet(budget:CohortBudget,result:BudgetResult,parameters:InstitutionalParameters){
+  const ys=result.years;
+  const paid=payableCurriculumCourses(budget.program);
+  const generic=genericCurriculumCourses(budget.program);
+  const periods=getActivePeriods(budget.startYear,budget.startSemester,budget.durationSemesters);
+  const curriculum=[...paid,...generic];
+  const entries:Array<{semesterLabel:string|number;name:string;type:string;weekly:number;weeks:number;sections:number[];hours:number[];costs:number[];payable:boolean}>=[];
+
+  // Caso normal: la malla curricular del programa es la fuente de verdad de las horas.
+  // Se visualizan también las competencias genéricas, pero no se valorizan en el costo.
+  if(curriculum.length){
+    for(const course of curriculum){
+      const period=periods[course.semester-1];
+      const isGeneric=course.kind==="COMPETENCIA_GENERICA";
+      const sections=ys.map((year:number)=>period?.year===year
+        ? curriculumCourseSectionsForBudget(course,budget.program.type,budget.semesters[course.semester-1]?.activeStudents??0,budget.curriculumSectionOverrides??{})
+        : 0);
+      const hours=ys.map((year:number,index:number)=>period?.year===year
+        ? curriculumCourseEffectiveHours(course,budget.deliveryModality,sections[index])
+        : 0);
+      const costs=ys.map((year:number,index:number)=>isGeneric
+        ? 0
+        : hours[index]*resolvedAnnualOverrideForYear(budget,parameters,year).directTeachingHourValue);
+      entries.push({
+        semesterLabel:course.semester,
+        name:course.name,
+        type:"Docencia directa",
+        weekly:curriculumCourseWeeklyDirectHours(course),
+        weeks:course.weeks,
+        sections,
+        hours,
+        costs,
+        payable:!isGeneric,
+      });
+    }
+  }else{
+    // Respaldo: un Doctorado nunca debe exportarse sin horas si éstas ya existen
+    // en los parámetros semestrales del presupuesto. Cuando la malla no está cargada
+    // en D1, se informa la carga registrada por semestre hasta completar la malla.
+    budget.semesters.forEach((semester:any,index:number)=>{
+      const yearIndex=ys.indexOf(semester.year);
+      if(yearIndex<0)return;
+      const annual=resolvedAnnualOverrideForYear(budget,parameters,semester.year);
+      const loads=[
+        {label:"Docencia directa",hours:Math.max(0,semester.directTeachingHours),rate:annual.directTeachingHourValue},
+        {label:"Docencia sincrónica",hours:Math.max(0,semester.synchronousTeachingHours),rate:annual.synchronousTeachingHourValue},
+        {label:"Docencia asincrónica equivalente",hours:Math.max(0,semester.asynchronousTeachingHours),rate:annual.asynchronousTeachingHourValue},
+      ].filter(item=>item.hours>0);
+      loads.forEach(item=>{
+        const sections=ys.map(()=>0),hours=ys.map(()=>0),costs=ys.map(()=>0);
+        sections[yearIndex]=1;
+        hours[yearIndex]=item.hours;
+        costs[yearIndex]=item.hours*item.rate;
+        entries.push({
+          semesterLabel:index+1,
+          name:`Carga docente registrada ${semester.year}-${semester.semester}S`,
+          type:item.label,
+          weekly:item.hours,
+          weeks:1,
+          sections,
+          hours,
+          costs,
+          payable:true,
+        });
+      });
+    });
+  }
+
+  const sectionsStart=6;
+  const hoursStart=sectionsStart+ys.length;
+  const costStart=hoursStart+ys.length;
+  const last=col(costStart+ys.length-1);
+  const rows:string[]=[];
+  rows.push(row(1,[tc("A1",`Costo directo de docencia - Cohorte ${budget.startYear} - ${budget.program.name}`,S.title)],28));
+  rows.push(row(2,[]));
+  rows.push(row(3,[
+    tc("A3","Semestre",S.header),
+    tc("B3","Asignatura",S.header),
+    tc("C3","Tipo",S.header),
+    tc("D3","Horas semanales",S.header),
+    tc("E3","Semanas",S.header),
+    ...ys.map((y:number,i:number)=>tc(`${col(sectionsStart+i)}3`,`Secciones ${y}`,S.header)),
+    ...ys.map((y:number,i:number)=>tc(`${col(hoursStart+i)}3`,`Horas ${y}`,S.header)),
+    ...ys.map((y:number,i:number)=>tc(`${col(costStart+i)}3`,`Costo ${y}`,S.header)),
+  ],24));
+
+  entries.forEach((entry,index)=>{
+    const r=4+index;
+    const cells=[
+      typeof entry.semesterLabel==="number"?nc(`A${r}`,entry.semesterLabel):tc(`A${r}`,entry.semesterLabel),
+      tc(`B${r}`,entry.name),
+      tc(`C${r}`,entry.type),
+      nc(`D${r}`,entry.weekly),
+      nc(`E${r}`,entry.weeks),
+    ];
+    entry.sections.forEach((value,i)=>cells.push(nc(`${col(sectionsStart+i)}${r}`,value)));
+    entry.hours.forEach((value,i)=>cells.push(fc(`${col(hoursStart+i)}${r}`,`${col(sectionsStart+i)}${r}*E${r}*D${r}`,value)));
+    entry.costs.forEach((value,i)=>cells.push(entry.payable
+      ? fc(`${col(costStart+i)}${r}`,`${col(hoursStart+i)}${r}*Parámetros!${col(i+2)}6`,value)
+      : nc(`${col(costStart+i)}${r}`,0)));
+    rows.push(row(r,cells));
+  });
+
+  const firstData=4;
+  const lastData=Math.max(firstData,3+entries.length);
+  const hoursRow=lastData+1;
+  const costRow=hoursRow+1;
+  const payableIndexes=entries.map((entry,index)=>entry.payable?index:-1).filter(index=>index>=0);
+  rows.push(row(hoursRow,[
+    tc(`A${hoursRow}`,"TOTAL HORAS",S.subtotal),
+    ...Array.from({length:hoursStart-2},(_,i)=>`<c r="${col(i+2)}${hoursRow}" s="${S.subtotal}"/>`),
+    ...ys.map((_:number,i:number)=>{
+      const refs=payableIndexes.map(index=>`${col(hoursStart+i)}${4+index}`);
+      const formula=refs.length?refs.join("+"):"0";
+      const cached=entries.filter(entry=>entry.payable).reduce((sum,entry)=>sum+entry.hours[i],0);
+      return fc(`${col(hoursStart+i)}${hoursRow}`,formula,cached,S.subtotal);
+    }),
+    ...ys.map((_:number,i:number)=>`<c r="${col(costStart+i)}${hoursRow}" s="${S.subtotal}"/>`),
+  ]));
+  rows.push(row(costRow,[
+    tc(`A${costRow}`,"TOTAL COSTO DIRECTO DE DOCENCIA",S.subtotal),
+    ...Array.from({length:costStart-2},(_,i)=>`<c r="${col(i+2)}${costRow}" s="${S.subtotal}"/>`),
+    ...ys.map((year:number,i:number)=>{
+      const refs=payableIndexes.map(index=>`${col(costStart+i)}${4+index}`);
+      const formula=refs.length?refs.join("+"):"0";
+      return fc(`${col(costStart+i)}${costRow}`,formula,yf(result,year).directTeachingCost,S.subtotal);
+    }),
+  ]));
+  const cols=`<col min="1" max="1" width="11" customWidth="1"/><col min="2" max="2" width="44" customWidth="1"/><col min="3" max="3" width="22" customWidth="1"/><col min="4" max="5" width="15" customWidth="1"/><col min="6" max="${costStart+ys.length-1}" width="15" customWidth="1"/>`;
+  return sheet(`A1:${last}${costRow}`,rows,cols,`A1:${last}1`,3);
+}
 
 function totalSheet(budget:CohortBudget,result:BudgetResult){const ys=result.years,last=col(ys.length+1),rows:string[]=[row(1,[tc("A1",`${budget.program.name} - Cohorte ${budget.startYear}`,S.title)],28),row(2,[]),row(3,[tc("A3","DETALLE",S.header),...ys.map((y,i)=>nc(`${col(i+2)}3`,y,S.header))],22)];const vals=ys.map(y=>{const f=yf(result,y);return {f,academic:[f.directTeachingCost,f.replacementTeachingCost,f.thesisGuidanceCost],nonAcademic:[f.direction,f.assistance,f.otherNonAcademicHonoraria],books:f.booksPublications,diff:f.diffusion,travel:f.travelFreight+f.perDiem,software:f.software,oper:f.operational+f.otherCosts,food:f.foodBeverages,congress:f.congressesInternships,aid:f.scholarshipsAndAid,equip:f.equipment};});const direct=(r:number,label:string,get:(v:typeof vals[number])=>number,style=S.money)=>rows.push(row(r,[tc(`A${r}`,label),...vals.map((v,i)=>nc(`${col(i+2)}${r}`,get(v),style))]));rows.push(row(4,[tc("A4","INGRESOS",S.section),...ys.map((_,i)=>tc(`${col(i+2)}4`,"",S.section))]));direct(5,"Ingresos por Matrícula",v=>v.f.grossEnrollmentFee);direct(6,"Ingresos por Aranceles",v=>v.f.tuitionAfterBenefits);direct(7,"Otros ingresos",v=>v.f.externalIncome+v.f.institutionalFinancing+v.f.otherIncome);rows.push(row(8,[tc("A8","INGRESOS",S.subtotal),...vals.map((v,i)=>fc(`${col(i+2)}8`,`SUM(${col(i+2)}5:${col(i+2)}7)`,v.f.grossEnrollmentFee+v.f.tuitionAfterBenefits+v.f.externalIncome+v.f.institutionalFinancing+v.f.otherIncome,S.subtotal))]));rows.push(row(9,[]));direct(10,"Docentes / Docentes (compromiso académico)",v=>v.academic[0]);direct(11,"Docentes Claustro Jornada Parcial 16h semanales (*)",()=>0);direct(12,"Docentes Externos a honorario",v=>v.academic[1]);direct(13,"Revisión de tesis externos a honorarios",v=>v.academic[2]);rows.push(row(14,[tc("A14","COSTOS ACADÉMICOS",S.subtotal),...vals.map((v,i)=>fc(`${col(i+2)}14`,`SUM(${col(i+2)}10:${col(i+2)}13)`,v.f.academicHonoraria,S.subtotal))]));rows.push(row(15,[]));direct(16,"Honorarios Director programa",v=>v.nonAcademic[0]);direct(17,"Honorarios Asistante de Dirección",v=>v.nonAcademic[1]);direct(18,"Honorarios Charlas Vinculación Empresas",v=>v.nonAcademic[2]);direct(19,"Revisión y seguimiento de contenidos virtuales",()=>0);direct(20,"Creación de contenidos virtuales Competencias Genéricas",()=>0);rows.push(row(21,[tc("A21","HONORARIOS NO ACADÉMICOS",S.subtotal),...vals.map((v,i)=>fc(`${col(i+2)}21`,`SUM(${col(i+2)}16:${col(i+2)}20)`,v.f.nonAcademicHonoraria,S.subtotal))]));rows.push(row(22,[]));direct(23,"Materiales básicos de enseñanza",()=>0);direct(24,"Textos impresos Bibliografía",v=>v.books);rows.push(row(25,[tc("A25","LIBROS Y PUBLICACIONES TÉCNICAS",S.subtotal),...vals.map((v,i)=>fc(`${col(i+2)}25`,`SUM(${col(i+2)}23:${col(i+2)}24)`,v.books,S.subtotal))]));rows.push(row(26,[]));direct(27,"Difusión",v=>v.diff);rows.push(row(28,[tc("A28","DIFUSIÓN",S.subtotal),...vals.map((v,i)=>fc(`${col(i+2)}28`,`${col(i+2)}27`,v.diff,S.subtotal))]));rows.push(row(29,[]));direct(30,"Docentes internacional",()=>0);direct(31,"Movilidad académicos / Pasajes y fletes",v=>v.travel);rows.push(row(32,[tc("A32","PASAJES Y FLETES",S.subtotal),...vals.map((v,i)=>fc(`${col(i+2)}32`,`SUM(${col(i+2)}30:${col(i+2)}31)`,v.travel,S.subtotal))]));rows.push(row(33,[]));direct(34,"Licencias de software",v=>v.software);rows.push(row(35,[tc("A35","ADQUISICIÓN DE PROGRAMAS O LICENCIAS",S.subtotal),...vals.map((v,i)=>fc(`${col(i+2)}35`,`${col(i+2)}34`,v.software,S.subtotal))]));rows.push(row(36,[]));direct(37,"Giro para rendir (gastos menores)",v=>v.oper);direct(38,"Seminarios nacionales y/o internacionales (coffee break)",()=>0);direct(39,"Coffee break otros eventos",v=>v.food);rows.push(row(40,[tc("A40","OTROS SERVICIOS",S.subtotal),...vals.map((v,i)=>fc(`${col(i+2)}40`,`SUM(${col(i+2)}37:${col(i+2)}39)`,v.oper+v.food,S.subtotal))]));rows.push(row(41,[]));direct(42,"Congresos y Pasantías de doctorado (al tercer año de la cohorte)",v=>v.congress);direct(43,"Beca de atención Económica (manutención)",v=>v.aid);rows.push(row(44,[tc("A44","APOYO INSTITUCIONAL A ESTUDIANTES",S.subtotal),...vals.map((v,i)=>fc(`${col(i+2)}44`,`SUM(${col(i+2)}42:${col(i+2)}43)`,v.congress+v.aid,S.subtotal))]));rows.push(row(45,[]));direct(46,"Inversión computacional",v=>v.equip);direct(47,"Inversión otro equipamiento",()=>0);rows.push(row(48,[tc("A48","INVERSIONES",S.subtotal),...vals.map((v,i)=>fc(`${col(i+2)}48`,`SUM(${col(i+2)}46:${col(i+2)}47)`,v.equip,S.subtotal))]));rows.push(row(49,[tc("A49","TOTAL COSTOS Y GASTOS DE ADMINISTRACIÓN",S.subtotal),...vals.map((v,i)=>fc(`${col(i+2)}49`,`${col(i+2)}14+${col(i+2)}21+${col(i+2)}25+${col(i+2)}28+${col(i+2)}32+${col(i+2)}35+${col(i+2)}40+${col(i+2)}44+${col(i+2)}48`,v.f.totalExpenses,S.subtotal))]));rows.push(row(50,[tc("A50","FLUJO DE CAJA NETO",S.bold),...vals.map((v,i)=>fc(`${col(i+2)}50`,`${col(i+2)}8-${col(i+2)}49`,v.f.netFlow,S.result))]));return sheet(`A1:${last}50`,rows,`<col min="1" max="1" width="64" customWidth="1"/><col min="2" max="${ys.length+1}" width="17" customWidth="1"/>`,`A1:${last}1`);}
 
