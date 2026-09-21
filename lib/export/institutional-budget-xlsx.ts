@@ -1,7 +1,7 @@
 import type { BudgetResult, CohortBudget, InstitutionalParameters, SemesterParameters } from "../calculations/types";
 import { resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
 import { calculateBreakEvenEquivalentEnrollments } from "../calculations/break-even";
-import { genericCurriculumCourses, payableCurriculumCourses } from "../curriculum/budget-load";
+import { curriculumCourseEffectiveHours, curriculumCourseSectionsForBudget, curriculumCourseWeeklyDirectHours, genericCurriculumCourses, payableCurriculumCourses } from "../curriculum/budget-load";
 import { enrollmentChargePeriodsForBudget, enrollmentFeeForPeriod } from "../calculations/billing";
 import { getActivePeriods, getAnnualEnrollmentChargePeriods } from "../calculations/periods";
 
@@ -463,13 +463,18 @@ export async function createInstitutionalFormulaBudgetXlsx(
     for (let row = 4; row <= courseEndRow; row += 1) {
       const course = courses[row - 4];
       if (!course) { s3 = clearCell(s3, `A${row}`); s3 = clearCell(s3, `B${row}`); s3 = setNumber(s3, `C${row}`, 18); s3 = setNumber(s3, `D${row}`, 1); s3 = setNumber(s3, `E${row}`, 0); s3 = setNumber(s3, `F${row}`, 0); s3 = setFormula(s3, `G${row}`, `+$C$${row}*$D$${row}*E${row}`, 0); s3 = setFormula(s3, `H${row}`, `+$C$${row}*$D$${row}*F${row}`, 0); continue; }
-      const period = activePeriods[course.semester - 1]; const participants = 1 + course.sharedWithProgramIds.filter((id) => id !== budget.program.id).length; const allocation = participants > 1 ? Math.max(0, Math.min(1, course.allocationRate || 1 / participants)) : 1;
-      const modeFactor = course.teachingMode === "ASINCRONICA" ? Math.max(0, Math.min(1, course.asynchronousRateFactor)) : 1;
-      const weeklyPaid = Math.max(0, course.directWeeklyHours) * modeFactor * allocation;
+      const period = activePeriods[course.semester - 1];
+      const semesterStudents = budget.semesters[course.semester - 1]?.activeStudents ?? 0;
+      const sections = curriculumCourseSectionsForBudget(course, budget.program.type, semesterStudents, budget.curriculumSectionOverrides ?? {});
+      const participants = 1 + course.sharedWithProgramIds.filter((id) => id !== budget.program.id).length;
+      const allocation = participants > 1 ? Math.max(0, Math.min(1, course.allocationRate || 1 / participants)) : 1;
+      const baseEffectiveHours = curriculumCourseEffectiveHours(course, budget.deliveryModality, sections);
+      const allocatedHours = baseEffectiveHours * allocation;
+      const weeklyPaid = course.weeks > 0 && sections > 0 ? allocatedHours / (course.weeks * sections) : 0;
       const detail = `${course.name}${course.teachingMode === "ASINCRONICA" ? ` · asincrónica ${Math.round(course.asynchronousRateFactor * 100)}%` : ""}${participants > 1 ? ` · compartida ${Math.round(allocation * 10000) / 100}%` : ""}`;
-      s3 = setNumber(s3, `A${row}`, course.semester); s3 = setText(s3, `B${row}`, detail); s3 = setNumber(s3, `C${row}`, course.weeks); s3 = setNumber(s3, `D${row}`, course.sections);
+      s3 = setNumber(s3, `A${row}`, course.semester); s3 = setText(s3, `B${row}`, detail); s3 = setNumber(s3, `C${row}`, course.weeks); s3 = setNumber(s3, `D${row}`, sections);
       s3 = setNumber(s3, `E${row}`, period?.year === year1 ? weeklyPaid : 0); s3 = setNumber(s3, `F${row}`, period?.year === year2 ? weeklyPaid : 0);
-      const total1Hours = period?.year === year1 ? course.weeks * course.sections * weeklyPaid : 0; const total2Hours = period?.year === year2 ? course.weeks * course.sections * weeklyPaid : 0;
+      const total1Hours = period?.year === year1 ? allocatedHours : 0; const total2Hours = period?.year === year2 ? allocatedHours : 0;
       s3 = setFormula(s3, `G${row}`, `+$C$${row}*$D$${row}*E${row}`, total1Hours); s3 = setFormula(s3, `H${row}`, `+$C$${row}*$D$${row}*F${row}`, total2Hours);
     }
   } else {
@@ -480,7 +485,7 @@ export async function createInstitutionalFormulaBudgetXlsx(
   }
   s3 = setFormula(s3, `G${totalHoursRow}`, `SUM(G4:G${courseEndRow})`, teachingRate1 > 0 ? flow1.directTeachingCost / teachingRate1 : 0); s3 = setFormula(s3, `H${totalHoursRow}`, `SUM(H4:H${courseEndRow})`, teachingRate2 > 0 ? flow2.directTeachingCost / teachingRate2 : 0);
   s3 = setFormula(s3, `G${directCostRow}`, `+G${totalHoursRow}*Parámetros!B6`, flow1.directTeachingCost); s3 = setFormula(s3, `H${directCostRow}`, `+H${totalHoursRow}*Parámetros!C6`, flow2.directTeachingCost);
-  for (let row = genericStartRow; row <= genericEndRow; row += 1) { const course = generic[row - genericStartRow]; if (!course) { s3 = clearCell(s3, `A${row}`); s3 = clearCell(s3, `B${row}`); s3 = setNumber(s3, `C${row}`, 0); s3 = setNumber(s3, `D${row}`, 0); } else { s3 = setText(s3, `A${row}`, course.code ?? ""); s3 = setText(s3, `B${row}`, course.name); s3 = setNumber(s3, `C${row}`, course.directWeeklyHours); s3 = setNumber(s3, `D${row}`, 0); } }
+  for (let row = genericStartRow; row <= genericEndRow; row += 1) { const course = generic[row - genericStartRow]; if (!course) { s3 = clearCell(s3, `A${row}`); s3 = clearCell(s3, `B${row}`); s3 = setNumber(s3, `C${row}`, 0); s3 = setNumber(s3, `D${row}`, 0); } else { s3 = setText(s3, `A${row}`, course.code ?? ""); s3 = setText(s3, `B${row}`, course.name); s3 = setNumber(s3, `C${row}`, curriculumCourseWeeklyDirectHours(course)); s3 = setNumber(s3, `D${row}`, 0); } }
   s3 = setText(s3, `B${thesisHeaderRow}`, `Base estudiantes ${year2}`); s3 = setText(s3, `C${thesisHeaderRow}`, `Valor unitario ${year2}`); s3 = setText(s3, `D${thesisHeaderRow}`, `Costo ${year2}`);
   s3 = setFormula(s3, `B${thesisRow}`, `+'Flujo estudiantes'!C${graduationStudentsRow}`, flow2.graduatingStudents); s3 = setFormula(s3, `C${thesisRow}`, "+Parámetros!C8", override2.thesisGuidancePerGraduatingStudent); s3 = setFormula(s3, `D${thesisRow}`, `B${thesisRow}*C${thesisRow}`, flow2.thesisGuidanceCost);
   files.set("xl/worksheets/sheet3.xml", encoder.encode(s3));
