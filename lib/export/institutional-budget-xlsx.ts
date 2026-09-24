@@ -189,7 +189,7 @@ function discountApplies(discount: CohortBudget["discounts"][number], semester: 
   return value >= periodOrdinal(discount.startYear, discount.startSemester) && value <= periodOrdinal(discount.endYear, discount.endSemester);
 }
 function exportableDiscounts(budget: CohortBudget): CohortBudget["discounts"] {
-  return budget.discounts.filter((discount) => Math.max(0, Math.min(1, discount.percentage)) > 0);
+  return budget.discounts.filter((discount) => (discount.target ?? "TUITION") === "TUITION" && Math.max(0, Math.min(1, discount.percentage)) > 0);
 }
 function tuitionChargePeriodsForYear(budget: CohortBudget, year: number): SemesterParameters[] {
   const chargePeriods = new Set(getAnnualEnrollmentChargePeriods(budget.startYear, budget.startSemester, budget.durationSemesters)
