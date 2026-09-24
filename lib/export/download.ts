@@ -116,8 +116,7 @@ export async function downloadBudgetXlsx(
   // Esa regla ya no está vigente: PROGRAM_TOTAL ahora se adapta al mismo XLSX institucional sin modificar el presupuesto real.
   // Todo Magíster Profesional sin descuentos directos de matrícula debe conservar el
   // formato institucional, incluido el modelo de arancel total del programa.
-  const institutionalCandidate = budget.program.type === "MAGISTER_PROFESIONAL"
-    && !budget.discounts.some((discount) => discount.target === "ENROLLMENT");
+  const institutionalCandidate = budget.program.type === "MAGISTER_PROFESIONAL";
 
   // Para los Magísteres Profesionales se conserva el formato institucional validado.
   // Si la cohorte cruza tres o más años, se genera primero el mismo archivo de dos años
