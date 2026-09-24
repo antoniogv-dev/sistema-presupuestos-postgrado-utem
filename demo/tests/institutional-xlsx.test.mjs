@@ -220,7 +220,7 @@ test("v10.30 genera XLSX institucional mejorado, con malla y fórmulas coherente
   assert.equal(/flujo(?: final)? simulado/i.test(studentXml), false, "no debe exportarse el texto flujo simulado");
   const studentFormulas = formulaMap(studentXml);
   const equilibriumFormula = formulaForCell(studentXml, "B14");
-  assert.equal(equilibriumFormula, "LET(costosFijos,ABS(SUM('FLUJO TOTAL'!B37:C37)-SUM('FLUJO TOTAL'!B36:C36)-SUM('FLUJO TOTAL'!B10:C10)),aporteArancel,SUMPRODUCT(Parámetros!B4:C4,1-Parámetros!B12:C12,1-Parámetros!B13:C13-Parámetros!B14:C14),aporteMatricula,(SUM(Parámetros!B5:C5)-SUM(Parámetros!B8:C8))*(B6/B7),costosFijos/(aporteArancel+aporteMatricula))");
+  assert.equal(equilibriumFormula, "IFERROR(ABS(SUM('FLUJO TOTAL'!B37:C37)-SUM('FLUJO TOTAL'!B36:C36)-SUM('FLUJO TOTAL'!B10:C10))*B7/(SUM('FLUJO TOTAL'!B7:C7)+SUM('FLUJO TOTAL'!B36:C36)+SUM('FLUJO TOTAL'!B10:C10)),0)");
   assert.equal(formulaForCell(studentXml, "B15"), "ROUNDUP(B14,0)");
   assert.ok(studentXml.includes("matrículas equivalentes"), "etiqueta de punto de equilibrio faltante");
   assert.equal(studentXml.includes("matrículas equivalentes (fórmula)"), false, "la etiqueta no debe mostrar (fórmula)");
@@ -274,11 +274,11 @@ test("v12.1.2 exporta el punto de equilibrio incorporando matrícula y guía de 
   const generated = await createInstitutionalFormulaBudgetXlsx(template, formulaBudget, formulaResult, institutionalParameters);
   const studentXml = text(unzip(generated), "xl/worksheets/sheet2.xml");
   const formula = formulaForCell(studentXml, "B14");
-  assert.equal(formula, "LET(costosFijos,ABS(SUM('FLUJO TOTAL'!B37:C37)-SUM('FLUJO TOTAL'!B36:C36)-SUM('FLUJO TOTAL'!B10:C10)),aporteArancel,SUMPRODUCT(Parámetros!B4:C4,1-Parámetros!B12:C12,1-Parámetros!B13:C13-Parámetros!B14:C14),aporteMatricula,(SUM(Parámetros!B5:C5)-SUM(Parámetros!B8:C8))*(B6/B7),costosFijos/(aporteArancel+aporteMatricula))");
+  assert.equal(formula, "IFERROR(ABS(SUM('FLUJO TOTAL'!B37:C37)-SUM('FLUJO TOTAL'!B36:C36)-SUM('FLUJO TOTAL'!B10:C10))*B7/(SUM('FLUJO TOTAL'!B7:C7)+SUM('FLUJO TOTAL'!B36:C36)+SUM('FLUJO TOTAL'!B10:C10)-3500000),0)");
   assert.equal(formula.includes("B39"), false, "el arrastre no reduce el umbral de equilibrio equivalente");
-  assert.ok(formula.includes("SUM(Parámetros!B5:C5)"), "la matrícula debe incorporarse como aporte al punto de equilibrio");
-  assert.ok(formula.includes("SUM(Parámetros!B8:C8)"), "la guía de tesis debe restarse como costo variable por estudiante");
-  assert.equal(formula.includes("3500000"), false, "el financiamiento institucional no reduce el umbral");
+  assert.ok(formula.includes("SUM('FLUJO TOTAL'!B7:C7)"), "el aporte debe partir de los ingresos operacionales del flujo");
+  assert.ok(formula.includes("SUM('FLUJO TOTAL'!B10:C10)"), "la guía de tesis debe mantenerse como costo variable");
+  assert.ok(formula.includes("-3500000"), "el financiamiento institucional debe excluirse explícitamente del aporte operacional");
   assert.equal(formulaForCell(studentXml, "B15"), "ROUNDUP(B14,0)");
   assert.ok(Math.abs(cachedNumber(studentXml, "B14") - (expected.minimumEquivalentEnrollmentsExact ?? 0)) < 0.01);
   assert.equal(cachedNumber(studentXml, "B15"), expected.minimumWholeStudents ?? 0);
@@ -306,7 +306,7 @@ test("v12.1.2 reproduce un caso objetivo de 9,45 matrículas equivalentes y 10 e
   assert.equal(equilibrium.minimumWholeStudents, 10);
   const generated = await createInstitutionalFormulaBudgetXlsx(template, targetBudget, targetResult, institutionalParameters);
   const studentXml = text(unzip(generated), "xl/worksheets/sheet2.xml");
-  assert.equal(formulaForCell(studentXml, "B14"), "LET(costosFijos,ABS(SUM('FLUJO TOTAL'!B37:C37)-SUM('FLUJO TOTAL'!B36:C36)-SUM('FLUJO TOTAL'!B10:C10)),aporteArancel,SUMPRODUCT(Parámetros!B4:C4,1-Parámetros!B12:C12,1-Parámetros!B13:C13-Parámetros!B14:C14),aporteMatricula,(SUM(Parámetros!B5:C5)-SUM(Parámetros!B8:C8))*(B6/B7),costosFijos/(aporteArancel+aporteMatricula))");
+  assert.equal(formulaForCell(studentXml, "B14"), "IFERROR(ABS(SUM('FLUJO TOTAL'!B37:C37)-SUM('FLUJO TOTAL'!B36:C36)-SUM('FLUJO TOTAL'!B10:C10))*B7/(SUM('FLUJO TOTAL'!B7:C7)+SUM('FLUJO TOTAL'!B36:C36)+SUM('FLUJO TOTAL'!B10:C10)),0)");
   assert.equal(formulaForCell(studentXml, "B15"), "ROUNDUP(B14,0)");
   assert.ok(Math.abs(cachedNumber(studentXml, "B14") - 9.45) < 0.01);
   assert.equal(cachedNumber(studentXml, "B15"), 10);
@@ -366,7 +366,7 @@ test("v11.0.3 exporta N descuentos como filas independientes y mantiene las fór
   assert.match(studentXml, /<dimension ref="A1:C21"\/>/);
   assert.match(studentXml, /<c(?=[^>]*\br="B19")[^>]*>[\s\S]*?<f>SUM\(B13:B18\)<\/f>/);
   const manyStudentFormulas = formulaMap(studentXml);
-  assert.equal(formulaForCell(studentXml, "B20"), "LET(costosFijos,ABS(SUM('FLUJO TOTAL'!B37:C37)-SUM('FLUJO TOTAL'!B36:C36)-SUM('FLUJO TOTAL'!B10:C10)),aporteArancel,SUMPRODUCT(Parámetros!B4:C4,1-Parámetros!B15:C15,1-Parámetros!B16:C16-Parámetros!B17:C17),aporteMatricula,(SUM(Parámetros!B5:C5)-SUM(Parámetros!B8:C8))*(B9/B10),costosFijos/(aporteArancel+aporteMatricula))");
+  assert.equal(formulaForCell(studentXml, "B20"), "IFERROR(ABS(SUM('FLUJO TOTAL'!B37:C37)-SUM('FLUJO TOTAL'!B36:C36)-SUM('FLUJO TOTAL'!B10:C10))*B10/(SUM('FLUJO TOTAL'!B7:C7)+SUM('FLUJO TOTAL'!B36:C36)+SUM('FLUJO TOTAL'!B10:C10)),0)");
   assert.equal(formulaForCell(studentXml, "B21"), "ROUNDUP(B20,0)");
   assert.match(flowXml, /<c(?=[^>]*\br="B5")[^>]*>[\s\S]*?<f>'Flujo estudiantes'!B19<\/f>/);
   assert.match(flowXml, /<c(?=[^>]*\br="B6")[^>]*>[\s\S]*?<f>-B5\*Parámetros!B15<\/f>/);
