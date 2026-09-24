@@ -252,7 +252,7 @@ export async function normalizeInstitutionalEnrollmentBilling(
     // La fila 5 de Parámetros representa el valor unitario aplicable a la modalidad elegida
     // en cada año: anual, por semestre o único/total. En años sin cobro queda en cero.
     parameterSheet = setNumber(parameterSheet, `${col}5`, enrollmentUnitPrice);
-    studentSheet = setFormula(studentSheet, `${col}${rows.enrollmentIncomeRow}`, `${enrollmentUnits}*Parámetros!$${col}$5`, flow.grossEnrollmentFee);
+    studentSheet = setFormula(studentSheet, `${col}${rows.enrollmentIncomeRow}`, `MAX(0,(${enrollmentUnits}-${enrollmentDiscountEquivalentUnits})*Parámetros!${col}$5)`, flow.netEnrollmentFee);
     studentSheet = setFormula(studentSheet, `${col}${rows.noDiscountIncomeRow}`, `(${col}3)*Parámetros!$${col}$4`, noDiscount * override.annualTuition);
     studentSheet = setFormula(studentSheet, `${col}${rows.totalTuitionIncomeRow}`, `SUM(${col}${rows.noDiscountIncomeRow}:${col}${rows.discountIncomeStartRow + rows.discountSlots - 1})`, flow.tuitionAfterBenefits);
   }
