@@ -1,4 +1,4 @@
-import type { AnnualFlow, BudgetResult, CohortBudget, InstitutionalParameters, ProgramCourse } from "../calculations/types";
+import type { AnnualFlow, BudgetResult, CohortBudget, InstitutionalParameters, SemesterParameters } from "../calculations/types";
 import { resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
 import { getActivePeriods } from "../calculations/periods";
 import { curriculumCourseEffectiveHours, curriculumCourseSectionsForBudget, curriculumCourseWeeklyDirectHours, genericCurriculumCourses, payableCurriculumCourses } from "../curriculum/budget-load";
@@ -28,7 +28,6 @@ function parametersSheet(budget:CohortBudget,result:BudgetResult,parameters:Inst
 
 function studentsSheet(budget:CohortBudget,result:BudgetResult,parameters:InstitutionalParameters){const ys=result.years,last=col(ys.length+1),rows:string[]=[row(1,[tc("A1",`Flujo de estudiantes - Cohorte ${budget.startYear} - ${budget.program.name}`,S.title)],28),row(2,[]),row(3,[tc("A3","CONCEPTOS",S.header),...ys.map((y,i)=>nc(`${col(i+2)}3`,y,S.header))],22)];const data=ys.map((y,i)=>{const f=yf(result,y),a=resolvedAnnualOverrideForYear(budget,parameters,y),e=enrollmentStudents(f,a.annualEnrollmentFee),q=Math.max(0,f.equivalentEnrollments),d=Math.max(0,e-q);return {e,q,d,n:i===0?d:0,o:i===0?0:d,g:f.graduatingStudents,m:maintenanceStudents(f,a.maintenanceScholarshipMonthlyValue)};});const labels=["Nuevos 100% descuento","Antiguos 100% descuento","Beca externa","Graduación","Tesistas en extensión","Manutención estudiantes","Matrículas totales","INGRESOS POR MATRÍCULA","INGRESOS POR ARANCEL EFECTIVO"];labels.forEach((label,k)=>{const r=4+k,cells=[tc(`A${r}`,label,r>=11?S.bold:S.normal)];ys.forEach((y,i)=>{const c=col(i+2),x=data[i],f=yf(result,y);let v=0;if(r===4)v=x.n;else if(r===5)v=x.o;else if(r===6)v=x.q;else if(r===7)v=x.g;else if(r===8)v=0;else if(r===9)v=x.m;else if(r===10)v=x.e;if(r===11)cells.push(fc(`${c}${r}`,`${c}10*'Parámetros'!${c}5`,f.grossEnrollmentFee,S.subtotal));else if(r===12)cells.push(fc(`${c}${r}`,`${c}6*'Parámetros'!${c}4`,f.tuitionAfterBenefits,S.subtotal));else cells.push(nc(`${c}${r}`,v));});rows.push(row(r,cells));});return sheet(`A1:${last}12`,rows,`<col min="1" max="1" width="38" customWidth="1"/><col min="2" max="${ys.length+1}" width="17" customWidth="1"/>`,`A1:${last}1`);}
 
-function courseType(course:ProgramCourse){if(course.kind==="GRADUACION")return "Graduación";if(course.kind==="ELECTIVA")return "Electiva";if(course.kind==="ESPECIALIZACION")return "Especialización";return "Obligatoria";}
 function teachingSheet(budget:CohortBudget,result:BudgetResult,parameters:InstitutionalParameters){
   const ys=result.years;
   const paid=payableCurriculumCourses(budget.program);
@@ -68,7 +67,7 @@ function teachingSheet(budget:CohortBudget,result:BudgetResult,parameters:Instit
     // Respaldo: un Doctorado nunca debe exportarse sin horas si éstas ya existen
     // en los parámetros semestrales del presupuesto. Cuando la malla no está cargada
     // en D1, se informa la carga registrada por semestre hasta completar la malla.
-    budget.semesters.forEach((semester:any,index:number)=>{
+    budget.semesters.forEach((semester: SemesterParameters, index: number) => {
       const yearIndex=ys.indexOf(semester.year);
       if(yearIndex<0)return;
       const annual=resolvedAnnualOverrideForYear(budget,parameters,semester.year);
