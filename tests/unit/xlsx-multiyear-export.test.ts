@@ -101,18 +101,18 @@ describe("exportación XLSX multianual", () => {
     expect(patch).toContain("IFERROR((${col}8+${col}38)/${col}8,0)");
   });
 
-  it("v13.0.7 usa la misma identidad operacional de la plataforma y evita LET/@", () => {
+  it("v13.0.8 conserva LET en el punto de equilibrio y evita el operador @ espurio", () => {
     const patch = source("lib/export/institutional-budget-break-even-formula.ts");
 
     expect(patch).toContain("38:${lastYearColumn}38");
     expect(patch).toContain("37:${lastYearColumn}37");
     expect(patch).toContain("11:${lastYearColumn}11");
     expect(patch).toContain("7:${lastYearColumn}7");
-    expect(patch).toContain("const formula = `IFERROR(");
+    expect(patch).toContain("const equilibriumFormula = `LET(");
     expect(patch).toContain("setNumber(totalFlow, `${col}7`, flow.recognizedEnrollmentFee)");
     expect(patch).not.toContain("const recognition = clampRate(budget.enrollmentRecognitionRate)");
-    expect(patch).not.toContain("`LET(");
     expect(patch).not.toContain("@LET");
+    expect(patch).not.toContain("`@LET(");
   });
 
   it("mantiene una firma Promise<void> compatible con los consumidores de exportación", () => {
