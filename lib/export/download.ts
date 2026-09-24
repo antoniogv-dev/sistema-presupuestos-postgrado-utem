@@ -61,7 +61,7 @@ function institutionalBudgetFilename(budget: CohortBudget): string {
   return `${budget.startYear} - ${programName}.xlsx`;
 }
 
-const INSTITUTIONAL_TEMPLATE_URL = "/templates/presupuesto-profesional-formula-base-v10-30.xlsx?v=24e7b6a886161646";
+const INSTITUTIONAL_TEMPLATE_URL = "/templates/presupuesto-profesional-formula-base-v10-30.xlsx?v=13.0.10-no-let";
 const INSTITUTIONAL_TEMPLATE_SHA256 = "24e7b6a886161646d2db9ff9015d261ecaebdb86b6548bd292baddbd5d89853e";
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
