@@ -215,6 +215,22 @@ export async function alignInstitutionalBreakEvenFormula(
   const lastYearColumn = yearColumn(result.years.length - 1);
   const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, parameters);
 
+  // Formato maestro de Magíster Profesional: conserva FLUJO TOTAL exactamente
+  // con la estructura y vínculos del archivo institucional de referencia.
+  // Sólo se corrige aquí el punto de equilibrio para abarcar el horizonte real.
+  if (budget.program.type === "MAGISTER_PROFESIONAL" && result.years.length > 0) {
+    const badDebtParameterRow = 10 + discountSlots;
+    const centralOverheadParameterRow = 11 + discountSlots;
+    const facultyOverheadParameterRow = 12 + discountSlots;
+    const totalStudentsRow = 4 + discountSlots;
+    let studentSheet = decoder.decode(files.get(studentSheetName)!);
+    const equilibriumFormula = `LET(costosFijos,ABS(SUM('FLUJO TOTAL'!${firstYearColumn}37:${lastYearColumn}37)-SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)-SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10)),aporteArancel,SUMPRODUCT('Parámetros'!${firstYearColumn}4:${lastYearColumn}4,1-'Parámetros'!${firstYearColumn}${badDebtParameterRow}:${lastYearColumn}${badDebtParameterRow},1-'Parámetros'!${firstYearColumn}${centralOverheadParameterRow}:${lastYearColumn}${centralOverheadParameterRow}-'Parámetros'!${firstYearColumn}${facultyOverheadParameterRow}:${lastYearColumn}${facultyOverheadParameterRow}),aporteMatricula,(SUM('Parámetros'!${firstYearColumn}5:${lastYearColumn}5)-SUM('Parámetros'!${firstYearColumn}8:${lastYearColumn}8))*(${firstYearColumn}${totalStudentsRow}/${firstYearColumn}${equivalentStudentsRow}),costosFijos/(aporteArancel+aporteMatricula))`;
+    studentSheet = setFormula(studentSheet, `${firstYearColumn}${equilibriumRow}`, equilibriumFormula, equilibrium.minimumEquivalentEnrollmentsExact ?? 0);
+    studentSheet = setFormula(studentSheet, `${firstYearColumn}${equilibriumRow + 1}`, `ROUNDUP(${firstYearColumn}${equilibriumRow},0)`, equilibrium.minimumWholeStudents ?? 0);
+    files.set(studentSheetName, encoder.encode(studentSheet));
+    return zip(files);
+  }
+
   let totalFlow = decoder.decode(files.get(totalSheetName)!);
 
   // Inserta Reconocimiento de Matrícula en la fila 7 y materializa la fila final 42.
