@@ -135,7 +135,7 @@ function discountApplies(discount: CohortBudget["discounts"][number], semester: 
   return value >= periodOrdinal(discount.startYear, discount.startSemester) && value <= periodOrdinal(discount.endYear, discount.endSemester);
 }
 function exportableDiscounts(budget: CohortBudget): CohortBudget["discounts"] {
-  return budget.discounts.filter((discount) => discount.target !== "ENROLLMENT" && Math.max(0, Math.min(1, discount.percentage)) > 0);
+  return budget.discounts.filter((discount) => (discount.target ?? "TUITION") === "TUITION" && Math.max(0, Math.min(1, discount.percentage)) > 0);
 }
 function semesterForPeriod(budget: CohortBudget, year: number, semester: 1 | 2): SemesterParameters | undefined {
   return budget.semesters.find((item) => item.year === year && item.semester === semester);
@@ -156,6 +156,11 @@ function enrollmentChargeSemestersForYear(budget: CohortBudget, year: number): S
     .filter((period) => period.year === year)
     .map((period) => semesterForPeriod(budget, period.year, period.semester))
     .filter((semester): semester is SemesterParameters => Boolean(semester));
+}
+function enrollmentDiscountEquivalentUnitsForYear(budget: CohortBudget, year: number): number {
+  return enrollmentChargeSemestersForYear(budget, year).reduce((total, semester) => total + budget.discounts
+    .filter((discount) => discount.target === "ENROLLMENT" && discountApplies(discount, semester))
+    .reduce((sum, discount) => sum + Math.max(0, discount.students) * Math.max(0, Math.min(1, discount.percentage)), 0), 0);
 }
 function enrollmentBillingUnitsForYear(budget: CohortBudget, year: number): number {
   // ANNUAL: estudiantes cobrados una vez en el semestre que inicia cada bloque bienal.
@@ -248,6 +253,7 @@ export async function normalizeInstitutionalEnrollmentBilling(
     studentSheet = setNumber(studentSheet, `${col}${rows.graduationStudentsRow}`, flow.graduatingStudents);
 
     const enrollmentUnits = enrollmentBillingUnitsForYear(budget, year);
+    const enrollmentDiscountEquivalentUnits = enrollmentDiscountEquivalentUnitsForYear(budget, year);
     const enrollmentUnitPrice = enrollmentUnitPriceForYear(budget, year, flow.grossEnrollmentFee, override.annualEnrollmentFee);
     // La fila 5 de Parámetros representa el valor unitario aplicable a la modalidad elegida
     // en cada año: anual, por semestre o único/total. En años sin cobro queda en cero.
