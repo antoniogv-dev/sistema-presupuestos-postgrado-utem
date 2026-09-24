@@ -353,7 +353,7 @@ export async function createInstitutionalFormulaBudgetXlsx(
   const thesisUnit2 = thesisGuidancePerStudentForYear(flow2);
   // La fórmula institucional de equilibrio conserva al menos el horizonte B:D solicitado por Postgrado.
   // Si la plantilla tiene sólo dos años efectivos, D permanece vacío y Excel lo trata como 0.
-  const lastYearColumn = String.fromCharCode(65 + Math.max(3, result.years.length));
+  const lastYearColumn = String.fromCharCode(65 + Math.max(2, result.years.length));
   const modality = modalityLabel(budget);
 
   // 1. Parámetros: reproduce la versión mejorada aportada por Postgrado.
