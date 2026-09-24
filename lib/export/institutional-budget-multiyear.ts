@@ -338,11 +338,18 @@ function extendStudentFlowSheet(sheetXml: string, budget: CohortBudget, result: 
     output = clearCell(output, `${col}${rows.equilibriumWholeStudentsRow}`);
   }
   const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, parameters);
+  const nonOperationalIncomeTotal = result.annualFlows.reduce(
+    (total, flow) => total + flow.externalIncome + flow.institutionalFinancing + flow.otherIncome,
+    0,
+  );
   output = setFormula(output, `B${rows.equilibriumRow}`, breakEvenExcelFormula(
     result.years.map((_year, index) => yearColumn(index)),
     rows.badDebtParameterRow,
     rows.centralOverheadParameterRow,
     rows.facultyOverheadParameterRow,
+    undefined,
+    rows.equivalentStudentsRow,
+    nonOperationalIncomeTotal,
   ), equilibrium.minimumEquivalentEnrollments ?? 0);
   output = setFormula(output, `B${rows.equilibriumWholeStudentsRow}`, `ROUNDUP(B${rows.equilibriumRow},0)`, equilibrium.minimumWholeStudents ?? 0);
   return output;
