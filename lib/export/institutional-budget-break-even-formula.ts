@@ -219,12 +219,15 @@ export async function alignInstitutionalBreakEvenFormula(
   // con la estructura y vínculos del archivo institucional de referencia.
   // Sólo se corrige aquí el punto de equilibrio para abarcar el horizonte real.
   if (budget.program.type === "MAGISTER_PROFESIONAL" && result.years.length > 0) {
-    const badDebtParameterRow = 10 + discountSlots;
-    const centralOverheadParameterRow = 11 + discountSlots;
-    const facultyOverheadParameterRow = 12 + discountSlots;
-    const totalStudentsRow = 4 + discountSlots;
     let studentSheet = decoder.decode(files.get(studentSheetName)!);
-    const equilibriumFormula = `LET(costosFijos,ABS(SUM('FLUJO TOTAL'!${firstYearColumn}37:${lastYearColumn}37)-SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)-SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10)),aporteArancel,SUMPRODUCT('Parámetros'!${firstYearColumn}4:${lastYearColumn}4,1-'Parámetros'!${firstYearColumn}${badDebtParameterRow}:${lastYearColumn}${badDebtParameterRow},1-'Parámetros'!${firstYearColumn}${centralOverheadParameterRow}:${lastYearColumn}${centralOverheadParameterRow}-'Parámetros'!${firstYearColumn}${facultyOverheadParameterRow}:${lastYearColumn}${facultyOverheadParameterRow}),aporteMatricula,(SUM('Parámetros'!${firstYearColumn}5:${lastYearColumn}5)-SUM('Parámetros'!${firstYearColumn}8:${lastYearColumn}8))*(${firstYearColumn}${totalStudentsRow}/${firstYearColumn}${equivalentStudentsRow}),costosFijos/(aporteArancel+aporteMatricula))`;
+    const nonOperationalIncomeTotal = result.annualFlows.reduce(
+      (total, flow) => total + flow.externalIncome + flow.institutionalFinancing + flow.otherIncome,
+      0,
+    );
+    const nonOperationalAdjustment = nonOperationalIncomeTotal ? `-${nonOperationalIncomeTotal}` : "";
+    const fixedCosts = `ABS(SUM('FLUJO TOTAL'!${firstYearColumn}37:${lastYearColumn}37)-SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)-SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10))`;
+    const currentNetContribution = `SUM('FLUJO TOTAL'!${firstYearColumn}7:${lastYearColumn}7)+SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)+SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10)${nonOperationalAdjustment}`;
+    const equilibriumFormula = `IFERROR(${fixedCosts}*${firstYearColumn}${equivalentStudentsRow}/(${currentNetContribution}),0)`;
     studentSheet = setFormula(studentSheet, `${firstYearColumn}${equilibriumRow}`, equilibriumFormula, equilibrium.minimumEquivalentEnrollmentsExact ?? 0);
     studentSheet = setFormula(studentSheet, `${firstYearColumn}${equilibriumRow + 1}`, `ROUNDUP(${firstYearColumn}${equilibriumRow},0)`, equilibrium.minimumWholeStudents ?? 0);
     files.set(studentSheetName, encoder.encode(studentSheet));
