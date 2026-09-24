@@ -366,7 +366,7 @@ test("v11.0.3 exporta N descuentos como filas independientes y mantiene las fór
   assert.match(studentXml, /<dimension ref="A1:C21"\/>/);
   assert.match(studentXml, /<c(?=[^>]*\br="B19")[^>]*>[\s\S]*?<f>SUM\(B13:B18\)<\/f>/);
   const manyStudentFormulas = formulaMap(studentXml);
-  assert.equal(formulaForCell(studentXml, "B20"), "LET(costosFijos,ABS(SUM('FLUJO TOTAL'!B37:C37)-SUM('FLUJO TOTAL'!B36:C36)-SUM('FLUJO TOTAL'!B10:C10)),aporteArancel,SUMPRODUCT(Parámetros!B4:C4,1-Parámetros!B15:D15,1-Parámetros!B16:D16-Parámetros!B17:D17),aporteMatricula,(SUM(Parámetros!B5:C5)-SUM(Parámetros!B8:C8))*(B9/B10),costosFijos/(aporteArancel+aporteMatricula))");
+  assert.equal(formulaForCell(studentXml, "B20"), "LET(costosFijos,ABS(SUM('FLUJO TOTAL'!B37:C37)-SUM('FLUJO TOTAL'!B36:C36)-SUM('FLUJO TOTAL'!B10:C10)),aporteArancel,SUMPRODUCT(Parámetros!B4:C4,1-Parámetros!B15:C15,1-Parámetros!B16:C16-Parámetros!B17:C17),aporteMatricula,(SUM(Parámetros!B5:C5)-SUM(Parámetros!B8:C8))*(B9/B10),costosFijos/(aporteArancel+aporteMatricula))");
   assert.equal(formulaForCell(studentXml, "B21"), "ROUNDUP(B20,0)");
   assert.match(flowXml, /<c(?=[^>]*\br="B5")[^>]*>[\s\S]*?<f>'Flujo estudiantes'!B19<\/f>/);
   assert.match(flowXml, /<c(?=[^>]*\br="B6")[^>]*>[\s\S]*?<f>-B5\*Parámetros!B15<\/f>/);
