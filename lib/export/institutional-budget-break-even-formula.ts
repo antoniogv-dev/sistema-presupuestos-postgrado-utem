@@ -228,8 +228,13 @@ export async function alignInstitutionalBreakEvenFormula(
     const fixedCosts = `ABS(SUM('FLUJO TOTAL'!${firstYearColumn}37:${lastYearColumn}37)-SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)-SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10))`;
     const currentNetContribution = `SUM('FLUJO TOTAL'!${firstYearColumn}7:${lastYearColumn}7)+SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)+SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10)${nonOperationalAdjustment}`;
     const equilibriumFormula = `IFERROR(${fixedCosts}*${firstYearColumn}${equivalentStudentsRow}/(${currentNetContribution}),0)`;
-    studentSheet = setFormula(studentSheet, `${firstYearColumn}${equilibriumRow}`, equilibriumFormula, equilibrium.minimumEquivalentEnrollmentsExact ?? 0);
+    const equilibriumRef = `${firstYearColumn}${equilibriumRow}`;
+    studentSheet = setFormula(studentSheet, equilibriumRef, equilibriumFormula, equilibrium.minimumEquivalentEnrollmentsExact ?? 0);
     studentSheet = setFormula(studentSheet, `${firstYearColumn}${equilibriumRow + 1}`, `ROUNDUP(${firstYearColumn}${equilibriumRow},0)`, equilibrium.minimumWholeStudents ?? 0);
+    const equilibriumCell = studentSheet.match(cellPattern(equilibriumRef))?.[0] ?? "";
+    if (/(?:@|_xludf\.)?LET\s*\(/i.test(equilibriumCell)) {
+      throw new Error("XLSX_EQUILIBRIO_OBSOLETO: la fórmula de punto de equilibrio contiene LET/@. Recargue completamente la aplicación antes de volver a exportar.");
+    }
     files.set(studentSheetName, encoder.encode(studentSheet));
     return zip(files);
   }
