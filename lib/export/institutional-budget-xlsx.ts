@@ -259,6 +259,7 @@ export function breakEvenExcelFormula(
   facultyOverheadParameterRow: number,
   totalStudentsRow?: number,
   equivalentStudentsRow?: number,
+  nonOperationalIncomeTotal = 0,
 ): string {
   const yearColumns = Array.isArray(yearColumnsOrLastColumn)
     ? (yearColumnsOrLastColumn.length ? yearColumnsOrLastColumn : ["B"])
@@ -267,13 +268,24 @@ export function breakEvenExcelFormula(
   const lastYearColumn = yearColumns.at(-1) ?? firstYearColumn;
 
   // En la plantilla institucional las filas de estudiantes se desplazan cuando hay
-  // más de dos descuentos. Si el llamador multianual no entrega explícitamente las
-  // filas, se deducen desde la fila de incobrabilidad (10 + cantidad de descuentos).
+  // más de dos descuentos. La fila de incobrabilidad permite deducir la posición
+  // de las matrículas equivalentes sin depender de un número fijo de beneficios.
   const discountSlots = Math.max(2, badDebtParameterRow - 10);
-  const resolvedTotalStudentsRow = totalStudentsRow ?? (4 + discountSlots);
   const resolvedEquivalentStudentsRow = equivalentStudentsRow ?? (5 + discountSlots);
+  void centralOverheadParameterRow;
+  void facultyOverheadParameterRow;
+  void totalStudentsRow;
 
-  return `LET(costosFijos,ABS(SUM('FLUJO TOTAL'!${firstYearColumn}37:${lastYearColumn}37)-SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)-SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10)),aporteArancel,SUMPRODUCT(Parámetros!${firstYearColumn}4:${lastYearColumn}4,1-Parámetros!${firstYearColumn}${badDebtParameterRow}:${lastYearColumn}${badDebtParameterRow},1-Parámetros!${firstYearColumn}${centralOverheadParameterRow}:${lastYearColumn}${centralOverheadParameterRow}-Parámetros!${firstYearColumn}${facultyOverheadParameterRow}:${lastYearColumn}${facultyOverheadParameterRow}),aporteMatricula,(SUM(Parámetros!${firstYearColumn}5:${lastYearColumn}5)-SUM(Parámetros!${firstYearColumn}8:${lastYearColumn}8))*(${firstYearColumn}${resolvedTotalStudentsRow}/${firstYearColumn}${resolvedEquivalentStudentsRow}),costosFijos/(aporteArancel+aporteMatricula))`;
+  // Misma identidad que calculateBreakEvenComponents():
+  // costos fijos = costos totales - overhead - guía de tesis
+  // aporte actual = ingresos operacionales - overhead - guía de tesis
+  // aporte unitario = aporte actual / matrículas equivalentes actuales
+  // Se resta sólo ingreso no operacional porque FLUJO TOTAL!7 ya incorpora matrícula
+  // reconocida, financiamiento institucional e ingresos extraordinarios.
+  const nonOperationalAdjustment = nonOperationalIncomeTotal ? `-${nonOperationalIncomeTotal}` : "";
+  const fixedCosts = `ABS(SUM('FLUJO TOTAL'!${firstYearColumn}37:${lastYearColumn}37)-SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)-SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10))`;
+  const currentNetContribution = `SUM('FLUJO TOTAL'!${firstYearColumn}7:${lastYearColumn}7)+SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)+SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10)${nonOperationalAdjustment}`;
+  return `IFERROR(${fixedCosts}*${firstYearColumn}${resolvedEquivalentStudentsRow}/(${currentNetContribution}),0)`;
 }
 
 function modalityLabel(budget: CohortBudget): string {
@@ -428,9 +440,13 @@ export async function createInstitutionalFormulaBudgetXlsx(
   s2 = setFormula(s2, `B${noDiscountIncomeRow}`, `(B3)*Parámetros!$B$4`, no1 * tuitionUnit1); s2 = setFormula(s2, `C${noDiscountIncomeRow}`, `(C3)*Parámetros!$C$4`, no2 * tuitionUnit2);
   s2 = setFormula(s2, `B${totalTuitionIncomeRow}`, `SUM(B${noDiscountIncomeRow}:B${discountIncomeStartRow + discountSlots - 1})`, flow1.tuitionAfterBenefits); s2 = setFormula(s2, `C${totalTuitionIncomeRow}`, `SUM(C${noDiscountIncomeRow}:C${discountIncomeStartRow + discountSlots - 1})`, flow2.tuitionAfterBenefits);
   const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, parameters);
+  const nonOperationalIncomeTotal = result.annualFlows.reduce(
+    (total, flow) => total + flow.externalIncome + flow.institutionalFinancing + flow.otherIncome,
+    0,
+  );
   const equilibriumFormula = breakEvenExcelFormula(
     lastYearColumn, badDebtParameterRow, centralOverheadParameterRow, facultyOverheadParameterRow,
-    totalStudentsRow, equivalentStudentsRow,
+    totalStudentsRow, equivalentStudentsRow, nonOperationalIncomeTotal,
   );
   s2 = setFormula(s2, `B${equilibriumRow}`, equilibriumFormula, equilibrium.minimumEquivalentEnrollmentsExact ?? 0);
   s2 = setText(s2, `C${equilibriumRow}`, "matrículas equivalentes");
