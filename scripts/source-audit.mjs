@@ -900,8 +900,8 @@ for (const marker of ["memorandum-presupuesto-base-v11-0-6.docx", "Para la elabo
 const institutionalXlsxV1108 = await readFile(path.join(root, "lib/export/institutional-budget-xlsx.ts"), "utf8");
 const institutionalXlsxTestV1108 = await readFile(path.join(root, "demo/tests/institutional-xlsx.test.mjs"), "utf8");
 const breakEvenV1108 = await readFile(path.join(root, "lib/calculations/break-even.ts"), "utf8");
-for (const marker of ["export function breakEvenExcelFormula", "yearColumnsOrLastColumn: string[] | string", "LET(costosFijos", "SUMPRODUCT(Parámetros!${firstYearColumn}4:${lastYearColumn}4", "SUM(Parámetros!${firstYearColumn}5:${lastYearColumn}5)-SUM(Parámetros!${firstYearColumn}8:${lastYearColumn}8)", "${firstYearColumn}${resolvedTotalStudentsRow}/${firstYearColumn}${resolvedEquivalentStudentsRow}", "matrículas equivalentes", "ROUNDUP(B${equilibriumRow},0)"]) if (!institutionalXlsxV1108.includes(marker)) fail(`XLSX v12.1.2 punto de equilibrio: falta ${marker}.`);
-for (const marker of ["v12.1.2 exporta el punto de equilibrio incorporando matrícula y guía de tesis", "LET(costosFijos,ABS(SUM('FLUJO TOTAL'!B37:C37)", "SUM(Parámetros!B5:C5)-SUM(Parámetros!B8:C8)", "ROUNDUP(B14,0)"]) if (!institutionalXlsxTestV1108.includes(marker)) fail(`XLSX v12.1.2 pruebas: falta ${marker}.`);
+for (const marker of ["export function breakEvenExcelFormula", "yearColumnsOrLastColumn: string[] | string", "const fixedCosts", "const currentNetContribution", "SUM('FLUJO TOTAL'!${firstYearColumn}7:${lastYearColumn}7)", "nonOperationalIncomeTotal", "${firstYearColumn}${resolvedEquivalentStudentsRow}", "matrículas equivalentes", "ROUNDUP(B${equilibriumRow},0)"]) if (!institutionalXlsxV1108.includes(marker)) fail(`XLSX v13.0.9 punto de equilibrio: falta ${marker}.`);
+for (const marker of ["v12.1.2 exporta el punto de equilibrio incorporando matrícula y guía de tesis", "IFERROR(ABS(SUM('FLUJO TOTAL'!B37:C37)", "SUM('FLUJO TOTAL'!B7:C7)", "ROUNDUP(B14,0)"]) if (!institutionalXlsxTestV1108.includes(marker)) fail(`XLSX v13.0.9 pruebas: falta ${marker}.`);
 for (const marker of ["calculateBreakEvenComponents", "flow.totalExpenses - flow.centralOverhead - flow.facultyOverhead - flow.thesisGuidanceCost", "enrollmentPerActualStudent - thesisGuidancePerActualStudent", "actualStudentsReference / equivalentEnrollmentsReference", "contributionPerEquivalentEnrollment"]) if (!breakEvenV1108.includes(marker)) fail(`Motor v12.1.2 punto de equilibrio: falta ${marker}.`);
 
 // v11.0.9: etiquetas limpias en Flujo estudiantes; las fórmulas permanecen en B14/B15.
@@ -1023,3 +1023,5 @@ if (failures.length) {
 }
 
 console.log(`Auditoría de código correcta${warnings.length ? `, con ${warnings.length} advertencia(s)` : ""}.`);
+
+if (institutionalXlsxV1108.includes("LET(costosFijos") || institutionalXlsxV1108.includes("@LET") || institutionalXlsxV1108.includes("_xludf.LET")) fail("XLSX v13.0.9: el punto de equilibrio no debe depender de LET/@.");
