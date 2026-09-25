@@ -155,6 +155,42 @@ function annualFlowPhrase(result: BudgetResult): string {
 function annualAccumulatedPhrase(result: BudgetResult): string {
   return joinSpanish(result.years.map((year, index) => `${money(result.annualFlows[index].accumulatedFlow)} al cierre de ${year}`));
 }
+
+function financialStructureDescription(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters): string {
+  const firstYear = result.years[0] ?? budget.startYear;
+  const firstAnnual = resolvedAnnualOverrideForYear(budget, parameters, firstYear);
+  const isMaster = budget.program.type === "MAGISTER_PROFESIONAL" || budget.program.type === "MAGISTER_ACADEMICO";
+
+  if (isMaster && budget.durationSemesters === 3) {
+    const totalTuition = budget.programTotalTuition ?? 0;
+    const tuitionText = totalTuition > 0
+      ? `un arancel total para el programa completo de ${money(totalTuition)}`
+      : "un arancel total para el programa completo";
+    const enrollmentValue = budget.singleEnrollmentFee ?? 0;
+    const enrollmentText = enrollmentValue > 0
+      ? `una matrícula única de ${money(enrollmentValue)}, cobrada una sola vez al inicio del programa`
+      : "una matrícula única, cobrada una sola vez al inicio del programa";
+    return `Por tratarse de un Magíster de tres semestres, la estructura financiera considera ${tuitionText}, y no un arancel anual. Este arancel puede pagarse hasta en 18 cuotas. Asimismo, se contempla ${enrollmentText}.`;
+  }
+
+  if (budget.program.type === "DOCTORADO") {
+    return `El programa mantiene una estructura anual de cobro, considerando matrícula anual durante cada año de permanencia y arancel anual conforme a los valores vigentes del respectivo período. Para ${firstYear}, la matrícula anual de referencia corresponde a ${money(firstAnnual.annualEnrollmentFee)}.`;
+  }
+
+  if (isMaster && budget.durationSemesters === 4) {
+    return `Por tratarse de un Magíster de cuatro semestres, el modelo considera arancel anual y matrícula anual durante los dos años académicos del programa. Para ${firstYear}, la matrícula anual de referencia corresponde a ${money(firstAnnual.annualEnrollmentFee)}.`;
+  }
+
+  const enrollmentMode = budget.enrollmentBillingMode === "SINGLE_SPECIAL"
+    ? "matrícula única al inicio del programa"
+    : budget.enrollmentBillingMode === "SEMESTER"
+      ? "matrícula semestral"
+      : "matrícula anual";
+  const tuitionMode = budget.tuitionPricingMode === "PROGRAM_TOTAL"
+    ? `arancel total para el programa completo${budget.tuitionInstallments ? `, pagadero en hasta ${budget.tuitionInstallments} cuotas` : ""}`
+    : "arancel anual";
+  return `La estructura financiera registrada para la cohorte considera ${tuitionMode} y ${enrollmentMode}.`;
+}
 function prorationDescription(budget: CohortBudget, parameters: InstitutionalParameters, result: BudgetResult): string {
   const byYear = result.years.map((year) => {
     const override = resolvedAnnualOverrideForYear(budget, parameters, year);
@@ -266,7 +302,8 @@ export function buildMemorandumBody(
 
   const context = `Cabe señalar que la presente proyección se formula considerando el inicio de la cohorte durante el ${semesterLabel} de ${budget.startYear} y su ejecución hasta ${lastYear}, conforme a la calendarización académica y presupuestaria registrada para el programa.${carryoverSentence}`;
 
-  const assumptions = `La proyección considera ${annualStudentPhrase(result, activeByYear)}${discountSentence}. Asimismo, se incorpora una incobrabilidad estimada del ${(badDebtRate * 100).toLocaleString("es-CL", { maximumFractionDigits: 1 })}%, además de los costos de docencia, guía o revisión de tesis, staff, gastos de operación y overhead institucional correspondientes a ${joinSpanish(result.years.map(String))}.${additionalIncomeSentence}`;
+  const financialStructure = financialStructureDescription(budget, result, parameters);
+  const assumptions = `La proyección considera ${annualStudentPhrase(result, activeByYear)}${discountSentence}. ${financialStructure} Asimismo, se incorpora una incobrabilidad estimada del ${(badDebtRate * 100).toLocaleString("es-CL", { maximumFractionDigits: 1 })}%, además de los costos de docencia, guía o revisión de tesis, staff, gastos de operación y overhead institucional correspondientes a ${joinSpanish(result.years.map(String))}.${additionalIncomeSentence}`;
 
   const financial = `Bajo estos supuestos, los ingresos efectivos proyectados ascienden a ${annualMoneyPhrase(result, (index) => result.annualFlows[index].totalIncome)}. Por su parte, los costos y gastos se estiman en ${annualMoneyPhrase(result, (index) => result.annualFlows[index].totalExpenses)}, y el resultado económico acumulado proyectado para el ciclo ${yearsLabel} alcanza un saldo ${balanceLabel} de ${balanceAmount}.`;
 
