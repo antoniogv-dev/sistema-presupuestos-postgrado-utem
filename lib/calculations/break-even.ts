@@ -17,6 +17,10 @@ export interface BreakEvenComponents {
   operationalExpenses: number;
   operationalResult: number;
   variableExpenses: number;
+  nonOperationalIncome: number;
+  startingCarryover: number;
+  finalResult: number;
+  financialFixedRequirement: number;
 }
 
 export interface BreakEvenResult {
@@ -56,6 +60,10 @@ const zeroComponents = (): BreakEvenComponents => ({
   operationalExpenses: 0,
   operationalResult: 0,
   variableExpenses: 0,
+  nonOperationalIncome: 0,
+  startingCarryover: 0,
+  finalResult: 0,
+  financialFixedRequirement: 0,
 });
 
 /**
@@ -73,15 +81,19 @@ const zeroComponents = (): BreakEvenComponents => ({
  *       (ingresos operacionales actuales - costos variables actuales)
  *       / matrículas equivalentes actuales
  *
- *   punto de equilibrio = costos fijos / aporte por matrícula equivalente
+ *   requerimiento financiero fijo =
+ *       costos fijos - ingresos no operacionales - arrastre inicial
+ *
+ *   punto de equilibrio financiero =
+ *       requerimiento financiero fijo / aporte por matrícula equivalente
  *
  * De esta forma, por construcción matemática:
- *   actuales > equilibrio  => resultado operacional > 0
- *   actuales = equilibrio  => resultado operacional = 0
- *   actuales < equilibrio  => resultado operacional < 0
+ *   actuales > equilibrio  => saldo final acumulado > 0
+ *   actuales = equilibrio  => saldo final acumulado = 0
+ *   actuales < equilibrio  => saldo final acumulado < 0
  *
- * Ingresos extraordinarios, financiamiento institucional y arrastre permanecen fuera del
- * indicador estructural de viabilidad. Sí continúan formando parte del flujo contable total.
+ * El resultado operacional se conserva como indicador analítico, pero la viabilidad y el
+ * punto de equilibrio principal se concilian con el saldo final que ve el usuario.
  *
  * Compatibilidad de auditoría histórica v12.1.2:
  * enrollmentPerActualStudent - thesisGuidancePerActualStudent
@@ -110,6 +122,12 @@ export function calculateBreakEvenComponents(
   );
   const operationalExpenses = current.annualFlows.reduce((total, flow) => total + flow.totalExpenses, 0);
   const operationalResult = operationalIncome - operationalExpenses;
+  const nonOperationalIncome = current.annualFlows.reduce(
+    (total, flow) => total + flow.externalIncome + flow.institutionalFinancing + flow.otherIncome,
+    0,
+  );
+  const startingCarryover = current.annualFlows[0]?.startingCarryover ?? 0;
+  const finalResult = current.finalAccumulatedFlow;
 
   const enrollmentPerActualStudent = enrollmentChargePeriodsForBudget(budget).reduce((total, period) => {
     const override = resolvedAnnualOverrideForYear(budget, parameters, period.year);
@@ -157,6 +175,7 @@ export function calculateBreakEvenComponents(
     ? enrollmentNetContributionTotal / equivalentEnrollmentsReference
     : 0;
   const contributionPerEquivalentEnrollment = tuitionContribution + enrollmentContribution;
+  const financialFixedRequirement = Math.max(0, fixedCosts - nonOperationalIncome - startingCarryover);
 
   return {
     fixedCosts,
@@ -173,12 +192,16 @@ export function calculateBreakEvenComponents(
     operationalExpenses,
     operationalResult,
     variableExpenses,
+    nonOperationalIncome,
+    startingCarryover,
+    finalResult,
+    financialFixedRequirement,
   };
 }
 
 /**
- * Punto de equilibrio estructural expresado en matrículas equivalentes.
- * Usa exactamente los ingresos operacionales y costos que determinan la viabilidad mínima.
+ * Punto de equilibrio financiero expresado en matrículas equivalentes.
+ * Se concilia exactamente con el saldo final acumulado del presupuesto.
  */
 export function calculateBreakEvenEquivalentEnrollments(
   budget: CohortBudget,
@@ -187,7 +210,7 @@ export function calculateBreakEvenEquivalentEnrollments(
   const components = calculateBreakEvenComponents(budget, parameters);
   const currentEquivalentEnrollments = components.equivalentEnrollmentsReference;
 
-  if (components.fixedCosts === 0) {
+  if (components.financialFixedRequirement === 0) {
     return {
       minimumEquivalentEnrollments: 0,
       minimumEquivalentEnrollmentsExact: 0,
@@ -213,10 +236,10 @@ export function calculateBreakEvenEquivalentEnrollments(
     };
   }
 
-  const exact = components.fixedCosts / components.contributionPerEquivalentEnrollment;
+  const exact = components.financialFixedRequirement / components.contributionPerEquivalentEnrollment;
   const minimum = Math.ceil((exact - 1e-9) * 100) / 100;
   const minimumWholeStudents = Math.ceil(exact - 1e-9);
-  const projectedFinalFlowAtMinimum = minimum * components.contributionPerEquivalentEnrollment - components.fixedCosts;
+  const projectedFinalFlowAtMinimum = minimum * components.contributionPerEquivalentEnrollment - components.financialFixedRequirement;
   const equivalentEnrollmentGap = exact - currentEquivalentEnrollments;
 
   return {
