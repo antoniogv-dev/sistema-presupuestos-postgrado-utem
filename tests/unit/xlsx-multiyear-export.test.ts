@@ -101,15 +101,16 @@ describe("exportación XLSX multianual", () => {
     expect(patch).toContain("IFERROR((${col}8+${col}38)/${col}8,0)");
   });
 
-  it("v13.0.9 usa la identidad operacional del motor y evita LET/@ en el punto de equilibrio", () => {
+  it("v13.0.10 usa el saldo final como identidad de equilibrio y evita LET/@", () => {
     const patch = source("lib/export/institutional-budget-break-even-formula.ts");
 
-    expect(patch).toContain("37:${lastYearColumn}37");
+    expect(patch).toContain("40");
     expect(patch).toContain("36:${lastYearColumn}36");
     expect(patch).toContain("10:${lastYearColumn}10");
     expect(patch).toContain("7:${lastYearColumn}7");
-    expect(patch).toContain("const equilibriumFormula = `IFERROR(");
+    expect(patch).toContain("const equilibriumFormula = `IFERROR(MAX(0,");
     expect(patch).toContain("const currentNetContribution");
+    expect(patch).toContain("const finalBalance");
     expect(patch).toContain("nonOperationalIncomeTotal");
     expect(patch).not.toContain("const recognition = clampRate(budget.enrollmentRecognitionRate)");
     expect(patch).not.toContain("LET(");
