@@ -13,6 +13,8 @@ const { calculateBudget } = await import(path.join(root, ".engine-build/lib/calc
 const { calculateBreakEvenEquivalentEnrollments } = await import(path.join(root, ".engine-build/lib/calculations/break-even.js"));
 const { applyProgramCurriculumToBudget } = await import(path.join(root, ".engine-build/lib/curriculum/budget-load.js"));
 const { createInstitutionalFormulaBudgetXlsx, canUseFormulaTemplate } = await import(path.join(root, ".engine-build/lib/export/institutional-budget-xlsx.js"));
+const { institutionalBudgetForExport, normalizeInstitutionalProgramTotalTuition } = await import(path.join(root, ".engine-build/lib/export/institutional-budget-program-total.js"));
+const { normalizeInstitutionalEnrollmentBilling } = await import(path.join(root, ".engine-build/lib/export/institutional-budget-enrollment-normalizer.js"));
 
 const templatePath = path.join(root, "public/templates/presupuesto-profesional-formula-base-v10-30.xlsx");
 const template = new Uint8Array(readFileSync(templatePath));
@@ -276,7 +278,10 @@ test("v13.0.11 muestra arancel total y matrícula única sólo en el primer año
   three.tuitionInstallments = 18;
   three.semesters = three.semesters.slice(0, 3);
   const threeResult = calculateBudget(three, institutionalParameters);
-  const generated = await createInstitutionalFormulaBudgetXlsx(template, three, threeResult, institutionalParameters);
+  const exportThree = institutionalBudgetForExport(three, threeResult, institutionalParameters);
+  let generated = await createInstitutionalFormulaBudgetXlsx(template, exportThree, threeResult, institutionalParameters);
+  generated = await normalizeInstitutionalEnrollmentBilling(generated, exportThree, threeResult, institutionalParameters);
+  generated = await normalizeInstitutionalProgramTotalTuition(generated, three, threeResult);
   const parameterXml = text(unzip(generated), "xl/worksheets/sheet1.xml");
   assert.equal(inlineTextForCell(parameterXml, "A5"), "Arancel total del programa");
   assert.equal(cachedNumber(parameterXml, "B5"), 6_000_000);
