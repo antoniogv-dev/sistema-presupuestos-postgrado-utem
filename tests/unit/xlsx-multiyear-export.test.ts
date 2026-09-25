@@ -123,6 +123,7 @@ describe("exportación XLSX multianual", () => {
     const xlsx = source("lib/export/institutional-budget-xlsx.ts");
     const enrollment = source("lib/export/institutional-budget-enrollment-normalizer.ts");
     const multiyear = source("lib/export/institutional-budget-multiyear.ts");
+    const staff = source("lib/export/institutional-budget-staff-multiyear.ts");
 
     expect(xlsx).toContain('s1 = setText(s1, "A5", "Arancel total del programa")');
     expect(xlsx).toContain("result.pricing.programTotalTuition");
