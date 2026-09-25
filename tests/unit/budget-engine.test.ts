@@ -192,7 +192,7 @@ describe("motor financiero", () => {
     expect(annual.annualDiffusion).toBe(0);
   });
 
-  it("v13.0.1 calcula el punto de equilibrio con la misma identidad operacional del motor", () => {
+  it("v13.0.10 calcula el punto de equilibrio con la misma identidad del saldo final", () => {
     const budget = clone(demoBudget);
     budget.enrollmentRecognitionRate = 1;
     const result = calculateBudget(budget, institutionalParameters);
@@ -211,18 +211,29 @@ describe("motor financiero", () => {
       0,
     ) / equivalentEnrollments;
     const expectedContribution = tuitionContribution + enrollmentContribution;
-    const exact = fixedCosts / expectedContribution;
+    const nonOperationalIncome = result.annualFlows.reduce(
+      (total, flow) => total + flow.externalIncome + flow.institutionalFinancing + flow.otherIncome,
+      0,
+    );
+    const startingCarryover = result.annualFlows[0]?.startingCarryover ?? 0;
+    const financialRequirement = Math.max(0, fixedCosts - nonOperationalIncome - startingCarryover);
+    const exact = financialRequirement / expectedContribution;
     const expectedOperationalResult = breakEven.currentEquivalentEnrollments * expectedContribution - fixedCosts;
+    const expectedFinalResult = breakEven.currentEquivalentEnrollments * expectedContribution - financialRequirement;
 
     expect(breakEven.components.fixedCosts).toBeCloseTo(fixedCosts, 8);
+    expect(breakEven.components.financialFixedRequirement).toBeCloseTo(financialRequirement, 8);
     expect(breakEven.components.tuitionContribution).toBeCloseTo(tuitionContribution, 8);
     expect(breakEven.components.enrollmentContribution).toBeCloseTo(enrollmentContribution, 8);
     expect(breakEven.components.contributionPerEquivalentEnrollment).toBeCloseTo(expectedContribution, 8);
     expect(breakEven.components.operationalResult).toBeCloseTo(expectedOperationalResult, 8);
+    expect(breakEven.components.finalResult).toBeCloseTo(expectedFinalResult, 8);
+    expect(breakEven.components.finalResult).toBeCloseTo(result.finalAccumulatedFlow, 8);
     expect(breakEven.minimumEquivalentEnrollmentsExact).toBeCloseTo(exact, 8);
     expect(breakEven.minimumEquivalentEnrollments).toBe(Math.ceil((exact - 1e-9) * 100) / 100);
     expect(breakEven.minimumWholeStudents).toBe(Math.ceil(exact - 1e-9));
     expect(breakEven.reached).toBe(breakEven.currentEquivalentEnrollments + 1e-9 >= exact);
+    expect(result.viable).toBe(result.finalAccumulatedFlow >= -1e-6);
     expect(result.viable).toBe(breakEven.reached);
     expect(breakEven.projectedFinalFlowAtMinimum).not.toBeNull();
     expect(breakEven.projectedFinalFlowAtMinimum!).toBeGreaterThanOrEqual(0);
