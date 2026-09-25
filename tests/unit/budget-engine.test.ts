@@ -216,8 +216,8 @@ describe("motor financiero", () => {
       0,
     );
     const startingCarryover = result.annualFlows[0]?.startingCarryover ?? 0;
-    const financialRequirement = Math.max(0, fixedCosts - nonOperationalIncome - startingCarryover);
-    const exact = financialRequirement / expectedContribution;
+    const financialRequirement = fixedCosts - nonOperationalIncome - startingCarryover;
+    const exact = Math.max(0, financialRequirement / expectedContribution);
     const expectedOperationalResult = breakEven.currentEquivalentEnrollments * expectedContribution - fixedCosts;
     const expectedFinalResult = breakEven.currentEquivalentEnrollments * expectedContribution - financialRequirement;
 
