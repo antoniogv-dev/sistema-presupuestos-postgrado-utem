@@ -64,3 +64,27 @@ test("v11.0.6 genera memorándum con el modelo institucional de Escuela de Postg
   ]) assert.ok(documentXml.includes(text), `falta ${text}`);
   assert.ok(bytes.length > 20_000);
 });
+
+
+test("memorándum explica arancel total y matrícula única en Magíster de tres semestres", async () => {
+  const budget = structuredClone(demoBudget);
+  budget.durationSemesters = 3;
+  budget.tuitionPricingMode = "PROGRAM_TOTAL";
+  budget.programTotalTuition = 6_000_000;
+  budget.enrollmentBillingMode = "SINGLE_SPECIAL";
+  budget.singleEnrollmentFee = 300_000;
+  budget.tuitionInstallments = 18;
+  const result = calculateBudget(budget, institutionalParameters);
+  const template = new Uint8Array(readFileSync(path.join(root, "public/templates/memorandum-presupuesto-base-v11-0-6.docx")));
+  const bytes = await createBudgetMemorandumDocx(template, budget, result, institutionalParameters);
+  const files = unzip(bytes);
+  const documentXml = new TextDecoder().decode(files.get("word/document.xml"));
+  for (const text of [
+    "Magíster de tres semestres",
+    "arancel total para el programa completo",
+    "no un arancel anual",
+    "hasta en 18 cuotas",
+    "matrícula única",
+    "cobrada una sola vez al inicio del programa",
+  ]) assert.ok(documentXml.includes(text), `falta ${text}`);
+});
