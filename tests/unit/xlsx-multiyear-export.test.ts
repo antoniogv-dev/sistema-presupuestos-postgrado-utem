@@ -42,6 +42,7 @@ describe("exportación XLSX multianual", () => {
 
   it("agrega los años posteriores en las mismas hojas institucionales", () => {
     const multiyear = source("lib/export/institutional-budget-multiyear.ts");
+    const staff = source("lib/export/institutional-budget-staff-multiyear.ts");
 
     expect(multiyear).toContain("extendParametersSheet");
     expect(multiyear).toContain("extendStudentFlowSheet");
@@ -135,6 +136,9 @@ describe("exportación XLSX multianual", () => {
     expect(enrollment).toContain('clearCell(parameterSheet, `${col}6`)');
     expect(multiyear).toContain("parameterDiscountStartRow: 11");
     expect(multiyear).toContain('clearCell(output, `${col}5`)');
+    expect(staff).toContain("direction: 14 + discountSlots");
+    expect(staff).toContain("assistance: 15 + discountSlots");
+    expect(staff).toContain("other: 16 + discountSlots");
   });
 
   it("mantiene una firma Promise<void> compatible con los consumidores de exportación", () => {
