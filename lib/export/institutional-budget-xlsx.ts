@@ -270,7 +270,7 @@ export function breakEvenExcelFormula(
   // En la plantilla institucional las filas de estudiantes se desplazan cuando hay
   // más de dos descuentos. La fila de incobrabilidad permite deducir la posición
   // de las matrículas equivalentes sin depender de un número fijo de beneficios.
-  const discountSlots = Math.max(2, badDebtParameterRow - 10);
+  const discountSlots = Math.max(2, badDebtParameterRow - 11);
   const resolvedEquivalentStudentsRow = equivalentStudentsRow ?? (5 + discountSlots);
   void centralOverheadParameterRow;
   void facultyOverheadParameterRow;
