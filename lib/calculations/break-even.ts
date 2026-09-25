@@ -175,7 +175,7 @@ export function calculateBreakEvenComponents(
     ? enrollmentNetContributionTotal / equivalentEnrollmentsReference
     : 0;
   const contributionPerEquivalentEnrollment = tuitionContribution + enrollmentContribution;
-  const financialFixedRequirement = Math.max(0, fixedCosts - nonOperationalIncome - startingCarryover);
+  const financialFixedRequirement = fixedCosts - nonOperationalIncome - startingCarryover;
 
   return {
     fixedCosts,
@@ -210,19 +210,6 @@ export function calculateBreakEvenEquivalentEnrollments(
   const components = calculateBreakEvenComponents(budget, parameters);
   const currentEquivalentEnrollments = components.equivalentEnrollmentsReference;
 
-  if (components.financialFixedRequirement === 0) {
-    return {
-      minimumEquivalentEnrollments: 0,
-      minimumEquivalentEnrollmentsExact: 0,
-      minimumWholeStudents: 0,
-      projectedFinalFlowAtMinimum: 0,
-      currentEquivalentEnrollments,
-      equivalentEnrollmentGap: -currentEquivalentEnrollments,
-      reached: true,
-      components,
-    };
-  }
-
   if (components.contributionPerEquivalentEnrollment <= 0 || currentEquivalentEnrollments <= 0) {
     return {
       minimumEquivalentEnrollments: null,
@@ -236,7 +223,7 @@ export function calculateBreakEvenEquivalentEnrollments(
     };
   }
 
-  const exact = components.financialFixedRequirement / components.contributionPerEquivalentEnrollment;
+  const exact = Math.max(0, components.financialFixedRequirement / components.contributionPerEquivalentEnrollment);
   const minimum = Math.ceil((exact - 1e-9) * 100) / 100;
   const minimumWholeStudents = Math.ceil(exact - 1e-9);
   const projectedFinalFlowAtMinimum = minimum * components.contributionPerEquivalentEnrollment - components.financialFixedRequirement;
