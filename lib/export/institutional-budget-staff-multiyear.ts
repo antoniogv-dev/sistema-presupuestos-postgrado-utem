@@ -183,9 +183,9 @@ function exportableDiscountCount(budget: CohortBudget): number {
 function parameterRows(budget: CohortBudget) {
   const discountSlots = Math.max(2, exportableDiscountCount(budget));
   return {
-    direction: 13 + discountSlots,
-    assistance: 14 + discountSlots,
-    other: 15 + discountSlots,
+    direction: 14 + discountSlots,
+    assistance: 15 + discountSlots,
+    other: 16 + discountSlots,
   };
 }
 function staffRate(budget: CohortBudget, year: number, kind: "direction" | "assistance" | "other", parameters: InstitutionalParameters): number {
