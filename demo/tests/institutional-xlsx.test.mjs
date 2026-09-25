@@ -282,7 +282,6 @@ test("v13.0.11 muestra arancel total y matrícula única sólo en el primer año
   assert.equal(cachedNumber(parameterXml, "B5"), 6_000_000);
   assert.equal(inlineTextForCell(parameterXml, "A6"), "Matrícula única");
   assert.equal(cachedNumber(parameterXml, "B6"), 300_000);
-  assert.equal(cachedNumber(parameterXml, "C6"), 0);
   assert.match(parameterXml, /<c(?=[^>]*\br="C6")[^>]*><\/c>|<c(?=[^>]*\br="C6")[^>]*\/>/);
 });
 
@@ -351,9 +350,9 @@ test("v11.0.11 muestra Descuento X% en Flujo estudiantes mediante fórmula vincu
   const generated = await createInstitutionalFormulaBudgetXlsx(template, labeled, labeledResult, institutionalParameters);
   const studentXml = text(unzip(generated), "xl/worksheets/sheet2.xml");
   assert.equal(formulaForCell(studentXml, "A4"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B11)*100),&quot;%&quot;)');
-  assert.equal(formulaForCell(studentXml, "A5"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B11)*100),&quot;%&quot;)');
+  assert.equal(formulaForCell(studentXml, "A5"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B12)*100),&quot;%&quot;)');
   assert.equal(formulaForCell(studentXml, "A11"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B11)*100),&quot;%&quot;)');
-  assert.equal(formulaForCell(studentXml, "A12"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B11)*100),&quot;%&quot;)');
+  assert.equal(formulaForCell(studentXml, "A12"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B12)*100),&quot;%&quot;)');
   assert.match(studentXml, /<c r="A4"[^>]*t="str">[\s\S]*?<v>Descuento 15%<\/v>/);
   assert.match(studentXml, /<c r="A5"[^>]*t="str">[\s\S]*?<v>Descuento 30%<\/v>/);
   assert.equal(studentXml.includes("Ingresos arancel Descuento"), false);
