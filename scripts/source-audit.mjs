@@ -673,12 +673,16 @@ const institutionalXlsxV1025 = await readFile(path.join(root, "lib/export/instit
 for (const marker of [
   "createInstitutionalFormulaBudgetXlsx",
   "canUseFormulaTemplate",
-  "totalStudentsRow}*Parámetros!$B$5",
+  "totalStudentsRow}*Parámetros!$B$6",
   "SUM(B11,B16,B19,B21,B24,B26,B28,B31,B33,B36)",
   'calcMode="auto"',
   'forceFullCalc="1"',
   'files.delete("xl/calcChain.xml")',
   "Use a function replacer",
+  '"Arancel total del programa"',
+  '"Matrícula anual"',
+  '"Matrícula única"',
+  'result.pricing.programTotalTuition',
 ]) {
   if (!institutionalXlsxV1025.includes(marker)) fail(`Exportación XLSX institucional v10.25: falta ${marker}.`);
 }
