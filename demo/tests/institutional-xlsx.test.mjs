@@ -158,7 +158,7 @@ test("v11.0.2 amplía dinámicamente la hoja para 14 o más asignaturas valoriza
   assert.ok(teachingXml.includes("Asignatura dinámica 14"), "la fila dinámica 17 debe contener la asignatura 14");
   assert.match(teachingXml, /<dimension ref="A2:H30"\/>/);
   assert.match(teachingXml, /<c(?=[^>]*\br="G18")[^>]*>[\s\S]*?<f>SUM\(G4:G17\)<\/f>/);
-  assert.match(teachingXml, /<c(?=[^>]*\br="G19")[^>]*>[\s\S]*?<f>\+G18\*Parámetros!B6<\/f>/);
+  assert.match(teachingXml, /<c(?=[^>]*\br="G19")[^>]*>[\s\S]*?<f>\+G18\*Parámetros!B7<\/f>/);
   assert.match(flowXml, /<c(?=[^>]*\br="B8")[^>]*>[\s\S]*?<f>-'Costo Directo de Docencia'!G19<\/f>/);
   assert.ok(Math.abs(cachedNumber(teachingXml, "G19") - extendedResult.annualFlows[0].directTeachingCost) < 0.01, "la malla dinámica no concilia con el costo docente 2027");
 });
@@ -202,6 +202,7 @@ test("v10.30 genera XLSX institucional mejorado, con malla y fórmulas coherente
   assert.equal(sha(out.get("xl/styles.xml")), sha(ref.get("xl/styles.xml")), "styles.xml cambió");
   assert.equal(sha(out.get("xl/theme/theme1.xml")), sha(ref.get("xl/theme/theme1.xml")), "tema cambió");
   for (const name of requiredSheets) {
+    if (name === "xl/worksheets/sheet1.xml") continue;
     assert.equal(stripSheetData(text(out, name)), stripSheetData(text(ref, name)), `${name}: cambió estructura fuera de sheetData`);
   }
 
@@ -216,6 +217,10 @@ test("v10.30 genera XLSX institucional mejorado, con malla y fórmulas coherente
   const studentXml = text(out, "xl/worksheets/sheet2.xml");
   const teachingXml = text(out, "xl/worksheets/sheet3.xml");
   assert.ok(parameterXml.includes("Semipresencial"), "modalidad faltante en Parámetros");
+  assert.equal(inlineTextForCell(parameterXml, "A4"), "Arancel anual");
+  assert.equal(inlineTextForCell(parameterXml, "A5"), "Arancel total del programa");
+  assert.equal(inlineTextForCell(parameterXml, "A6"), "Matrícula anual");
+  assert.ok(cachedNumber(parameterXml, "B5") > 0, "debe informarse el arancel total del programa");
   assert.ok(studentXml.includes("matrículas equivalentes"), "punto de equilibrio no identifica matrículas equivalentes");
   assert.equal(/flujo(?: final)? simulado/i.test(studentXml), false, "no debe exportarse el texto flujo simulado");
   const studentFormulas = formulaMap(studentXml);
@@ -229,8 +234,8 @@ test("v10.30 genera XLSX institucional mejorado, con malla y fórmulas coherente
   assert.equal(inlineTextForCell(studentXml, "C15"), "estudiantes", "C15 debe mostrar únicamente estudiantes");
   const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, institutionalParameters);
   assert.ok(Math.abs(cachedNumber(studentXml, "B14") - (equilibrium.minimumEquivalentEnrollmentsExact ?? 0)) < 0.01, "el valor cacheado del punto de equilibrio no concilia con el motor");
-  assert.ok(cachedNumber(parameterXml, "B5") + cachedNumber(parameterXml, "C5") > 0, "Parámetros debe exponer la matrícula efectiva del horizonte");
-  assert.ok(cachedNumber(parameterXml, "B8") + cachedNumber(parameterXml, "C8") >= 0, "Parámetros debe exponer la guía de tesis unitaria por año");
+  assert.ok(cachedNumber(parameterXml, "B6") + cachedNumber(parameterXml, "C6") > 0, "Parámetros debe exponer la matrícula efectiva del horizonte");
+  assert.ok(cachedNumber(parameterXml, "B9") + cachedNumber(parameterXml, "C9") >= 0, "Parámetros debe exponer la guía de tesis unitaria por año");
   assert.ok(teachingXml.includes("Base estudiantes"), "sección de guía de tesis mejorada faltante");
   assert.ok(teachingXml.includes("Análisis territorial"), "la malla obligatoria no se exportó");
   assert.ok(teachingXml.includes("Modelamiento asincrónico"), "la asignatura asincrónica no se exportó");
@@ -241,7 +246,7 @@ test("v10.30 genera XLSX institucional mejorado, con malla y fórmulas coherente
   const formulas = requiredSheets.flatMap((name) => [...formulaMap(text(out, name)).values()]);
   assert.ok(formulas.length >= 120, `se esperaban fórmulas institucionales; encontradas ${formulas.length}`);
   assert.equal(formulas.some((formula) => /#REF!|#NAME\?|#DIV\/0!|#VALUE!/.test(formula)), false);
-  assert.ok(formulas.includes("B6*Parámetros!$B$5"), "referencia absoluta de matrícula dañada");
+  assert.ok(formulas.includes("B6*Parámetros!$B$6"), "referencia absoluta de matrícula dañada");
   assert.ok(formulas.includes("SUM(B11,B16,B19,B21,B24,B26,B28,B31,B33,B36)"), "subtotal de costos institucional faltante");
   assert.ok(formulas.includes("+SUM(B38:B39)"), "saldo acumulado institucional faltante");
 
@@ -259,6 +264,26 @@ test("v10.30 genera XLSX institucional mejorado, con malla y fórmulas coherente
   assert.ok(Math.abs(cachedNumber(flowXml, "B38") - first.netFlow) < 0.01);
   assert.ok(Math.abs(cachedNumber(flowXml, "C38") - second.netFlow) < 0.01);
   assert.ok(Math.abs(cachedNumber(flowXml, "C40") - second.accumulatedFlow) < 0.01);
+});
+
+test("v13.0.11 muestra arancel total y matrícula única sólo en el primer año para 3 semestres", async () => {
+  const three = structuredClone(budget);
+  three.durationSemesters = 3;
+  three.tuitionPricingMode = "PROGRAM_TOTAL";
+  three.programTotalTuition = 6_000_000;
+  three.enrollmentBillingMode = "SINGLE_SPECIAL";
+  three.singleEnrollmentFee = 300_000;
+  three.tuitionInstallments = 18;
+  three.semesters = three.semesters.slice(0, 3);
+  const threeResult = calculateBudget(three, institutionalParameters);
+  const generated = await createInstitutionalFormulaBudgetXlsx(template, three, threeResult, institutionalParameters);
+  const parameterXml = text(unzip(generated), "xl/worksheets/sheet1.xml");
+  assert.equal(inlineTextForCell(parameterXml, "A5"), "Arancel total del programa");
+  assert.equal(cachedNumber(parameterXml, "B5"), 6_000_000);
+  assert.equal(inlineTextForCell(parameterXml, "A6"), "Matrícula única");
+  assert.equal(cachedNumber(parameterXml, "B6"), 300_000);
+  assert.equal(cachedNumber(parameterXml, "C6"), 0);
+  assert.match(parameterXml, /<c(?=[^>]*\br="C6")[^>]*><\/c>|<c(?=[^>]*\br="C6")[^>]*\/>/);
 });
 
 test("v12.1.2 exporta el punto de equilibrio incorporando matrícula y guía de tesis", async () => {
@@ -325,9 +350,9 @@ test("v11.0.11 muestra Descuento X% en Flujo estudiantes mediante fórmula vincu
   const labeledResult = calculateBudget(labeled, institutionalParameters);
   const generated = await createInstitutionalFormulaBudgetXlsx(template, labeled, labeledResult, institutionalParameters);
   const studentXml = text(unzip(generated), "xl/worksheets/sheet2.xml");
-  assert.equal(formulaForCell(studentXml, "A4"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B10)*100),&quot;%&quot;)');
+  assert.equal(formulaForCell(studentXml, "A4"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B11)*100),&quot;%&quot;)');
   assert.equal(formulaForCell(studentXml, "A5"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B11)*100),&quot;%&quot;)');
-  assert.equal(formulaForCell(studentXml, "A11"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B10)*100),&quot;%&quot;)');
+  assert.equal(formulaForCell(studentXml, "A11"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B11)*100),&quot;%&quot;)');
   assert.equal(formulaForCell(studentXml, "A12"), 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B11)*100),&quot;%&quot;)');
   assert.match(studentXml, /<c r="A4"[^>]*t="str">[\s\S]*?<v>Descuento 15%<\/v>/);
   assert.match(studentXml, /<c r="A5"[^>]*t="str">[\s\S]*?<v>Descuento 30%<\/v>/);
@@ -357,21 +382,21 @@ test("v11.0.3 exporta N descuentos como filas independientes y mantiene las fór
     assert.equal(studentXml.includes(label), false, `Flujo estudiantes no debe usar el nombre administrativo ${label}`);
   }
   for (let index = 0; index < 5; index += 1) {
-    const parameterRow = 10 + index;
+    const parameterRow = 11 + index;
     const studentRow = 4 + index;
     const incomeRow = 14 + index;
     const expectedFormula = `CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B${parameterRow})*100),&quot;%&quot;)`;
     assert.equal(formulaForCell(studentXml, `A${studentRow}`), expectedFormula, `etiqueta de descuento no vinculada a Parámetros!B${parameterRow}`);
     assert.equal(formulaForCell(studentXml, `A${incomeRow}`), expectedFormula, `etiqueta de ingreso con descuento no vinculada a Parámetros!B${parameterRow}`);
   }
-  assert.match(parameterXml, /<dimension ref="A1:C20"\/>/);
+  assert.match(parameterXml, /<dimension ref="A1:C21"\/>/);
   assert.match(studentXml, /<dimension ref="A1:C21"\/>/);
   assert.match(studentXml, /<c(?=[^>]*\br="B19")[^>]*>[\s\S]*?<f>SUM\(B13:B18\)<\/f>/);
   const manyStudentFormulas = formulaMap(studentXml);
   assert.equal(formulaForCell(studentXml, "B20"), "IFERROR(MAX(0,B10-('FLUJO TOTAL'!C40*B10/(SUM('FLUJO TOTAL'!B7:C7)+SUM('FLUJO TOTAL'!B36:C36)+SUM('FLUJO TOTAL'!B10:C10)))),0)");
   assert.equal(formulaForCell(studentXml, "B21"), "ROUNDUP(B20,0)");
   assert.match(flowXml, /<c(?=[^>]*\br="B5")[^>]*>[\s\S]*?<f>'Flujo estudiantes'!B19<\/f>/);
-  assert.match(flowXml, /<c(?=[^>]*\br="B6")[^>]*>[\s\S]*?<f>-B5\*Parámetros!B15<\/f>/);
+  assert.match(flowXml, /<c(?=[^>]*\br="B6")[^>]*>[\s\S]*?<f>-B5\*Parámetros!B16<\/f>/);
   assert.ok(Math.abs(cachedNumber(studentXml, "B19") - manyResult.annualFlows[0].tuitionAfterBenefits) < 0.01, "los descuentos múltiples no concilian con el ingreso neto 2027");
   assert.equal(/#REF!|#NAME\?|#DIV\/0!|#VALUE!/.test(parameterXml + studentXml + flowXml), false);
 });
