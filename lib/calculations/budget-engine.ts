@@ -344,14 +344,10 @@ export function calculateBudget(budget: CohortBudget, parameters: InstitutionalP
 
   const finalAccumulatedFlow = annualFlows.at(-1)?.accumulatedFlow ?? (budget.includeAuthorizedCarryover ? budget.authorizedInitialCarryover : 0);
   const isProfessional = budget.program.type === "MAGISTER_PROFESIONAL";
-  // v13.0.1: la viabilidad estructural usa exactamente la misma base del punto de equilibrio:
-  // arancel neto + matrícula reconocida versus costos totales. Ingresos extraordinarios,
-  // financiamiento institucional y arrastre siguen informándose en el flujo, pero no convierten
-  // por sí solos una dictación estructuralmente deficitaria en viable.
-  const operationalIncome = annualFlows.reduce((total, flow) => total + flow.netTuitionIncome + flow.recognizedEnrollmentFee, 0);
-  const operationalExpenses = annualFlows.reduce((total, flow) => total + flow.totalExpenses, 0);
-  const operationalResult = operationalIncome - operationalExpenses;
-  const viable = isProfessional ? operationalResult >= -1e-6 : null;
+  // v13.0.10: la viabilidad visible debe responder a la misma pregunta que el punto de equilibrio:
+  // ¿el saldo final acumulado de la cohorte es no negativo? El resultado operacional se conserva
+  // en las trazas financieras, pero no se utiliza como una segunda definición de viabilidad.
+  const viable = isProfessional ? finalAccumulatedFlow >= -1e-6 : null;
   const deficitFlows = annualFlows.filter((flow) => flow.accumulatedFlow < 0).sort((a, b) => a.accumulatedFlow - b.accumulatedFlow);
   const breakEvenYear = annualFlows.find((flow) => flow.accumulatedFlow >= 0)?.year ?? null;
 
