@@ -125,6 +125,12 @@ function replaceCell(sheetXml: string, ref: string, body: string, typeAttribute 
 function setNumber(sheetXml: string, ref: string, value: number): string {
   return replaceCell(sheetXml, ref, `<v>${Number.isFinite(value) ? value : 0}</v>`);
 }
+function setText(sheetXml: string, ref: string, value: string): string {
+  return replaceCell(sheetXml, ref, `<is><t>${xml(value)}</t></is>`, ' t="inlineStr"');
+}
+function clearCell(sheetXml: string, ref: string): string {
+  return replaceCell(sheetXml, ref, "");
+}
 function setFormula(sheetXml: string, ref: string, formula: string, cached: number): string {
   return replaceCell(sheetXml, ref, `<f>${xml(formula)}</f><v>${Number.isFinite(cached) ? cached : 0}</v>`);
 }
