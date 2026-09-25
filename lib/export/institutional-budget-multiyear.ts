@@ -233,13 +233,13 @@ function rowLayout(budget: CohortBudget) {
   return {
     discounts,
     discountSlots,
-    parameterDiscountStartRow: 10,
-    badDebtParameterRow: 10 + discountSlots,
-    centralOverheadParameterRow: 11 + discountSlots,
-    facultyOverheadParameterRow: 12 + discountSlots,
-    directionParameterRow: 13 + discountSlots,
-    assistanceParameterRow: 14 + discountSlots,
-    otherHonorariaParameterRow: 15 + discountSlots,
+    parameterDiscountStartRow: 11,
+    badDebtParameterRow: 11 + discountSlots,
+    centralOverheadParameterRow: 12 + discountSlots,
+    facultyOverheadParameterRow: 13 + discountSlots,
+    directionParameterRow: 14 + discountSlots,
+    assistanceParameterRow: 15 + discountSlots,
+    otherHonorariaParameterRow: 16 + discountSlots,
     studentDiscountStartRow: 4,
     totalStudentsRow: 4 + discountSlots,
     equivalentStudentsRow: 5 + discountSlots,
@@ -268,11 +268,12 @@ function extendParametersSheet(sheetXml: string, budget: CohortBudget, result: B
     const previousOverride = resolvedAnnualOverrideForYear(budget, parameters, previousYear);
     output = setNumber(output, `${col}3`, year);
     output = setNumber(output, `${col}4`, override.annualTuition);
-    output = setNumber(output, `${col}5`, override.annualEnrollmentFee);
-    output = setNumber(output, `${col}6`, effectiveTeachingRate(budget, parameters, year));
-    output = setNumber(output, `${col}7`, parameters.replacementHour);
-    output = setNumber(output, `${col}8`, override.thesisGuidancePerGraduatingStudent);
-    output = clearCell(output, `${col}9`);
+    output = clearCell(output, `${col}5`);
+    output = setNumber(output, `${col}6`, override.annualEnrollmentFee);
+    output = setNumber(output, `${col}7`, effectiveTeachingRate(budget, parameters, year));
+    output = setNumber(output, `${col}8`, parameters.replacementHour);
+    output = setNumber(output, `${col}9`, override.thesisGuidancePerGraduatingStudent);
+    output = clearCell(output, `${col}10`);
     for (let discountIndex = 0; discountIndex < rows.discountSlots; discountIndex += 1) {
       const row = rows.parameterDiscountStartRow + discountIndex;
       const rate = rows.discounts[discountIndex] ? Math.max(0, Math.min(1, rows.discounts[discountIndex].percentage)) : 0;
@@ -331,7 +332,7 @@ function extendStudentFlowSheet(sheetXml: string, budget: CohortBudget, result: 
     const graduationFormula = Math.abs(flow.graduatingStudents - (noDiscount + discounted)) < 1e-9 ? `${col}${rows.totalStudentsRow}` : `${flow.graduatingStudents}`;
     output = setFormula(output, `${col}${rows.graduationStudentsRow}`, graduationFormula, flow.graduatingStudents);
     const enrollmentStudents = annualEnrollmentStudents(budget, year, flow.grossEnrollmentFee, override.annualEnrollmentFee);
-    output = setFormula(output, `${col}${rows.enrollmentIncomeRow}`, Math.abs(enrollmentStudents - (noDiscount + discounted)) < 1e-9 ? `${col}${rows.totalStudentsRow}*Parámetros!$${col}$5` : `${enrollmentStudents}*Parámetros!$${col}$5`, flow.grossEnrollmentFee);
+    output = setFormula(output, `${col}${rows.enrollmentIncomeRow}`, Math.abs(enrollmentStudents - (noDiscount + discounted)) < 1e-9 ? `${col}${rows.totalStudentsRow}*Parámetros!${col}$6` : `${enrollmentStudents}*Parámetros!${col}$6`, flow.grossEnrollmentFee);
     output = setFormula(output, `${col}${rows.noDiscountIncomeRow}`, `(${col}3)*Parámetros!$${col}$4`, noDiscount * override.annualTuition);
     output = setFormula(output, `${col}${rows.totalTuitionIncomeRow}`, `SUM(${col}${rows.noDiscountIncomeRow}:${col}${rows.discountIncomeStartRow + rows.discountSlots - 1})`, flow.tuitionAfterBenefits);
     output = clearCell(output, `${col}${rows.equilibriumRow}`);
@@ -401,7 +402,7 @@ function extendDirectTeachingSheet(sheetXml: string, budget: CohortBudget, resul
     }
     const teachingRate = effectiveTeachingRate(budget, parameters, year);
     output = setFormula(output, `${col}${totalHoursRow}`, `SUM(${col}4:${col}${courseEndRow})`, teachingRate > 0 ? flow.directTeachingCost / teachingRate : 0);
-    output = setFormula(output, `${col}${directCostRow}`, `+${col}${totalHoursRow}*Parámetros!${parameterCol}6`, flow.directTeachingCost);
+    output = setFormula(output, `${col}${directCostRow}`, `+${col}${totalHoursRow}*Parámetros!${parameterCol}7`, flow.directTeachingCost);
   }
 
   const lastIndex = result.years.length - 1;
@@ -413,7 +414,7 @@ function extendDirectTeachingSheet(sheetXml: string, budget: CohortBudget, resul
   output = setText(output, `C${thesisHeaderRow}`, `Valor unitario ${lastYear}`);
   output = setText(output, `D${thesisHeaderRow}`, `Costo ${lastYear}`);
   output = setFormula(output, `B${thesisRow}`, `+'Flujo estudiantes'!${lastStudentColumn}${rowLayout(budget).graduationStudentsRow}`, lastFlow.graduatingStudents);
-  output = setFormula(output, `C${thesisRow}`, `+Parámetros!${lastStudentColumn}8`, lastOverride.thesisGuidancePerGraduatingStudent);
+  output = setFormula(output, `C${thesisRow}`, `+Parámetros!${lastStudentColumn}9`, lastOverride.thesisGuidancePerGraduatingStudent);
   output = setFormula(output, `D${thesisRow}`, `B${thesisRow}*C${thesisRow}`, lastFlow.thesisGuidanceCost);
   return output;
 }
@@ -437,8 +438,8 @@ function extendTotalFlowSheet(sheetXml: string, budget: CohortBudget, result: Bu
     output = setFormula(output, `${col}6`, `-${col}5*Parámetros!${parameterCol}${rows.badDebtParameterRow}`, -flow.badDebt);
     output = setFormula(output, `${col}7`, ext ? `SUM(${col}5:${col}6)+${ext}` : `SUM(${col}5:${col}6)`, flow.totalIncome);
     output = setFormula(output, `${col}8`, `-'Costo Directo de Docencia'!${teachingCol}${18 + Math.max(0, payableCurriculumCourses(budget.program).length - 13)}`, -flow.directTeachingCost);
-    output = setFormula(output, `${col}9`, `-${repHours}*Parámetros!${parameterCol}7`, -flow.replacementTeachingCost);
-    output = setFormula(output, `${col}10`, `-'Flujo estudiantes'!${col}${rows.graduationStudentsRow}*Parámetros!$${parameterCol}$8`, -flow.thesisGuidanceCost);
+    output = setFormula(output, `${col}9`, `-${repHours}*Parámetros!${parameterCol}8`, -flow.replacementTeachingCost);
+    output = setFormula(output, `${col}10`, `-'Flujo estudiantes'!${col}${rows.graduationStudentsRow}*Parámetros!${parameterCol}$9`, -flow.thesisGuidanceCost);
     output = setFormula(output, `${col}11`, `SUM(${col}8:${col}10)`, -flow.academicHonoraria);
     // El formato de Prorrateo Staff validado se conserva intacto; para años adicionales
     // el flujo usa los importes calculados por el motor, sin crear una estructura nueva.
