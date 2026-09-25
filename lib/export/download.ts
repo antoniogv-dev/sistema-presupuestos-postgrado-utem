@@ -182,7 +182,7 @@ async function loadMemorandumTemplate(): Promise<Uint8Array> {
 export async function downloadBudgetMemorandum(budget: CohortBudget, result: BudgetResult, parameters: InstitutionalParameters) {
   const template = await loadMemorandumTemplate();
   const bytes = await createBudgetMemorandumDocx(template, budget, result, parameters);
-  const filename = `Memorándum - Proyección presupuestaria - ${budget.program.name} - Cohorte ${budget.startYear}-${budget.startSemester}S.docx`;
+  const yearShort = String(new Date().getFullYear()).slice(-2);\n  const filename = `XXX - ${yearShort} VRAF ${budget.program.name} ${budget.startYear} - ${budget.startSemester}S.docx`;
   download(bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", filename);
 }
 
