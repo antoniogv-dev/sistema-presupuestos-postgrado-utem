@@ -336,7 +336,7 @@ export async function alignInstitutionalBreakEvenFormula(
   // Asegura los rótulos del modelo de referencia cuando la plantilla histórica los traiga distintos.
   if (files.has(parameterSheetName)) {
     let parametersSheet = decoder.decode(files.get(parameterSheetName)!);
-    const otherHonorariaRow = 15 + discountSlots;
+    const otherHonorariaRow = 16 + discountSlots;
     if (cellPattern(`A${otherHonorariaRow}`).test(parametersSheet)) parametersSheet = setText(parametersSheet, `A${otherHonorariaRow}`, "Asistencia técnica ");
     files.set(parameterSheetName, encoder.encode(parametersSheet));
   }
