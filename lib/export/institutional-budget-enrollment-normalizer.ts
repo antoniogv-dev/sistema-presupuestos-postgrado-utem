@@ -188,7 +188,7 @@ function rowLayout(budget: CohortBudget) {
   return {
     discounts,
     discountSlots,
-    parameterDiscountStartRow: 10,
+    parameterDiscountStartRow: 11,
     studentDiscountStartRow: 4,
     totalStudentsRow: 4 + discountSlots,
     equivalentStudentsRow: 5 + discountSlots,
@@ -255,10 +255,18 @@ export async function normalizeInstitutionalEnrollmentBilling(
     const enrollmentUnits = enrollmentBillingUnitsForYear(budget, year);
     const enrollmentDiscountEquivalentUnits = enrollmentDiscountEquivalentUnitsForYear(budget, year);
     const enrollmentUnitPrice = enrollmentUnitPriceForYear(budget, year, flow.grossEnrollmentFee, override.annualEnrollmentFee);
-    // La fila 5 de Parámetros representa el valor unitario aplicable a la modalidad elegida
-    // en cada año: anual, por semestre o único/total. En años sin cobro queda en cero.
-    parameterSheet = setNumber(parameterSheet, `${col}5`, enrollmentUnitPrice);
-    studentSheet = setFormula(studentSheet, `${col}${rows.enrollmentIncomeRow}`, `MAX(0,(${enrollmentUnits}-${enrollmentDiscountEquivalentUnits})*Parámetros!${col}$5)`, flow.netEnrollmentFee);
+    // La fila 6 de Parámetros representa la matrícula aplicable a la modalidad elegida.
+    // En matrícula única, sólo el primer año muestra valor; los años posteriores quedan vacíos.
+    const enrollmentLabel = budget.enrollmentBillingMode === "SINGLE_SPECIAL"
+      ? "Matrícula única"
+      : budget.enrollmentBillingMode === "SEMESTER"
+        ? "Matrícula semestral"
+        : "Matrícula anual";
+    parameterSheet = setText(parameterSheet, "A6", enrollmentLabel);
+    parameterSheet = enrollmentUnitPrice > 0
+      ? setNumber(parameterSheet, `${col}6`, enrollmentUnitPrice)
+      : clearCell(parameterSheet, `${col}6`);
+    studentSheet = setFormula(studentSheet, `${col}${rows.enrollmentIncomeRow}`, `MAX(0,(${enrollmentUnits}-${enrollmentDiscountEquivalentUnits})*Parámetros!${col}$6)`, flow.netEnrollmentFee);
     studentSheet = setFormula(studentSheet, `${col}${rows.noDiscountIncomeRow}`, `(${col}3)*Parámetros!$${col}$4`, noDiscount * override.annualTuition);
     studentSheet = setFormula(studentSheet, `${col}${rows.totalTuitionIncomeRow}`, `SUM(${col}${rows.noDiscountIncomeRow}:${col}${rows.discountIncomeStartRow + rows.discountSlots - 1})`, flow.tuitionAfterBenefits);
   }
