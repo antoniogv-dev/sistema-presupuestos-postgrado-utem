@@ -53,12 +53,13 @@ test("v11.0.6 genera memorándum con el modelo institucional de Escuela de Postg
   for (const text of [
     "MEMORÁNDUM N.º",
     budget.program.name,
-    "Para la elaboración de esta proyección se tuvieron a la vista los siguientes antecedentes:",
-    "Flujo de estudiantes e ingresos",
-    "Valores base y reajustes",
-    "Costos académicos y docencia",
-    "resultado económico",
-    "En virtud de lo expuesto, solicito a usted revisar y, de estimarlo procedente, aprobar la proyección presupuestaria adjunta.",
+    "Junto con saludar, remito para su revisión y aprobación la proyección presupuestaria de la cohorte",
+    "Cabe señalar que la presente proyección se formula considerando el inicio de la cohorte",
+    "incobrabilidad estimada",
+    "costos de docencia, guía o revisión de tesis, staff, gastos de operación y overhead institucional",
+    "resultado económico acumulado proyectado",
+    "En virtud de lo anterior, solicito a usted revisar y, de estimarlo procedente, aprobar la proyección presupuestaria adjunta.",
+    "Saluda atentamente,",
     "DR. JORGE RODRÍGUEZ BECERRA",
   ]) assert.ok(documentXml.includes(text), `falta ${text}`);
   assert.ok(bytes.length > 20_000);
