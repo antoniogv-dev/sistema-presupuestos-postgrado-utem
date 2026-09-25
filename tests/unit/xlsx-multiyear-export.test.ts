@@ -118,6 +118,25 @@ describe("exportación XLSX multianual", () => {
     expect(patch).not.toContain("_xludf.LET");
   });
 
+  it("v13.0.11 expone arancel total y matrícula anual o única en Parámetros", () => {
+    const xlsx = source("lib/export/institutional-budget-xlsx.ts");
+    const enrollment = source("lib/export/institutional-budget-enrollment-normalizer.ts");
+    const multiyear = source("lib/export/institutional-budget-multiyear.ts");
+
+    expect(xlsx).toContain('s1 = setText(s1, "A5", "Arancel total del programa")');
+    expect(xlsx).toContain("result.pricing.programTotalTuition");
+    expect(xlsx).toContain('? "Matrícula única"');
+    expect(xlsx).toContain(': "Matrícula anual"');
+    expect(xlsx).toContain('Parámetros!$B$6');
+    expect(xlsx).toContain('Parámetros!B7');
+    expect(xlsx).toContain('Parámetros!B8');
+    expect(xlsx).toContain('Parámetros!$B$9');
+    expect(enrollment).toContain('setText(parameterSheet, "A6", enrollmentLabel)');
+    expect(enrollment).toContain('clearCell(parameterSheet, `${col}6`)');
+    expect(multiyear).toContain("parameterDiscountStartRow: 11");
+    expect(multiyear).toContain('clearCell(output, `${col}5`)');
+  });
+
   it("mantiene una firma Promise<void> compatible con los consumidores de exportación", () => {
     const download = source("lib/export/download.ts");
 
