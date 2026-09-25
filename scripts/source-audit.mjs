@@ -830,8 +830,8 @@ const memorandumV1031 = await readFile(path.join(root, "lib/export/memorandum.ts
 const memorandumTemplateV1031 = await readFile(path.join(root, "public/templates/memorandum-presupuesto-base-v11-0-6.docx"));
 const pdfV1031 = await readFile(path.join(root, "lib/export/pdf.ts"), "utf8");
 const importExportV1031 = await readFile(path.join(root, "app/importar-exportar/page.tsx"), "utf8");
-for (const marker of ["createBudgetMemorandumDocx", "MEMORÁNDUM N.º", "Flujo de estudiantes e ingresos", "Costos académicos y docencia", "DR. JORGE RODRÍGUEZ BECERRA"]) {
-  if (!memorandumV1031.includes(marker)) fail(`Memorándum v10.31: falta ${marker}.`);
+for (const marker of ["createBudgetMemorandumDocx", "MEMORÁNDUM N.º", "Junto con saludar, remito para su revisión y aprobación", "resultado económico acumulado proyectado", "Saluda atentamente,", "DR. JORGE RODRÍGUEZ BECERRA"]) {
+  if (!memorandumV1031.includes(marker)) fail(`Memorándum ejecutivo VRAF: falta ${marker}.`);
 }
 if (memorandumTemplateV1031.byteLength < 20000) fail("Memorándum v10.31: la plantilla DOCX institucional parece incompleta.");
 for (const marker of ["downloadBudgetMemorandum", "normalizeDownloadFilename", "memorandum-presupuesto-base-v11-0-6.docx", 'cache: "no-store"']) {
@@ -892,9 +892,10 @@ if (!narrativeFeatureTestV1101.includes(narrativeTitleV1101)) fail("v11.0.3 test
 const memorandumV1106 = await readFile(path.join(root, "lib/export/memorandum.ts"), "utf8");
 const memorandumTemplateV1106 = await readFile(path.join(root, "public/templates/memorandum-presupuesto-base-v11-0-6.docx"));
 const memorandumTestV1106 = await readFile(path.join(root, "demo/tests/memorandum-export.test.mjs"), "utf8");
-for (const marker of ["Para la elaboración de esta proyección se tuvieron a la vista los siguientes antecedentes:", "En virtud de lo expuesto, solicito a usted revisar y, de estimarlo procedente, aprobar la proyección presupuestaria adjunta.", "recognizedEnrollmentFee", "institutionalFinancing", "effectiveBadDebtRate", "prorationDescription"]) if (!memorandumV1106.includes(marker)) fail(`Memorándum v11.0.6 institucional: falta ${marker}.`);
-if (memorandumTemplateV1106.byteLength < 20000) fail("Memorándum v11.0.6: la plantilla institucional parece incompleta.");
-for (const marker of ["memorandum-presupuesto-base-v11-0-6.docx", "Para la elaboración de esta proyección se tuvieron a la vista los siguientes antecedentes:", "En virtud de lo expuesto"]) if (!memorandumTestV1106.includes(marker)) fail(`Memorándum v11.0.6 test: falta ${marker}.`);
+for (const marker of ["Junto con saludar, remito para su revisión y aprobación la proyección presupuestaria de la cohorte", "Cabe señalar que la presente proyección se formula considerando el inicio de la cohorte", "incobrabilidad estimada", "resultado económico acumulado proyectado", "En virtud de lo anterior, solicito a usted revisar y, de estimarlo procedente, aprobar la proyección presupuestaria adjunta.", "effectiveBadDebtRate", "recognizedEnrollmentFee", "institutionalFinancing"]) if (!memorandumV1106.includes(marker)) fail(`Memorándum ejecutivo VRAF: falta ${marker}.`);
+if (memorandumTemplateV1106.byteLength < 20000) fail("Memorándum ejecutivo VRAF: la plantilla institucional parece incompleta.");
+for (const marker of ["memorandum-presupuesto-base-v11-0-6.docx", "Junto con saludar, remito para su revisión y aprobación la proyección presupuestaria de la cohorte", "En virtud de lo anterior"]) if (!memorandumTestV1106.includes(marker)) fail(`Memorándum ejecutivo VRAF test: falta ${marker}.`);
+if (!downloadV112.includes("XXX - ${yearShort} VRAF ${budget.program.name} ${budget.startYear} - ${budget.startSemester}S.docx")) fail("Memorándum ejecutivo VRAF: falta nomenclatura de descarga.");
 
 // v12.1.2: punto de equilibrio institucional completo = costos fijos / (aporte arancel + aporte matrícula).
 const institutionalXlsxV1108 = await readFile(path.join(root, "lib/export/institutional-budget-xlsx.ts"), "utf8");
