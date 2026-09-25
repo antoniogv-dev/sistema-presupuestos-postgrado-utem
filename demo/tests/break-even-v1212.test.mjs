@@ -11,18 +11,20 @@ const { calculateBreakEvenEquivalentEnrollments } = await import(path.join(root,
 
 const clone = (value) => structuredClone(value);
 
-test("v13.0.1 concilia punto de equilibrio y resultado operacional con una sola identidad", () => {
+test("v13.0.10 concilia punto de equilibrio, viabilidad y saldo final con una sola identidad", () => {
   const budget = clone(demoBudget);
   budget.enrollmentRecognitionRate = 1;
   const result = calculateBudget(budget, institutionalParameters);
   const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, institutionalParameters);
 
   assert.ok(equilibrium.minimumEquivalentEnrollmentsExact !== null);
-  const expectedOperationalResult = equilibrium.currentEquivalentEnrollments
+  const expectedFinalResult = equilibrium.currentEquivalentEnrollments
     * equilibrium.components.contributionPerEquivalentEnrollment
-    - equilibrium.components.fixedCosts;
+    - equilibrium.components.financialFixedRequirement;
 
-  assert.ok(Math.abs(equilibrium.components.operationalResult - expectedOperationalResult) < 1e-6);
+  assert.ok(Math.abs(result.finalAccumulatedFlow - expectedFinalResult) < 1e-6);
+  assert.ok(Math.abs(equilibrium.components.finalResult - result.finalAccumulatedFlow) < 1e-6);
+  assert.equal(result.viable, result.finalAccumulatedFlow >= -1e-6);
   assert.equal(result.viable, equilibrium.currentEquivalentEnrollments + 1e-9 >= equilibrium.minimumEquivalentEnrollmentsExact);
   assert.equal(equilibrium.reached, result.viable);
 });
@@ -83,6 +85,44 @@ test("v13.0.1 si 8 equivalentes superan el equilibrio el presupuesto es viable",
   assert.ok(equilibrium.components.operationalResult > 0);
   assert.equal(equilibrium.reached, true);
   assert.equal(result.viable, true);
+});
+
+test("v13.0.10 un saldo final negativo obliga a que el equilibrio sea mayor que las matrículas equivalentes actuales", () => {
+  const budget = clone(demoBudget);
+  budget.enrollmentRecognitionRate = 1;
+  budget.discounts = [];
+  budget.initialStudents = 10;
+  budget.semesters.forEach((semester) => { semester.activeStudents = 10; });
+  budget.includeAuthorizedCarryover = true;
+
+  const baseline = calculateBudget(budget, institutionalParameters);
+  budget.authorizedInitialCarryover = -(Math.abs(baseline.finalAccumulatedFlow) + 1_000_000);
+
+  const result = calculateBudget(budget, institutionalParameters);
+  const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, institutionalParameters);
+
+  assert.ok(result.finalAccumulatedFlow < 0, "la prueba debe partir con saldo final negativo");
+  assert.ok(equilibrium.minimumEquivalentEnrollmentsExact !== null);
+  assert.ok(equilibrium.minimumEquivalentEnrollmentsExact > equilibrium.currentEquivalentEnrollments,
+    `saldo negativo con ${equilibrium.currentEquivalentEnrollments} equivalentes no puede mostrar equilibrio ${equilibrium.minimumEquivalentEnrollmentsExact}`);
+  assert.equal(equilibrium.reached, false);
+  assert.equal(result.viable, false);
+});
+
+test("v13.0.10 si las matrículas equivalentes alcanzan el equilibrio el saldo final no es negativo", () => {
+  const budget = clone(demoBudget);
+  budget.enrollmentRecognitionRate = 1;
+  const result = calculateBudget(budget, institutionalParameters);
+  const equilibrium = calculateBreakEvenEquivalentEnrollments(budget, institutionalParameters);
+
+  assert.ok(equilibrium.minimumEquivalentEnrollmentsExact !== null);
+  if (equilibrium.currentEquivalentEnrollments + 1e-9 >= equilibrium.minimumEquivalentEnrollmentsExact) {
+    assert.ok(result.finalAccumulatedFlow >= -1e-6);
+    assert.equal(result.viable, true);
+  } else {
+    assert.ok(result.finalAccumulatedFlow < 1e-6);
+    assert.equal(result.viable, false);
+  }
 });
 
 test("v13.0.1 mantiene guía de tesis como costo variable por estudiante", () => {
