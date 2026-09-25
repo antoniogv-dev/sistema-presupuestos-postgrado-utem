@@ -225,9 +225,9 @@ export async function alignInstitutionalBreakEvenFormula(
       0,
     );
     const nonOperationalAdjustment = nonOperationalIncomeTotal ? `-${nonOperationalIncomeTotal}` : "";
-    const fixedCosts = `ABS(SUM('FLUJO TOTAL'!${firstYearColumn}37:${lastYearColumn}37)-SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)-SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10))`;
     const currentNetContribution = `SUM('FLUJO TOTAL'!${firstYearColumn}7:${lastYearColumn}7)+SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)+SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10)${nonOperationalAdjustment}`;
-    const equilibriumFormula = `IFERROR(${fixedCosts}*${firstYearColumn}${equivalentStudentsRow}/(${currentNetContribution}),0)`;
+    const finalBalance = `'FLUJO TOTAL'!${lastYearColumn}40`;
+    const equilibriumFormula = `IFERROR(MAX(0,${firstYearColumn}${equivalentStudentsRow}-(${finalBalance}*${firstYearColumn}${equivalentStudentsRow}/(${currentNetContribution}))),0)`;
     const equilibriumRef = `${firstYearColumn}${equilibriumRow}`;
     studentSheet = setFormula(studentSheet, equilibriumRef, equilibriumFormula, equilibrium.minimumEquivalentEnrollmentsExact ?? 0);
     studentSheet = setFormula(studentSheet, `${firstYearColumn}${equilibriumRow + 1}`, `ROUNDUP(${firstYearColumn}${equilibriumRow},0)`, equilibrium.minimumWholeStudents ?? 0);
