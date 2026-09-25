@@ -928,7 +928,7 @@ const institutionalXlsxV1111 = await readFile(path.join(root, "lib/export/instit
 const institutionalXlsxTestV1111 = await readFile(path.join(root, "demo/tests/institutional-xlsx.test.mjs"), "utf8");
 for (const marker of ["setTextFormula", 'CONCATENATE(\"Descuento ",((+Parámetros!B${parameterRow})*100),\"%\")', 'setTextFormula(s2, `A${studentRow}`', 'setTextFormula(s2, `A${incomeRow}`']) if (!institutionalXlsxV1111.includes(marker)) fail(`XLSX v11.0.11 descuentos visibles: falta ${marker}.`);
 if (institutionalXlsxV1111.includes('`Ingresos arancel ${label}`')) fail("XLSX v11.0.11: las filas con descuento no deben anteponer 'Ingresos arancel'.");
-for (const marker of ["v11.0.11 muestra Descuento X% en Flujo estudiantes mediante fórmula vinculada a Parámetros", 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B10)*100),&quot;%&quot;)', 'studentXml.includes("Ingresos arancel Descuento")']) if (!institutionalXlsxTestV1111.includes(marker)) fail(`XLSX v11.0.11 pruebas: falta ${marker}.`);
+for (const marker of ["v11.0.11 muestra Descuento X% en Flujo estudiantes mediante fórmula vinculada a Parámetros", 'CONCATENATE(&quot;Descuento &quot;,((+Parámetros!B11)*100),&quot;%&quot;)', 'studentXml.includes("Ingresos arancel Descuento")']) if (!institutionalXlsxTestV1111.includes(marker)) fail(`XLSX v11.0.11 pruebas: falta ${marker}.`);
 
 
 // v11.1.0: arancel total del programa y modalidades de matrícula.
