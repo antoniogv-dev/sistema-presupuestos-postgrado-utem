@@ -276,16 +276,14 @@ export function breakEvenExcelFormula(
   void facultyOverheadParameterRow;
   void totalStudentsRow;
 
-  // Misma identidad que calculateBreakEvenComponents():
-  // costos fijos = costos totales - overhead - guía de tesis
-  // aporte actual = ingresos operacionales - overhead - guía de tesis
-  // aporte unitario = aporte actual / matrículas equivalentes actuales
-  // Se resta sólo ingreso no operacional porque FLUJO TOTAL!7 ya incorpora matrícula
-  // reconocida, financiamiento institucional e ingresos extraordinarios.
+  // v13.0.10: misma identidad financiera que la plataforma.
+  // El aporte unitario conserva sólo ingresos/costos variables asociados a matrícula;
+  // el saldo final acumulado ya incorpora costos fijos, ingresos extraordinarios,
+  // financiamiento institucional y arrastre autorizado.
   const nonOperationalAdjustment = nonOperationalIncomeTotal ? `-${nonOperationalIncomeTotal}` : "";
-  const fixedCosts = `ABS(SUM('FLUJO TOTAL'!${firstYearColumn}37:${lastYearColumn}37)-SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)-SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10))`;
   const currentNetContribution = `SUM('FLUJO TOTAL'!${firstYearColumn}7:${lastYearColumn}7)+SUM('FLUJO TOTAL'!${firstYearColumn}36:${lastYearColumn}36)+SUM('FLUJO TOTAL'!${firstYearColumn}10:${lastYearColumn}10)${nonOperationalAdjustment}`;
-  return `IFERROR(${fixedCosts}*${firstYearColumn}${resolvedEquivalentStudentsRow}/(${currentNetContribution}),0)`;
+  const finalBalance = `'FLUJO TOTAL'!${lastYearColumn}40`;
+  return `IFERROR(MAX(0,${firstYearColumn}${resolvedEquivalentStudentsRow}-(${finalBalance}*${firstYearColumn}${resolvedEquivalentStudentsRow}/(${currentNetContribution}))),0)`;
 }
 
 function modalityLabel(budget: CohortBudget): string {
