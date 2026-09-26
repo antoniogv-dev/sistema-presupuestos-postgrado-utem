@@ -13,6 +13,7 @@ const items = [
   ["/presupuestos", "Presupuestos", "budget"],
   ["/planes-anuales", "Planes anuales", "calendar"],
   ["/consolidado", "Consolidado", "chart"],
+  ["/doctorados", "Doctorados", "academic"],
   ["/parametros", "Parámetros generales", "sliders"],
   ["/versiones", "Versiones y aprobaciones", "check"],
   ["/importar-exportar", "Importar y exportar", "transfer"],
@@ -85,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const roleText = useMemo(() => identity?.roles.map((role) => roleLabels[role] ?? role).join(" · ") ?? "Sesión institucional", [identity]);
   const searchResults = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return items.slice(0, 5);
+    if (!normalized) return items.slice(0, 6);
     return items.filter(([, label]) => label.toLowerCase().includes(normalized)).slice(0, 6);
   }, [query]);
 
@@ -120,7 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             return <Link key={href} href={href} className={active ? "nav-link active" : "nav-link"} onClick={() => setOpen(false)}><span className="nav-icon"><NavIcon name={icon} /></span><span>{label}</span></Link>;
           })}
           <span className="nav-section-label nav-section-spacer">Configuración</span>
-          {items.slice(5).map(([href, label, icon]) => {
+          {items.slice(6).map(([href, label, icon]) => {
             const active = pathname.startsWith(href);
             return <Link key={href} href={href} className={active ? "nav-link active" : "nav-link"} onClick={() => setOpen(false)}><span className="nav-icon"><NavIcon name={icon} /></span><span>{label}</span></Link>;
           })}
