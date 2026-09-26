@@ -116,7 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <nav>
           <span className="nav-section-label">Gestión</span>
-          {items.slice(0, 5).map(([href, label, icon]) => {
+          {items.slice(0, 6).map(([href, label, icon]) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return <Link key={href} href={href} className={active ? "nav-link active" : "nav-link"} onClick={() => setOpen(false)}><span className="nav-icon"><NavIcon name={icon} /></span><span>{label}</span></Link>;
           })}
