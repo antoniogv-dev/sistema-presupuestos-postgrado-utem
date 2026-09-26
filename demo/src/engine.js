@@ -39,7 +39,7 @@ function scoped(type) {
 }
 
 const parameters = {
-  teachingHour: yearly([23152, 24310, 25526, 26802, 28142, 29549]),
+  teachingHour: yearly([23070, 24224, 25435, 26707, 28042, 29444]),
   replacementHour: 23152,
   maintenanceMonthly: yearly([577500, 606375, 636694, 668529, 701956, 737054]),
   doctorateTuitionTemplate: yearly([4023852, 4182884, 4348182, 4519991, 4745991, 4983291]),
