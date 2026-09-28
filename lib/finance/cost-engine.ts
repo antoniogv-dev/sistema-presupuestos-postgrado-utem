@@ -95,7 +95,8 @@ export function calculateAnnualCosts(
   const directTeachingCost = budget.program.type === "MAGISTER_PROFESIONAL"
     ? presentialTeachingCost + synchronousTeachingCost + asynchronousTeachingCost
     : (budget.deliveryModality === "PRESENCIAL" ? presentialTeachingCost : synchronousTeachingCost + asynchronousTeachingCost);
-  const replacementTeachingHourValue = budget.program.type === "DOCTORADO" ? nonNegative(override.directTeachingHourValue) : nonNegative(parameters.replacementHour);\n  const replacementTeachingCost = sum(semesters.map((semester) => nonNegative(semester.replacementTeachingHours) * replacementTeachingHourValue));
+  const replacementTeachingHourValue = budget.program.type === "DOCTORADO" ? nonNegative(override.directTeachingHourValue) : nonNegative(parameters.replacementHour);
+  const replacementTeachingCost = sum(semesters.map((semester) => nonNegative(semester.replacementTeachingHours) * replacementTeachingHourValue));
   const graduatingStudents = Math.max(0, ...semesters.map((semester) => semester.graduatingStudents === undefined ? inferredGraduatingStudents(budget, semester) : nonNegative(semester.graduatingStudents)));
   const thesisGuidanceCost = graduatingStudents * nonNegative(override.thesisGuidancePerGraduatingStudent);
   const academicHonoraria = directTeachingCost + replacementTeachingCost + thesisGuidanceCost;
