@@ -236,6 +236,10 @@ function effectiveTeachingRate(budget: CohortBudget, parameters: InstitutionalPa
 function replacementHoursForYear(budget: CohortBudget, year: number): number {
   return periodsForYear(budget, year).reduce((total, semester) => total + Math.max(0, semester.replacementTeachingHours), 0);
 }
+function effectiveReplacementRate(budget: CohortBudget, parameters: InstitutionalParameters, year: number): number {
+  if (budget.program.type === "DOCTORADO") return Math.max(0, resolvedAnnualOverrideForYear(budget, parameters, year).directTeachingHourValue);
+  return Math.max(0, parameters.replacementHour);
+}
 function maybeProjectionFormula(base: number, next: number, adjustment: number, baseRef: string): string | null {
   const projected = Math.ceil(base * (1 + adjustment) - 1e-9);
   return Math.abs(projected - next) < 1 ? `ROUNDUP(${baseRef}*(1+${adjustment}),0)` : null;
@@ -386,7 +390,7 @@ export async function createInstitutionalFormulaBudgetXlsx(
   s1 = setNumber(s1, "B6", enrollmentUnit1);
   s1 = enrollmentUnit2 > 0 ? setNumber(s1, "C6", enrollmentUnit2) : clearCell(s1, "C6");
   s1 = setNumber(s1, "B7", teachingRate1); s1 = setNumber(s1, "C7", teachingRate2);
-  s1 = setNumber(s1, "B8", parameters.replacementHour); s1 = setNumber(s1, "C8", parameters.replacementHour);
+  s1 = setNumber(s1, "B8", effectiveReplacementRate(budget, parameters, year1)); s1 = setNumber(s1, "C8", effectiveReplacementRate(budget, parameters, year2));
   s1 = setNumber(s1, "B9", thesisUnit1); s1 = setNumber(s1, "C9", thesisUnit2);
   s1 = setText(s1, "B10", `${budget.startYear}-${budget.startSemester}S`); s1 = clearCell(s1, "C10");
   if (extraDiscountRows > 0) s1 = insertRowsFromTemplate(s1, 12, extraDiscountRows, 12);
