@@ -222,6 +222,10 @@ function effectiveTeachingRate(budget: CohortBudget, parameters: InstitutionalPa
 function replacementHoursForYear(budget: CohortBudget, year: number): number {
   return periodsForYear(budget, year).reduce((total, semester) => total + Math.max(0, semester.replacementTeachingHours), 0);
 }
+function effectiveReplacementRate(budget: CohortBudget, parameters: InstitutionalParameters, year: number): number {
+  if (budget.program.type === "DOCTORADO") return Math.max(0, resolvedAnnualOverrideForYear(budget, parameters, year).directTeachingHourValue);
+  return Math.max(0, parameters.replacementHour);
+}
 function maybeProjectionFormula(base: number, next: number, adjustment: number, baseRef: string): string | null {
   const projected = Math.ceil(base * (1 + adjustment) - 1e-9);
   return Math.abs(projected - next) < 1 ? `ROUNDUP(${baseRef}*(1+${adjustment}),0)` : null;
@@ -271,7 +275,7 @@ function extendParametersSheet(sheetXml: string, budget: CohortBudget, result: B
     output = clearCell(output, `${col}5`);
     output = setNumber(output, `${col}6`, override.annualEnrollmentFee);
     output = setNumber(output, `${col}7`, effectiveTeachingRate(budget, parameters, year));
-    output = setNumber(output, `${col}8`, parameters.replacementHour);
+    output = setNumber(output, `${col}8`, effectiveReplacementRate(budget, parameters, year));
     output = setNumber(output, `${col}9`, override.thesisGuidancePerGraduatingStudent);
     output = clearCell(output, `${col}10`);
     for (let discountIndex = 0; discountIndex < rows.discountSlots; discountIndex += 1) {
