@@ -111,12 +111,27 @@ export function resolvedAnnualOverrideForYear(
     // profesionales se recupera la referencia institucional/plantilla en vez de
     // interpretar ese 0 como una matrícula real.
     annualEnrollmentFee: nonNegative(stored.annualEnrollmentFee) > 0 ? nonNegative(stored.annualEnrollmentFee) : fallback.annualEnrollmentFee,
-    directTeachingHourValue: budget.program.type === "MAGISTER_PROFESIONAL" ? resolvedSynchronousTeachingHour : nonNegative(stored.directTeachingHourValue),
-    synchronousTeachingHourValue: resolvedSynchronousTeachingHour,
-    asynchronousTeachingHourValue: budget.program.type === "MAGISTER_PROFESIONAL" ? resolvedSynchronousTeachingHour : (Number.isFinite(stored.asynchronousTeachingHourValue) && stored.asynchronousTeachingHourValue > 0 ? nonNegative(stored.asynchronousTeachingHourValue) : fallback.asynchronousTeachingHourValue),
+    // Doctorados: hora docente y manutención son parámetros institucionales del año,
+    // no valores heredados de la cohorte. Esto impide arrastrar tarifas históricas
+    // al formular cohortes anteriores dentro de un nuevo año presupuestario.
+    directTeachingHourValue: budget.program.type === "DOCTORADO"
+      ? fallback.directTeachingHourValue
+      : budget.program.type === "MAGISTER_PROFESIONAL"
+        ? resolvedSynchronousTeachingHour
+        : nonNegative(stored.directTeachingHourValue),
+    synchronousTeachingHourValue: budget.program.type === "DOCTORADO"
+      ? fallback.synchronousTeachingHourValue
+      : resolvedSynchronousTeachingHour,
+    asynchronousTeachingHourValue: budget.program.type === "DOCTORADO"
+      ? fallback.asynchronousTeachingHourValue
+      : budget.program.type === "MAGISTER_PROFESIONAL"
+        ? resolvedSynchronousTeachingHour
+        : (Number.isFinite(stored.asynchronousTeachingHourValue) && stored.asynchronousTeachingHourValue > 0 ? nonNegative(stored.asynchronousTeachingHourValue) : fallback.asynchronousTeachingHourValue),
     maintenanceScholarshipMonthlyValue: budget.program.type === "MAGISTER_PROFESIONAL"
       ? 0
-      : (Number.isFinite(stored.maintenanceScholarshipMonthlyValue) && stored.maintenanceScholarshipMonthlyValue > 0 ? nonNegative(stored.maintenanceScholarshipMonthlyValue) : fallback.maintenanceScholarshipMonthlyValue),
+      : budget.program.type === "DOCTORADO"
+        ? fallback.maintenanceScholarshipMonthlyValue
+        : (Number.isFinite(stored.maintenanceScholarshipMonthlyValue) && stored.maintenanceScholarshipMonthlyValue > 0 ? nonNegative(stored.maintenanceScholarshipMonthlyValue) : fallback.maintenanceScholarshipMonthlyValue),
     directionAllocationRate: clampRate(stored.directionAllocationRate),
     assistanceAllocationRate: clampRate(stored.assistanceAllocationRate),
     annualOtherNonAcademicHonoraria: Number.isFinite(stored.annualOtherNonAcademicHonoraria) ? nonNegative(stored.annualOtherNonAcademicHonoraria) : fallback.annualOtherNonAcademicHonoraria,

@@ -192,7 +192,7 @@ export function buildParameterReport(
   pushText("Identificación", "Observaciones generales", "General", budget.notes?.trim() || "Sin observaciones");
 
   // Parámetros institucionales generales que efectivamente alimentan el cálculo.
-  pushCurrency("Parámetros institucionales generales", "Valor hora docencia de reemplazo", "General", parameters.replacementHour);
+  pushCurrency("Parámetros institucionales generales", "Valor hora docencia de reemplazo base", "General", parameters.replacementHour);
   pushPercent("Parámetros institucionales generales", "Reajuste anual de referencia", "General", parameters.annualAdjustmentRate);
   pushNumber("Parámetros institucionales generales", "Horizonte de planificación", "General", parameters.planningHorizonYears, "años");
 
@@ -217,7 +217,7 @@ export function buildParameterReport(
     } else {
       pushCurrency(section, "Valor hora docencia presencial", String(year), annual.directTeachingHourValue);
     }
-    pushCurrency(section, "Valor hora docencia de reemplazo", String(year), parameters.replacementHour, "Parámetro institucional general");
+    pushCurrency(section, "Valor hora docencia de reemplazo", String(year), budget.program.type === "DOCTORADO" ? annual.directTeachingHourValue : parameters.replacementHour, budget.program.type === "DOCTORADO" ? "Parámetro institucional anual del doctorado" : "Parámetro institucional general");
     pushCurrency(section, "Guía de tesis por estudiante en graduación", String(year), annual.thesisGuidancePerGraduatingStudent);
     if (budget.scholarshipsEnabled) {
       pushCurrency(section, "Beca de manutención mensual", String(year), annual.maintenanceScholarshipMonthlyValue);
