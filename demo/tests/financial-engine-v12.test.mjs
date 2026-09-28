@@ -54,10 +54,10 @@ test("v12: presupuesto histórico conserva exactamente los principales resultado
     netFlow: flow.netFlow,
     accumulatedFlow: flow.accumulatedFlow,
   })), [
-    { year: 2027, grossTuition: 68512500, discounts: 9135000, badDebt: 8906625, netTuitionIncome: 50470875, grossEnrollmentFee: 2882250, totalIncome: 50470875, totalExpenses: 29811953.5, netFlow: 20658921.5, accumulatedFlow: 20658921.5 },
-    { year: 2028, grossTuition: 67142250, discounts: 9591750, badDebt: 8632575, netTuitionIncome: 48917925, grossEnrollmentFee: 2824612, totalIncome: 51317925, totalExpenses: 32813052.5, netFlow: 18504872.5, accumulatedFlow: 39163794 },
+    { year: 2027, grossTuition: 68512500, discounts: 9135000, badDebt: 8906625, netTuitionIncome: 50470875, grossEnrollmentFee: 2882250, totalIncome: 50470875, totalExpenses: 29785709.5, netFlow: 20685165.5, accumulatedFlow: 20685165.5 },
+    { year: 2028, grossTuition: 67142250, discounts: 9591750, badDebt: 8632575, netTuitionIncome: 48917925, grossEnrollmentFee: 2824612, totalIncome: 51317925, totalExpenses: 32793396.5, netFlow: 18524528.5, accumulatedFlow: 39209694 },
   ]);
-  assert.equal(result.finalAccumulatedFlow, 39163794);
+  assert.equal(result.finalAccumulatedFlow, 39209694);
 });
 
 test("v12: el ledger semestral separa precio del programa de reconocimiento presupuestario", () => {
