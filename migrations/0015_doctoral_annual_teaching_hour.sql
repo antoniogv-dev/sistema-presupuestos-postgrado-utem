@@ -6,3 +6,19 @@ INSERT OR REPLACE INTO "AnnualParameter" ("id","parameterId","year","scope","amo
   ('annual-direct_teaching_hour-2028','param-direct-hour',2028,'GENERAL',25435),
   ('annual-direct_teaching_hour-2029','param-direct-hour',2029,'GENERAL',26707),
   ('annual-direct_teaching_hour-2030','param-direct-hour',2030,'GENERAL',28042);
+
+-- Corrección base de la hora docente de reemplazo 2026.
+UPDATE "AnnualParameter"
+SET "amount" = 23070
+WHERE "parameterId" = 'param-replacement-hour'
+  AND "scope" = 'GENERAL'
+  AND "year" IS NULL;
+
+INSERT INTO "AnnualParameter" ("id","parameterId","year","scope","amount")
+SELECT 'annual-replacement-hour-general','param-replacement-hour',NULL,'GENERAL',23070
+WHERE NOT EXISTS (
+  SELECT 1 FROM "AnnualParameter"
+  WHERE "parameterId" = 'param-replacement-hour'
+    AND "scope" = 'GENERAL'
+    AND "year" IS NULL
+);
