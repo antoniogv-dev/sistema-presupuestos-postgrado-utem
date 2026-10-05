@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { analyzeBudgetFile, pendingImportedBudgetFields } from "@/lib/import/budget-file-import";
+
+const root = process.cwd();
 
 describe("v10.32 importación parcial de presupuestos", () => {
   it("infiere el año inicial desde la primera anualidad reconocida y no bloquea por estudiantes faltantes", async () => {
@@ -35,5 +39,25 @@ describe("v10.32 importación parcial de presupuestos", () => {
       "Estudiantes iniciales",
     ]);
     expect(analysis.warnings.some((item) => item.includes("importación parcial seguirá habilitada"))).toBe(true);
+  });
+
+  it("crea primero un Borrador mínimo y aplica el detalle importado sólo en el PUT", () => {
+    const source = readFileSync(path.join(root, "app/importar-exportar/page.tsx"), "utf8");
+    const postStart = source.indexOf("const created = await responseBody");
+    const detailStart = source.indexOf("const detailPayload", postStart);
+
+    expect(postStart).toBeGreaterThanOrEqual(0);
+    expect(detailStart).toBeGreaterThan(postStart);
+
+    const initialPost = source.slice(postStart, detailStart);
+    expect(initialPost).not.toContain("annualOverrides:");
+    expect(initialPost).not.toContain("discounts:");
+    expect(initialPost).not.toContain("externalIncome:");
+    expect(initialPost).not.toContain("items:");
+
+    expect(source).toContain("annualOverrides: prepared.annualOverrides");
+    expect(source).toContain("El POST inicial crea únicamente un Borrador mínimo y seguro");
+    expect(source).toContain("messageTone");
+    expect(source).toContain("importPendingFields");
   });
 });
