@@ -148,11 +148,17 @@ export default function ImportExportPage() {
   const [parameters, setParameters] = useState<InstitutionalParameters>(() => structuredClone(fallbackParameters));
   const [selectedId, setSelectedId] = useState("");
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"info" | "warning" | "error">("info");
   const [loading, setLoading] = useState(true);
   const [analysis, setAnalysis] = useState<ImportedBudgetAnalysis | null>(null);
   const [importProgramId, setImportProgramId] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [importing, setImporting] = useState(false);
+
+  function showMessage(text: string, tone: "info" | "warning" | "error" = "info") {
+    setMessage(text);
+    setMessageTone(tone);
+  }
 
   async function load() {
     setLoading(true);
@@ -171,7 +177,7 @@ export default function ImportExportPage() {
       setParameters(parameterValues);
       setSelectedId((current) => current && mapped.some((item) => item.id === current) ? current : mapped[0]?.id ?? "");
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "No fue posible cargar la información de interoperabilidad.");
+      showMessage(reason instanceof Error ? reason.message : "No fue posible cargar la información de interoperabilidad.", "error");
     } finally {
       setLoading(false);
     }
@@ -183,14 +189,21 @@ export default function ImportExportPage() {
   const result = useMemo(() => selected ? calculateBudget(selected, parameters) : null, [selected, parameters]);
   const institutional = useMemo(() => buildConsolidationGroups(budgets, parameters).find((group) => group.id === "institutional-approved"), [budgets, parameters]);
   const selectedImportProgram = programs.find((program) => program.id === importProgramId);
-  const importWarnings = analysis?.warnings.filter((warning) => !(importProgramId && warning.includes("programa; deberá seleccionarlo manualmente"))) ?? [];
+  const importPendingFields = analysis
+    ? pendingImportedBudgetFields(analysis).filter((field) => !(field === "Duración del programa" && selectedImportProgram))
+    : [];
+  const importWarnings = analysis?.warnings.filter((warning) => {
+    if (importProgramId && warning.includes("programa; deberá seleccionarlo manualmente")) return false;
+    if (selectedImportProgram && warning.includes("No se pudo identificar la duración")) return false;
+    return true;
+  }) ?? [];
 
   async function runExport(action: () => void | Promise<void>, success: string) {
     try {
       await action();
-      setMessage(success);
+      showMessage(success);
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "No fue posible completar la exportación.");
+      showMessage(reason instanceof Error ? reason.message : "No fue posible completar la exportación.", "error");
     }
   }
 
@@ -198,6 +211,7 @@ export default function ImportExportPage() {
     if (!file) return;
     setAnalyzing(true);
     setAnalysis(null);
+    showMessage("");
     try {
       const next = await analyzeBudgetFile(file);
       setAnalysis(next);
@@ -210,11 +224,11 @@ export default function ImportExportPage() {
       }) : undefined;
       const matchedProgram = byCode ?? byName;
       setImportProgramId(matchedProgram?.id ?? "");
-      setMessage(matchedProgram
+      showMessage(matchedProgram
         ? `Archivo analizado localmente: ${next.recognized.length} variables reconocidas, confianza ${next.confidence} %. Programa reconocido: ${matchedProgram.code} · ${matchedProgram.name}. Revise la vista previa antes de crear el borrador.`
         : `Archivo analizado localmente: ${next.recognized.length} variables reconocidas, confianza ${next.confidence} %. No se asignó un programa automáticamente; seleccione explícitamente el programa correcto antes de importar.`);
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "No fue posible interpretar el archivo seleccionado.");
+      showMessage(reason instanceof Error ? reason.message : "No fue posible interpretar el archivo seleccionado.", "error");
     } finally {
       setAnalyzing(false);
     }
@@ -226,12 +240,17 @@ export default function ImportExportPage() {
     if (!program) return;
     if (!window.confirm(`Se creará un nuevo presupuesto en estado Borrador para ${program.code}. El archivo original no se modifica. ¿Continuar?`)) return;
     setImporting(true);
+    showMessage("");
     try {
-      const pendingFields = pendingImportedBudgetFields(analysis);
+      const pendingFields = importPendingFields;
       const prepared = prepareImportedBudget(analysis, program, parameters);
       const pendingNote = pendingFields.length
         ? ` Campos pendientes de completar: ${pendingFields.join(", ")}.`
         : "";
+
+      // El POST inicial crea únicamente un Borrador mínimo y seguro. Los datos reconocidos del
+      // archivo se aplican después mediante PUT; de esta forma una variable importada dudosa no
+      // puede impedir la creación del Borrador completo.
       const created = await responseBody<{ id: string }>(await fetch("/api/budgets", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -247,7 +266,6 @@ export default function ImportExportPage() {
           programVersionLabel: prepared.programVersionLabel,
           scholarshipsEnabled: prepared.scholarshipsEnabled,
           deliveryModality: prepared.deliveryModality,
-          annualOverrides: prepared.annualOverrides,
           authorizedInitialCarryover: 0,
           includeAuthorizedCarryover: true,
           normalizeSharedCosts: true,
@@ -319,11 +337,18 @@ export default function ImportExportPage() {
       const baseMessage = pendingFields.length
         ? `Presupuesto importado como Borrador con información parcial. Se reconocieron ${analysis.recognized.length} variables. Pendiente de completar: ${pendingFields.join(", ")}.`
         : `Presupuesto importado como Borrador. Se reconocieron ${analysis.recognized.length} variables; revise el nuevo presupuesto antes de guardarlo o enviarlo a flujo de aprobación.`;
-      setMessage(detailIssue
+      showMessage(detailIssue
         ? `${baseMessage} El Borrador fue creado correctamente, aunque parte del detalle automático requiere revisión: ${detailIssue}.`
-        : baseMessage);
+        : baseMessage,
+      detailIssue || pendingFields.length ? "warning" : "info");
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "No fue posible crear el presupuesto importado.");
+      const detail = reason instanceof Error ? reason.message : "No fue posible crear el presupuesto importado.";
+      showMessage(
+        detail === "Error interno."
+          ? "No fue posible crear el Borrador inicial en D1. El análisis local se conserva y no se perdió información; vuelva a intentar la importación después de actualizar la aplicación."
+          : detail,
+        "error",
+      );
     } finally {
       setImporting(false);
     }
@@ -331,7 +356,7 @@ export default function ImportExportPage() {
 
   return <AppShell>
     <PageHeader eyebrow="Interoperabilidad" title="Importar y exportar" description="Importación local con reconocimiento de variables y exportaciones desde los presupuestos almacenados en D1." />
-    {message ? <div className="notice info"><p>{message}</p></div> : null}
+    {message ? <div className={`notice ${messageTone}`}><p>{message}</p></div> : null}
     <div className="dashboard-grid import-export-grid">
       <section className="panel import-budget-panel">
         <div className="panel-title"><div><h2>Importar presupuesto</h2><p>Seleccione un archivo local. El sistema lo analiza en el navegador, identifica variables presupuestarias y sólo crea un Borrador después de su confirmación.</p></div></div>
@@ -356,10 +381,10 @@ export default function ImportExportPage() {
           </div>
           {analysis.inferences.length ? <div className="notice info"><strong>Datos inferidos automáticamente</strong><ul>{analysis.inferences.map((inference) => <li key={inference}>{inference}</li>)}</ul></div> : null}
           {importWarnings.length ? <div className="notice warning"><strong>Revisión requerida, pero la importación no se bloquea</strong><ul>{importWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul><p>Puede crear el presupuesto igualmente. Se guardará como <strong>Borrador</strong> y los datos no identificados quedarán señalados para completarlos posteriormente.</p></div> : <div className="notice success"><p>Los campos esenciales o resolubles fueron identificados. El presupuesto se crea como Borrador para revisión humana.</p></div>}
-          {pendingImportedBudgetFields(analysis).length ? <div className="notice info"><strong>Pendientes que quedarán marcados en el Borrador</strong><p>{pendingImportedBudgetFields(analysis).join(" · ")}</p><small>Si no fueron detectados, el sistema utiliza valores provisionales técnicamente válidos para permitir la importación: 0 estudiantes, duración oficial del programa y 1S cuando corresponda.</small></div> : null}
+          {importPendingFields.length ? <div className="notice info"><strong>Pendientes que quedarán marcados en el Borrador</strong><p>{importPendingFields.join(" · ")}</p><small>Si no fueron detectados, el sistema utiliza valores provisionales técnicamente válidos para permitir la importación: 0 estudiantes, duración oficial del programa y 1S cuando corresponda.</small></div> : null}
           <div className="table-wrap import-preview-table"><table className="data-table"><thead><tr><th>Variable reconocida</th><th>Periodo</th><th>Valor</th><th>Origen</th></tr></thead><tbody>{analysis.recognized.slice(0, 120).map((item, index) => <tr key={`${item.field}-${item.period}-${index}`}><td>{item.field}</td><td>{item.period}</td><td>{item.value}</td><td>{item.source}</td></tr>)}</tbody></table></div>
           {analysis.recognized.length > 120 ? <p className="muted">Se muestran las primeras 120 variables de {analysis.recognized.length} reconocidas.</p> : null}
-          <div className="workspace-actions"><button className="button primary" type="button" disabled={importing || !importProgramId || !identity} onClick={() => void persistImportedBudget()}>{importing ? "Creando borrador…" : pendingImportedBudgetFields(analysis).length ? "Importar como borrador con pendientes" : "Crear presupuesto importado"}</button><button className="button secondary" type="button" disabled={importing} onClick={() => { setAnalysis(null); setImportProgramId(""); }}>Descartar análisis</button></div>
+          <div className="workspace-actions"><button className="button primary" type="button" disabled={importing || !importProgramId || !identity} onClick={() => void persistImportedBudget()}>{importing ? "Creando borrador…" : importPendingFields.length ? "Importar como borrador con pendientes" : "Crear presupuesto importado"}</button><button className="button secondary" type="button" disabled={importing} onClick={() => { setAnalysis(null); setImportProgramId(""); showMessage(""); }}>Descartar análisis</button></div>
         </div> : null}
 
         <div className="notice info"><strong>Reconocimiento adaptable</strong><p>El motor usa nombres y estructura de las hojas, no una única posición fija de celdas. El presupuesto de ejemplo que usted suba servirá para ampliar los alias y reglas específicas sin cambiar este flujo de importación.</p></div>
