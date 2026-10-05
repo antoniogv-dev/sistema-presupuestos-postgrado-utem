@@ -12,6 +12,7 @@ const items = [
   ["/programas", "Programas", "academic"],
   ["/presupuestos", "Presupuestos", "budget"],
   ["/planes-anuales", "Planes anuales", "calendar"],
+  ["/seguimiento", "Seguimiento de programas", "check"],
   ["/consolidado", "Consolidado", "chart"],
   ["/parametros", "Parámetros generales", "sliders"],
   ["/versiones", "Versiones y aprobaciones", "check"],
@@ -85,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const roleText = useMemo(() => identity?.roles.map((role) => roleLabels[role] ?? role).join(" · ") ?? "Sesión institucional", [identity]);
   const searchResults = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return items.slice(0, 5);
+    if (!normalized) return items.slice(0, 6);
     return items.filter(([, label]) => label.toLowerCase().includes(normalized)).slice(0, 6);
   }, [query]);
 
@@ -115,12 +116,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <nav>
           <span className="nav-section-label">Gestión</span>
-          {items.slice(0, 5).map(([href, label, icon]) => {
+          {items.slice(0, 6).map(([href, label, icon]) => {
             const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return <Link key={href} href={href} className={active ? "nav-link active" : "nav-link"} onClick={() => setOpen(false)}><span className="nav-icon"><NavIcon name={icon} /></span><span>{label}</span></Link>;
           })}
           <span className="nav-section-label nav-section-spacer">Configuración</span>
-          {items.slice(5).map(([href, label, icon]) => {
+          {items.slice(6).map(([href, label, icon]) => {
             const active = pathname.startsWith(href);
             return <Link key={href} href={href} className={active ? "nav-link active" : "nav-link"} onClick={() => setOpen(false)}><span className="nav-icon"><NavIcon name={icon} /></span><span>{label}</span></Link>;
           })}
