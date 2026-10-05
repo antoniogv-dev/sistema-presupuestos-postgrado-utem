@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   fallbackBudgetStage,
@@ -49,5 +50,18 @@ describe("seguimiento de programas", () => {
       { ...base, programId: "4", budgetStage: "OBSERVADO" },
     ];
     expect(trackingSummary(records)).toEqual({ total: 4, approved: 1, vraf: 1, drafting: 1, observed: 1 });
+  });
+
+  it("persiste el seguimiento como snapshot auditable y mantiene Drive fuera de D1", () => {
+    const route = readFileSync("app/api/program-tracking/route.ts", "utf8");
+    const page = readFileSync("app/seguimiento/page.tsx", "utf8");
+    const shell = readFileSync("components/AppShell.tsx", "utf8");
+
+    expect(route).toContain("'ProgramTracking'");
+    expect(route).toContain("UPDATE_PROGRAM_TRACKING");
+    expect(route).toContain("AuditLog");
+    expect(page).toContain("Enlace a Google Drive");
+    expect(page).toContain("La plataforma guarda sólo el enlace y la trazabilidad");
+    expect(shell).toContain('["/seguimiento", "Seguimiento de programas"');
   });
 });
