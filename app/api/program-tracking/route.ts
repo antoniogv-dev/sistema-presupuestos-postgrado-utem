@@ -150,6 +150,9 @@ export async function PUT(request: Request) {
       ORDER BY "createdAt" DESC
       LIMIT 1
     `).bind(input.programId).first();
+    const previousValue = previous && typeof (previous as Record<string, unknown>).value === "string"
+      ? String((previous as Record<string, unknown>).value)
+      : null;
 
     const nextSnapshot: ProgramTrackingSnapshot = {
       academicStatus: input.academicStatus,
@@ -171,7 +174,7 @@ export async function PUT(request: Request) {
         d1Id("tracking"),
         identity.userId,
         input.programId,
-        previous ? (previous as Record<string, unknown>).value ?? null : null,
+        previousValue,
         d1Json(nextSnapshot),
       ),
     ]);
