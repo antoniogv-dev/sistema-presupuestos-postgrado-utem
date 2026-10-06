@@ -228,13 +228,13 @@ function firstYearTeachingValues(budget: CohortBudget, firstYear: number, firstA
 export function defaultMemorandumMetadata(budget: CohortBudget, date = new Date()): MemorandumMetadata {
   return {
     number: `XXX/${date.getFullYear()}`,
-    recipientName: "SR. MAURICIO LOYOLA MORENILLA",
-    recipientRole: "VICERRECTOR DE ADMINISTRACIÓN Y FINANZAS (S)",
+    recipientName: "SR. LUIS AMÉSTICA RIVAS",
+    recipientRole: "VICERRECTOR DE ADMINISTRACIÓN Y FINANZAS",
     senderName: "DR. JORGE RODRÍGUEZ BECERRA",
     senderRole: "DIRECTOR DE ESCUELA DE POSTGRADO",
     reference: `SOLICITA APROBACIÓN DE PROYECCIÓN PRESUPUESTARIA DE LA COHORTE ${budget.startYear} DEL ${budget.program.name.toUpperCase()} (${budget.program.code}).`,
     dateText: defaultDateText(date),
-    greeting: "Estimado Vicerrector (s):",
+    greeting: "Estimado Vicerrector:",
     initials: "JRB/agv",
   };
 }
