@@ -60,8 +60,11 @@ describe("seguimiento de programas", () => {
     expect(route).toContain("'ProgramTracking'");
     expect(route).toContain("UPDATE_PROGRAM_TRACKING");
     expect(route).toContain("AuditLog");
+    expect(route).toContain("approvalUrl");
     expect(page).toContain("Enlace a Google Drive");
-    expect(page).toContain("La plataforma guarda sólo el enlace y la trazabilidad");
+    expect(page).toContain('type="url"');
+    expect(page).toContain("El archivo permanece en Drive");
+    expect(page).toContain("la plataforma guarda sólo el enlace y la trazabilidad");
     expect(shell).toContain('["/seguimiento", "Seguimiento de programas"');
   });
 });
