@@ -33,6 +33,7 @@ import { availableWorkflowActions, canDeleteBudget, canEditBudget, type Workflow
 import { auditBudgetIntegrity } from "@/lib/validation/budget-integrity";
 import { applyProgramCurriculumToBudget, courseAllowsVariableSections, curriculumCourseAppliedMode, curriculumCourseEffectiveHours, curriculumCourseRawHours, curriculumCourseSectionsForBudget, curriculumCourseWeeklyDirectHours, graduationSectionsFollowStudents, payableCurriculumCourses } from "@/lib/curriculum/budget-load";
 import { fullProgramDiscountRange, synchronizeInitialStudents, synchronizeLastSemesterGraduation } from "@/lib/budgets/form-defaults";
+import { recalendarizeCohortBudget } from "@/lib/budgets/recalendarize";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";
 const FUNCTIONAL_RELEASE = "v12.1.2";
@@ -345,24 +346,23 @@ export function BudgetWorkspace() {
   }
 
   function regeneratePeriods(startYear: number, startSemester: 1 | 2, durationSemesters: number, initialStudents: number) {
-    if (!budget) return;
-    const current = new Map(budget.semesters.map((semester) => [`${semester.year}-${semester.semester}`, semester]));
-    const periods = getActivePeriods(startYear, startSemester, durationSemesters);
-    const semesters = periods.map((period, index) => {
-      const existing = current.get(`${period.year}-${period.semester}`);
-      const baseSemester = existing ?? emptySemester(period.year, period.semester, initialStudents);
-      return {
-        ...baseSemester,
-        activeStudents: existing?.activeStudents ?? initialStudents,
-        graduatingStudents: index === periods.length - 1 ? Math.max(0, Math.round(initialStudents)) : baseSemester.graduatingStudents,
-      };
+    if (!budget || !Number.isInteger(startYear) || startYear < 2000) return;
+    const updated = recalendarizeCohortBudget(budget, parameters, { startYear, startSemester, durationSemesters, initialStudents });
+    replaceBudget(applyProgramCurriculumToBudget(updated));
+    if (budget.program.type === "MAGISTER_PROFESIONAL" && (budget.startSemester !== startSemester || budget.startYear !== startYear)) {
+      setMessage("Períodos desplazados por semestre académico. Se ajustó el staff a los semestres activos y se preservó el arancel total. Revise los gastos anuales no prorrateables antes de guardar.");
+    }
+  }
+
+  function normalizeSecondSemesterBudget() {
+    if (!budget || budget.program.type !== "MAGISTER_PROFESIONAL" || budget.startSemester !== 2) return;
+    const updated = recalendarizeCohortBudget(budget, parameters, {
+      startYear: budget.startYear, startSemester: budget.startSemester,
+      durationSemesters: budget.durationSemesters, initialStudents: budget.initialStudents,
+      normalizeExisting: true,
     });
-    const synchronizedSemesters = synchronizeLastSemesterGraduation(semesters, initialStudents);
-    const tuitionSemesterDistribution = budget.tuitionDistributionMode === "CUSTOM"
-      ? Array.from({ length: durationSemesters }, (_, index) => Math.max(0, budget.tuitionSemesterDistribution?.[index] ?? 0))
-      : proportionalTuitionDistribution(durationSemesters);
-    const base = { ...budget, startYear, startSemester, durationSemesters, initialStudents, semesters: synchronizedSemesters, tuitionSemesterDistribution };
-    replaceBudget(applyProgramCurriculumToBudget(hydrateAnnualOverrides(base, parameters)));
+    replaceBudget(applyProgramCurriculumToBudget(updated));
+    setMessage("Normalización aplicada localmente. Dirección, asistencia y honorarios continuos siguen la proporción real de semestres; arancel completo preservado. Revise los gastos anuales no prorrateables y guarde los cambios.");
   }
 
   function setInitialStudentsForAllSemesters(initialStudents: number) {
@@ -874,6 +874,7 @@ export function BudgetWorkspace() {
         <label>Estado<div className="input-like"><StatusBadge status={budget.status} /></div></label>
         {budget.program.type === "MAGISTER_PROFESIONAL" ? <label>Modalidad<select disabled={!editable} value={budget.deliveryModality} onChange={(event) => patchBudget({ deliveryModality: event.target.value as DeliveryModality })}><option value="PRESENCIAL">Presencial</option><option value="SEMIPRESENCIAL">Semipresencial</option><option value="E_LEARNING">E-learning</option></select></label> : null}
       </div>
+      {budget.program.type === "MAGISTER_PROFESIONAL" && budget.startSemester === 2 ? <div className="workspace-actions"><button className="button secondary" type="button" disabled={!editable} onClick={normalizeSecondSemesterBudget}>Normalizar costos del inicio 2S</button><small>Para cohortes ya configuradas: prorratea honorarios continuos según 0,5 / 1 / 0,5 en programas de cuatro semestres y evita sumar otro arancel anual. No altera otras cohortes ni aplica cambios sin guardar.</small></div> : null}
     </section>
 
     <section className="panel">
