@@ -96,7 +96,18 @@ export function recalendarizeCohortBudget(
     return allocateAnnualStaff(updated, previous, oldShare, newShare);
   });
 
-  const discountDates = moveBy === 0 ? budget.discounts : budget.discounts.map((discount) => {
+  // Corrige también rangos "1S a 2S" que quedaron sin desplazar en
+  // presupuestos 2S guardados con la lógica anterior, sólo si abarcan toda la cohorte.
+  const earlier1SPeriods = change.normalizeExisting && change.startSemester === 2
+    ? getActivePeriods(change.startYear, 1, change.durationSemesters) : [];
+  const legacyLast = earlier1SPeriods.at(-1);
+  const discountDates = budget.discounts.map((discount) => {
+    if (legacyLast && discount.startYear === change.startYear && discount.startSemester === 1
+      && discount.endYear === legacyLast.year && discount.endSemester === legacyLast.semester) {
+      const last = newPeriods.at(-1)!;
+      return { ...discount, startYear: change.startYear, startSemester: change.startSemester, endYear: last.year, endSemester: last.semester };
+    }
+    if (moveBy === 0) return discount;
     const start = shiftedPeriod(discount.startYear, discount.startSemester, moveBy);
     const end = shiftedPeriod(discount.endYear, discount.endSemester, moveBy);
     return { ...discount, startYear: start.year, startSemester: start.semester, endYear: end.year, endSemester: end.semester };
