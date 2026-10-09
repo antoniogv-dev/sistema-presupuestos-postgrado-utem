@@ -55,9 +55,9 @@ export function recalendarizeCohortBudget(
 ): CohortBudget {
   const oldPeriods = getActivePeriods(budget.startYear, budget.startSemester, budget.durationSemesters);
   const newPeriods = getActivePeriods(change.startYear, change.startSemester, change.durationSemesters);
-  const previousByPosition = new Map(oldPeriods.map((period, index) => [
+  const previousByPosition = new Map<number, CohortBudget["semesters"][number] | undefined>(oldPeriods.map((period, index) => [
     index, budget.semesters.find((item) => item.year === period.year && item.semester === period.semester),
-  ]));
+  ] as const));
   const moveBy = (change.startYear - budget.startYear) * 2 + change.startSemester - budget.startSemester;
   const changedCalendar = moveBy !== 0 || change.durationSemesters !== budget.durationSemesters;
   const isProfessional = budget.program.type === "MAGISTER_PROFESIONAL";
