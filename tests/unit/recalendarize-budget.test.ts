@@ -75,6 +75,19 @@ describe("recalendarización de una cohorte profesional de cuatro semestres", ()
     expect(again).toEqual(normalized);
   });
 
+  it("rescata descuentos completos que un presupuesto 2S antiguo dejó con fechas 1S", () => {
+    const moved = recalendarizeCohortBudget(original(), institutionalParameters, changeTo2S);
+    const legacy = {
+      ...moved,
+      tuitionPricingMode: "ANNUAL_LEGACY" as const,
+      discounts: [{ ...moved.discounts[0], startYear: 2027, startSemester: 1 as const, endYear: 2028, endSemester: 2 as const }],
+    };
+    const legacyPrice = calculateBudget(legacy, institutionalParameters).pricing.programTotalTuition;
+    const normalized = recalendarizeCohortBudget(legacy, institutionalParameters, { ...changeTo2S, normalizeExisting: true });
+    expect(normalized.discounts[0]).toMatchObject({ startYear: 2027, startSemester: 2, endYear: 2029, endSemester: 1 });
+    expect(calculateBudget(normalized, institutionalParameters).pricing.programTotalTuition).toBeLessThan(legacyPrice);
+  });
+
   it("al volver al primer semestre restaura el año completo de staff y mantiene el arancel", () => {
     const moved = recalendarizeCohortBudget(original(), institutionalParameters, changeTo2S);
     const back = recalendarizeCohortBudget(moved, institutionalParameters, {
