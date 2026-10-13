@@ -12,6 +12,7 @@ import { downloadAuditCsv, downloadBudgetMemorandum, downloadBudgetPdf, download
 import { analyzeBudgetFile, pendingImportedBudgetFields, type ImportedBudgetAnalysis } from "@/lib/import/budget-file-import";
 import type { ApiBudgetRecord, ApiIdentity, ApiProgram } from "@/lib/mappers/budget-api";
 import { responseBody, toBudget, toProgram } from "@/lib/mappers/budget-api";
+import { buildDashboardOffer2027 } from "@/lib/integrations/dashboard-offer-2027";
 
 const numberOr = (value: unknown, fallback: number) => typeof value === "number" && Number.isFinite(value) ? value : fallback;
 
@@ -154,6 +155,26 @@ export default function ImportExportPage() {
   const [importProgramId, setImportProgramId] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [importing, setImporting] = useState(false);
+
+  function exportDashboardOffer2027() {
+    const payload = buildDashboardOffer2027(budgets, parameters);
+    if (!payload.programs.length) {
+      showMessage("No existen cohortes con inicio 2027 almacenadas para exportar.", "warning");
+      return;
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "oferta-postgrado-2027-dashboard-matricula.json";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    const valid = payload.programs.filter((program) => program.ready).length;
+    showMessage(`Oferta 2027: ${payload.programs.length} cohorte(s) exportadas; ${valid} listas para importar. Las restantes requieren revisión de sus advertencias.`,
+      valid === payload.programs.length ? "info" : "warning");
+  }
 
   function showMessage(text: string, tone: "info" | "warning" | "error" = "info") {
     setMessage(text);
@@ -393,6 +414,7 @@ export default function ImportExportPage() {
       <section className="panel">
         <div className="panel-title"><div><h2>Exportaciones</h2><p>Seleccione un presupuesto para exportar su flujo individual o auditoría.</p></div></div>
         <label>Presupuesto<select value={selectedId} disabled={loading || !budgets.length} onChange={(event) => setSelectedId(event.target.value)}><option value="">Seleccione</option>{budgets.map((budget) => <option key={budget.id} value={budget.id}>{budget.program.code} · {budget.cohortName} · Versión {budget.programVersionLabel} · R{budget.version}</option>)}</select></label>
+        <div className="notice info"><strong>Sincronizar oferta 2027 con Dashboard de Matrícula</strong><p>Descarga un JSON de intercambio desde presupuestos reales D1: punto de equilibrio financiero, arancel total por cohorte, meta de arancel neto de descuentos, matrícula inicial y advertencias. No incluye RUT ni registros individuales. En el dashboard, use «Importar presupuestos 2027» para revisar y confirmar los programas.</p><div className="workspace-actions"><button type="button" className="button primary" disabled={loading || !budgets.length} onClick={exportDashboardOffer2027}>Exportar oferta 2027 para dashboard</button></div></div>
         <div className="export-list enabled-exports">
           <button type="button" disabled={!selected || !result} onClick={() => selected && result && void runExport(() => downloadBudgetXlsx(selected, result, parameters), "Flujo individual exportado a Excel.")}><span><strong>Flujo individual</strong><small>Excel (.xlsx) con flujo y parámetros completos</small></span><span>Exportar XLSX</span></button>
           <button type="button" disabled={!selected || !result} onClick={() => selected && result && void runExport(() => downloadBudgetPdf(selected, result, parameters, budgets), "Reporte de viabilidad exportado a PDF.")}><span><strong>Reporte de viabilidad</strong><small>PDF con portada institucional, flujo, análisis financiero y parámetros</small></span><span>Exportar PDF</span></button>
