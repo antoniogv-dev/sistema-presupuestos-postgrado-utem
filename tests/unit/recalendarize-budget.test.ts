@@ -57,6 +57,8 @@ describe("recalendarización de una cohorte profesional de cuatro semestres", ()
 
   it("respeta prorrateos manuales de otras cohortes", () => {
     const budget = original();
+    budget.annualOverrides = [2027, 2028].map((year) =>
+      resolvedAnnualOverrideForYear(budget, institutionalParameters, year));
     budget.annualOverrides[0].directionProrated = true;
     budget.annualOverrides[0].directionAllocationRate = 0.3;
     const moved = recalendarizeCohortBudget(budget, institutionalParameters, changeTo2S);
