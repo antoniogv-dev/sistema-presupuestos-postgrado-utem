@@ -32,7 +32,7 @@ import { defaultBudgetTemplates } from "@/lib/templates/default-templates";
 import { availableWorkflowActions, canDeleteBudget, canEditBudget, type WorkflowAction } from "@/lib/workflow/budget-workflow";
 import { auditBudgetIntegrity } from "@/lib/validation/budget-integrity";
 import { applyProgramCurriculumToBudget, courseAllowsVariableSections, curriculumCourseAppliedMode, curriculumCourseEffectiveHours, curriculumCourseRawHours, curriculumCourseSectionsForBudget, curriculumCourseWeeklyDirectHours, graduationSectionsFollowStudents, payableCurriculumCourses } from "@/lib/curriculum/budget-load";
-import { fullProgramDiscountRange, synchronizeInitialStudents, synchronizeLastSemesterGraduation } from "@/lib/budgets/form-defaults";
+import { fullProgramDiscountRange, synchronizeInitialStudents } from "@/lib/budgets/form-defaults";
 import { recalendarizeCohortBudget } from "@/lib/budgets/recalendarize";
 
 const ROLE_KEY = "utem-postgrado-active-role-v10";

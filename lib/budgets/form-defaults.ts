@@ -1,6 +1,32 @@
 import { getActivePeriods } from "../calculations/periods";
 import type { SemesterNumber, SemesterParameters } from "../calculations/types";
 
+/**
+ * Valores neutrales de un semestre nuevo. Se mantienen en el módulo de presupuestos
+ * para que el motor financiero compilado aisladamente no dependa de los mappers de API.
+ */
+export function emptyBudgetSemester(year: number, semester: SemesterNumber, students = 0): SemesterParameters {
+  return {
+    year,
+    semester,
+    activeStudents: students,
+    graduatingStudents: 0,
+    directTeachingHours: 0,
+    synchronousTeachingHours: 0,
+    asynchronousTeachingHours: 0,
+    replacementTeachingHours: 0,
+    electiveSubjects: 0,
+    electiveSections: 0,
+    specializedCourses: 0,
+    specializedSections: 0,
+    internalTuitionScholarshipStudents: 0,
+    internalTuitionScholarshipCoverage: 1,
+    maintenanceScholarshipStudents: 0,
+    maintenanceScholarshipMonths: 0,
+    notes: "",
+  };
+}
+
 export function synchronizeInitialStudents(
   semesters: SemesterParameters[],
   initialStudents: number,
