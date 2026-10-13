@@ -2,8 +2,7 @@ import { grossTuitionPerStudentForProgram, proportionalTuitionDistribution } fro
 import { resolvedAnnualOverrideForYear } from "../calculations/budget-engine";
 import { getActivePeriods, getActiveYears } from "../calculations/periods";
 import type { BudgetAnnualOverride, CohortBudget, InstitutionalParameters, SemesterNumber } from "../calculations/types";
-import { emptySemester } from "../mappers/budget-api";
-import { synchronizeLastSemesterGraduation } from "./form-defaults";
+import { emptyBudgetSemester, synchronizeLastSemesterGraduation } from "./form-defaults";
 
 /**
  * Modifica la fecha académica (no la duración del programa).
@@ -67,7 +66,7 @@ export function recalendarizeCohortBudget(
   const semesters = newPeriods.map((period, index) => {
     const source = previousByPosition.get(index);
     return {
-      ...(source ?? emptySemester(period.year, period.semester, actualStudents)),
+      ...(source ?? emptyBudgetSemester(period.year, period.semester, actualStudents)),
       year: period.year,
       semester: period.semester,
       activeStudents: source?.activeStudents ?? actualStudents,
